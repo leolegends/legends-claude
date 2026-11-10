@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { agentLine, cardLines, cardWidth, clean, fit, fmtCost, fmtSpan, fmtTokens, lineWidth, prettyModel, reconcileRows, scanner, shimmer, shortTool, sortAgents, spin, upsert } from './register'
+import { agentLine, cardLines, clean, fit, fmtCost, fmtSpan, fmtTokens, lineWidth, prettyModel, reconcileRows, shimmer, shortTool, sortAgents, spin, trail, upsert } from './register'
+import { SPINNER } from './register'
 import type { Line } from './register'
 import type { StatusAgent } from '../types'
 
@@ -14,6 +15,10 @@ const agent = (over: Partial<StatusAgent> = {}): StatusAgent => ({
 })
 const card = (over: Partial<Parameters<typeof cardLines>[0]> = {}) =>
   cardLines({ figures: FIGURES, main: MAIN, agents: [], now: NOW, frame: 0, isWorking: false, ...over })
+// Estreita demais para modelo e custo dividirem a linha: empilha.
+const stacked = (over: Partial<Parameters<typeof cardLines>[0]> = {}) => card({ max: 40, ...over })
+const left = (l: Line | undefined) => (l?.parts ?? []).map(p => p.text).join('')
+const right = (l: Line | undefined) => (l?.tail ?? []).map(p => p.text).join('')
 
 describe('formatos', () => {
   test('o custo tem quatro casas e milhares agrupados', () => {
@@ -46,19 +51,26 @@ describe('formatos', () => {
 })
 
 describe('animações', () => {
-  test('o giro anda um quadro por vez e cada agente fica fora de fase', () => {
-    expect(spin(0)).toBe('⠋')
-    expect(spin(1)).toBe('⠙')
-    expect(spin(10)).toBe('⠋')
-    expect(spin(0, 3)).toBe('⠸')
+  test('a faísca do Claude pulsa um quadro por vez e cada agente fica fora de fase', () => {
+    expect(SPINNER.slice(0, 6).join('')).toBe('·✢✳✶✻✽')
+    expect(spin(0)).toBe('·')
+    expect(spin(1)).toBe('✢')
+    expect(spin(5)).toBe('✽')
+    expect(spin(6)).toBe('✻') // e volta encolhendo
+    expect(spin(10)).toBe('·')
+    expect(spin(0, 3)).toBe('✶')
   })
 
-  test('o trecho aceso vai até o fim da barra e volta', () => {
-    const bar = (f: number) => { const s = scanner(f); return s.before + s.lit + s.after }
-    expect(bar(0)).toBe('▰▰▱▱▱▱')
-    expect(bar(4)).toBe('▱▱▱▱▰▰')
-    expect(bar(5)).toBe('▱▱▱▰▰▱')
-    expect(bar(8)).toBe('▰▰▱▱▱▱')
+  test('o cometa de faíscas atravessa a trilha, sai pela direita e volta do começo', () => {
+    const bar = (f: number, w = 6) => trail(f, w).map(p => p.text).join('')
+    expect(bar(0)).toBe('✻·····')
+    expect(bar(2)).toBe('✳✶✻···')
+    expect(bar(5)).toBe('··✢✳✶✻')
+    expect(bar(8)).toBe('·····✢')
+    expect(bar(9)).toBe('······')
+    expect(bar(10)).toBe('✻·····')
+    for (const f of [0, 3, 7, 11]) expect(trail(f, 6).length).toBe(6)
+    expect(trail(3, 6)[3]?.color).toBe('claude')
   })
 
   test('o brilho percorre o texto sem mudar o que está escrito', () => {
@@ -69,40 +81,47 @@ describe('animações', () => {
 })
 
 describe('linhas do card', () => {
-  test('mostra modelo, effort e custo, e nada de contexto', () => {
-    const lines = card().map(text)
-    expect(lines[0]).toBe('○ Fable 5.2 · high')
-    expect(lines[1]).toBe('$1.5000 sessão · turno +$0.2500')
-    expect(lines.some(l => /ctx|context/i.test(l))).toBe(false)
+  test('na largura toda, modelo à esquerda e custo à direita na mesma linha, sem contexto', () => {
+    const lines = card()
+    expect(lines.length).toBe(1)
+    expect(left(lines[0])).toBe('✻ Fable 5.2 · high')
+    expect(right(lines[0])).toBe('$1.5000 sessão · turno +$0.2500')
+    expect(lines.map(text).some(l => /ctx|context/i.test(l))).toBe(false)
+  })
+
+  test('estreita demais, modelo e custo empilham', () => {
+    const lines = stacked().map(text)
+    expect(lines).toEqual(['✻ Fable 5.2 · high', '$1.5000 sessão · turno +$0.2500'])
   })
 
   test('sem turno ainda não há custo de turno; sem leitura, o custo fica pendente', () => {
-    expect(text(card({ main: { ...MAIN, costAtStart: null } })[1] as Line)).toBe('$1.5000 sessão')
-    expect(text(card({ figures: { model: null, effort: null } })[1] as Line)).toBe('custo —')
+    expect(text(card({ max: 12, main: { ...MAIN, costAtStart: null } })[1] as Line)).toBe('$1.5000 sessão')
+    expect(text(card({ max: 12, figures: { model: null, effort: null } })[1] as Line)).toBe('custo —')
   })
 
   test('o custo fica aceso logo depois de crescer e apaga em seguida', () => {
-    const fresh = card({ figures: { ...FIGURES, costMovedAt: NOW - 500 } })[1] as Line
+    const fresh = stacked({ figures: { ...FIGURES, costMovedAt: NOW - 500 } })[1] as Line
     expect(text(fresh)).toBe('$1.5000 ▲ sessão · turno +$0.2500')
     expect(fresh.parts[0]?.color).toBe('claude')
-    expect(text(card({ figures: { ...FIGURES, costMovedAt: NOW - 5_000 } })[1] as Line)).toBe('$1.5000 sessão · turno +$0.2500')
+    expect(text(stacked({ figures: { ...FIGURES, costMovedAt: NOW - 5_000 } })[1] as Line)).toBe('$1.5000 sessão · turno +$0.2500')
   })
 
-  test('enquanto o turno roda aparece o giro e a linha de trabalho', () => {
-    const lines = card({ isWorking: true, frame: 1 }).map(text)
-    expect(lines[0]).toBe('⠙ Fable 5.2 · high')
-    expect(lines[2]).toBe('▱▰▰▱▱▱ 1m12s · 14 tools · Bash')
+  test('enquanto o turno roda a faísca pulsa e o cometa corre na linha de trabalho', () => {
+    const lines = card({ isWorking: true, frame: 1 })
+    expect(left(lines[0])).toBe('✢ Fable 5.2 · high')
+    expect(text(lines[1] as Line)).toBe('✶✻······ 1m12s · 14 tools · Bash')
   })
 
-  test('os limites só aparecem quando há leitura', () => {
-    expect(card().length).toBe(2)
-    const withLimits = card({ figures: { ...FIGURES, fiveHour: { pct: 42 }, week: { pct: 91 } } }).map(text)
-    expect(withLimits[2]).toBe('5h ▰▰▱▱▱ 42% · 7d ▰▰▰▰▰ 91%')
+  test('os limites só aparecem quando há leitura, ao lado do custo ou empilhados', () => {
+    const limited = { figures: { ...FIGURES, fiveHour: { pct: 42 }, week: { pct: 91 } } }
+    expect(right(card(limited)[0])).toBe('$1.5000 sessão · turno +$0.2500  ·  5h ▰▰▱▱▱ 42% · 7d ▰▰▰▰▰ 91%')
+    expect(stacked().length).toBe(2)
+    expect(text(stacked(limited)[2] as Line)).toBe('5h ▰▰▱▱▱ 42% · 7d ▰▰▰▰▰ 91%')
   })
 
   test('um agente rodando mostra giro, tipo, descrição, tempo e ferramentas', () => {
     const l = agentLine(agent(), NOW, 0, 0, 64)
-    expect(text(l)).toBe('⠋ Explore  buscar rotas HLS12s · 4 tools · Grep')
+    expect(text(l)).toBe('· Explore ✻····  buscar rotas HLS12s · 4 tools · Grep')
     expect(lineWidth(l) <= 64).toBe(true)
   })
 
@@ -126,14 +145,18 @@ describe('linhas do card', () => {
     ]
     expect(sortAgents(list).map(a => a.id)).toEqual(['r6', 'r5', 'r4', 'r3', 'r2', 'r1', 'd'])
     const lines = card({ agents: list }).map(text)
-    expect(lines.length).toBe(2 + 6 + 1)
+    expect(lines.length).toBe(1 + 6 + 1)
     expect(lines[lines.length - 1]).toBe('+1 agente')
   })
 
-  test('a largura do card fica entre o mínimo e o máximo', () => {
-    expect(cardWidth(card())).toBe(31)
-    expect(cardWidth(card({ agents: [agent({ description: 'x'.repeat(200) })] })) <= 64).toBe(true)
-    expect(cardWidth([{ parts: [{ text: 'a' }] }])).toBe(30)
+  test('nenhuma linha passa da largura da barra, larga ou estreita', () => {
+    const list = [agent({ description: 'x'.repeat(200) }), agent({ id: 'a2', state: 'done', endedAt: NOW, tokens: 9 })]
+    for (const max of [60, 100, 200]) for (const l of card({ agents: list, isWorking: true, max })) expect(lineWidth(l) <= max).toBe(true)
+  })
+
+  test('numa barra larga a descrição do agente usa o espaço que sobra', () => {
+    const long = agent({ description: 'uma descrição comprida que cabe inteira numa barra larga' })
+    expect(text(agentLine(long, NOW, 0, 0, 120)).includes('cabe inteira numa barra larga')).toBe(true)
   })
 })
 

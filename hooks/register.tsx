@@ -21,8 +21,8 @@ const isHidden = atom({ plugin: 'legends-claude', key: 'isHidden' } as const, fa
 
 const COMMAND = 'legends-claude'
 const MIN_COLUMNS = 60 // mais estreito que isso o card cobriria a conversa: não desenha
-const MIN_CARD_WIDTH = 30
-const MAX_CARD_WIDTH = 64
+const DEFAULT_WIDTH = 100 // largura das linhas quando quem chama não diz (a barra passa a da faixa)
+const BAR_RIGHT_PAD = 1 // a barra vai de ponta a ponta da faixa, menos essa folga à direita
 const BUTTONS_WIDTH = 3 // o botão ' ▾ ' à direita da primeira linha
 const TAIL_GAP = 2 // colunas entre o texto de uma linha e o que fica encostado à direita
 const HIDDEN_RIGHT_PAD = 5 // livre do [-] que o Claude Code desenha no canto da faixa
@@ -35,8 +35,8 @@ const FLASH_MS = 1_500 // quanto tempo o custo fica aceso depois de crescer
 const COST_DECIMALS = 4 // $0.0123, não $0.01
 const MIN_TURN_COST = 0.00005 // abaixo disso arredonda para $0.0000: não mostra
 const LIMIT_GAUGE = 5
-const SCAN_WIDTH = 6
-const SCAN_LIT = 2
+const TRAIL_WIDTH = 8 // o rastro de faíscas da linha de trabalho
+const AGENT_TRAIL_WIDTH = 5 // o rastro de cada agente rodando
 const SHIMMER_GAP = 6 // quadros de pausa entre uma passada do brilho e a seguinte
 const MAX_AGENT_ROWS = 6
 const TYPE_MAX = 20
@@ -45,7 +45,9 @@ const DESC_MIN = 6
 const PENDING = '—'
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
 
-export const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+// A faísca do Claude pulsando: cresce de · até ✽ e volta, como o giro do próprio Claude Code.
+export const SPINNER = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢']
+const IDLE_GLYPH = '✻'
 
 export const STRINGS = {
   hide: ' ▾ ', show: '◂ status', session: ' sessão', turn: 'turno +', noCost: 'custo ',
@@ -128,14 +130,22 @@ export const prettyModel = (id: string) => {
 // "mcp__servidor__ferramenta" -> "ferramenta"; os outros nomes como vieram.
 export const shortTool = (tool: string) => fit(clean(tool.split('__').pop() ?? tool, 80), TOOL_MAX)
 
-export const spin = (f: number, offset = 0) => SPINNER[(f + offset) % SPINNER.length] ?? '⠋'
+export const spin = (f: number, offset = 0) => SPINNER[(f + offset) % SPINNER.length] ?? IDLE_GLYPH
 
-// Um trecho aceso que vai e volta numa barra: ▰▰▱▱▱▱ → ▱▰▰▱▱▱ → … → ▱▱▱▱▰▰ → volta.
-export const scanner = (f: number, width = SCAN_WIDTH) => {
-  const span = width - SCAN_LIT
-  const t = f % (span * 2)
-  const at = t <= span ? t : span * 2 - t
-  return { before: '▱'.repeat(at), lit: '▰'.repeat(SCAN_LIT), after: '▱'.repeat(span - at) }
+// A cauda de um cometa de faíscas, da cabeça para trás.
+const COMET: Part[] = [
+  { text: '✻', color: 'claude', bold: true },
+  { text: '✶', color: 'claude' },
+  { text: '✳', color: 'claude', dim: true },
+  { text: '✢', color: 'subtle' },
+]
+const TRAIL_DOT: Part = { text: '·', color: 'subtle' }
+
+// Um cometa de faíscas que atravessa a trilha da esquerda para a direita e sai antes de voltar:
+// ✻······· → ✶✻······ → ✳✶✻····· → … → ·······✢ → ✻·······
+export const trail = (f: number, width = TRAIL_WIDTH): Part[] => {
+  const head = f % (width + COMET.length)
+  return Array.from({ length: width }, (_, i) => COMET[head - i] ?? TRAIL_DOT)
 }
 
 // Um brilho que percorre o texto, uma letra por quadro, e descansa antes de voltar.
@@ -164,10 +174,10 @@ export const fromUsage = (u: Pick<SessionUsage, 'rateLimits' | 'cost'>): Pick<Fi
   return { costUsd: u.cost?.usd, fiveHour: find('five_hour'), week: find('seven_day') }
 }
 
-// "⠹ Fable 5.2 · high": o giro enquanto o turno roda, um círculo parado fora dele.
+// "✶ Fable 5.2 · high": a faísca pulsa enquanto o turno roda e fica apagada fora dele.
 const headLine = (f: Figures, isWorking: boolean, fr: number): Line => ({
   parts: [
-    isWorking ? { text: `${spin(fr)} `, color: 'claude' } : { text: '○ ', dim: true },
+    isWorking ? { text: `${spin(fr)} `, color: 'claude', bold: true } : { text: `${IDLE_GLYPH} `, dim: true },
     { text: f.model ? prettyModel(f.model) : PENDING, color: 'claude', bold: true },
     ...(f.effort ? [{ text: ' · ', dim: true }, { text: f.effort, ...(EFFORTS.includes(f.effort) && { color: 'claude' }) }] : []),
   ],
@@ -188,20 +198,15 @@ const costLine = (f: Figures, m: Main, now: number): Line => {
   }
 }
 
-// "▱▰▰▱▱▱ 1m12s · 14 tools · Bash": o turno do loop principal, enquanto roda.
-const workLine = (m: Main, now: number, fr: number): Line => {
-  const bar = scanner(fr)
-  return {
-    parts: [
-      ...(bar.before ? [{ text: bar.before, color: 'subtle' }] : []),
-      { text: bar.lit, color: 'claude' },
-      ...(bar.after ? [{ text: bar.after, color: 'subtle' }] : []),
-      { text: ` ${fmtSpan(now - m.startedAt)}` },
-      ...(m.tools > 0 ? [{ text: ` · ${STRINGS.tools(m.tools)}`, dim: true }] : []),
-      ...(m.lastTool ? [{ text: ' · ', dim: true }, { text: m.lastTool, color: 'claude' }] : []),
-    ],
-  }
-}
+// "✳✶✻····· 1m12s · 14 tools · Bash": o turno do loop principal, enquanto roda.
+const workLine = (m: Main, now: number, fr: number): Line => ({
+  parts: [
+    ...trail(fr),
+    { text: ` ${fmtSpan(now - m.startedAt)}` },
+    ...(m.tools > 0 ? [{ text: ` · ${STRINGS.tools(m.tools)}`, dim: true }] : []),
+    ...(m.lastTool ? [{ text: ' · ', dim: true }, { text: m.lastTool, color: 'claude' }] : []),
+  ],
+})
 
 const limitParts = (label: string, l: Limit, now: number): Part[] => {
   const on = Math.min(LIMIT_GAUGE, Math.max(0, Math.round((l.pct * LIMIT_GAUGE) / 100)))
@@ -245,17 +250,20 @@ const agentTail = (a: Agent, now: number): Part[] => {
   ]
 }
 
-// "⠹ Explore  buscar rotas HLS        12s · 4 tools · Grep": a descrição cede espaço antes de tudo.
+// "✶ Explore ✳✶✻··  buscar rotas HLS        12s · 4 tools · Grep": a descrição cede espaço antes de tudo.
 export const agentLine = (a: Agent, now: number, fr: number, index: number, max: number): Line => {
-  const isRunning = a.state === 'running'
   const type = fit(a.type, TYPE_MAX)
   const tail = agentTail(a, now)
-  const head: Part[] = [
-    // cada agente gira fora de fase do vizinho
-    a.state === 'running' ? { text: spin(fr, index * 3), color: 'claude' } : GLYPH[a.state],
-    { text: ' ' },
-    ...(isRunning ? shimmer(type, fr + index * 5) : [{ text: type, dim: a.state !== 'failed' }]),
-  ]
+  // cada agente pulsa e corre fora de fase do vizinho
+  const head: Part[] = a.state === 'running'
+    ? [
+        { text: spin(fr, index * 3), color: 'claude', bold: true },
+        { text: ' ' },
+        ...shimmer(type, fr + index * 5),
+        { text: ' ' },
+        ...trail(fr + index * 2, AGENT_TRAIL_WIDTH),
+      ]
+    : [GLYPH[a.state], { text: ' ' }, { text: type, dim: a.state !== 'failed' }]
   const room = max - partsWidth(head) - 2 - TAIL_GAP - partsWidth(tail)
   const description = a.description && room >= DESC_MIN ? [{ text: `  ${fit(a.description, room)}`, dim: true }] : []
   return { parts: [...head, ...description], tail }
@@ -282,24 +290,24 @@ export type CardInput = {
   max?: number
 }
 
-// Puro: as linhas do card. Não há linha de contexto: o card é sobre custo, modelo e quem está trabalhando.
-export const cardLines = ({ figures: f, main: m, agents: list, now, frame: fr, isWorking, max = MAX_CARD_WIDTH }: CardInput): Line[] => {
+// Puro: as linhas da barra, na largura `max`. Não há linha de contexto: é sobre custo, modelo e quem trabalha.
+// Quando cabe, modelo fica à esquerda e custo e limites encostam à direita da mesma linha; senão, empilham.
+export const cardLines = ({ figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH }: CardInput): Line[] => {
+  const head = headLine(f, isWorking, fr)
+  const cost = costLine(f, m, now)
   const limits = limitsLine(f, now)
+  const top: Line = { parts: head.parts, tail: [...cost.parts, ...(limits ? [{ text: '  ·  ', dim: true }, ...limits.parts] : [])] }
+  const isOneRow = lineWidth(top) + BUTTONS_WIDTH <= max
+  const work = isWorking && m.startedAt > 0 ? [workLine(m, now, fr)] : []
   const sorted = sortAgents(list)
   const shown = sorted.slice(0, MAX_AGENT_ROWS)
   const hiddenCount = sorted.length - shown.length
   return [
-    headLine(f, isWorking, fr),
-    costLine(f, m, now),
-    ...(isWorking && m.startedAt > 0 ? [workLine(m, now, fr)] : []),
-    ...(limits ? [limits] : []),
+    ...(isOneRow ? [top, ...work] : [head, cost, ...work, ...(limits ? [limits] : [])]),
     ...shown.map((a, n) => agentLine(a, now, fr, n, max)),
     ...(hiddenCount > 0 ? [{ parts: [{ text: STRINGS.more(hiddenCount), dim: true }] }] : []),
   ]
 }
-
-export const cardWidth = (lines: Line[], max = MAX_CARD_WIDTH) =>
-  Math.min(max, Math.max(MIN_CARD_WIDTH, lineWidth(lines[0] ?? { parts: [] }) + 1 + BUTTONS_WIDTH, ...lines.slice(1).map(lineWidth)))
 
 const isLive = (a: Agent) => a.state === 'running' || a.state === 'waiting'
 const isExpired = (a: Agent, now: number) => a.endedAt !== undefined && now - a.endedAt > LINGER_MS
@@ -532,7 +540,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // As linhas da faixa seguram o card no canto direito, logo acima do prompt.
+  // A faixa acima do prompt vira uma barra na largura toda.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     lastBandColumns = e.props.bodyColumns
     isBandWorking = e.props.isWorking
@@ -552,12 +560,12 @@ export const register: Register = on => {
 
     const list = await read($, agents)
     if (hasWork(list)) ensureTicker($)
-    const max = Math.min(MAX_CARD_WIDTH, e.props.bodyColumns - 2)
+    // A barra ocupa a faixa toda, de ponta a ponta.
+    const width = e.props.bodyColumns - BAR_RIGHT_PAD
     const lines = cardLines({
       figures: await read($, figures), main: await read($, main), agents: list,
-      now: await $.clock.now(), frame: await read($, frame), isWorking: e.props.isWorking, max,
+      now: await $.clock.now(), frame: await read($, frame), isWorking: e.props.isWorking, max: width,
     })
-    const width = cardWidth(lines, max)
     const runs = (parts: Part[]) => parts.map(q => <Text color={q.color} dimColor={q.dim} bold={q.bold}>{q.text}</Text>)
     // Uma linha é um Text só, cortado na borda do card; o trecho da direita encosta na borda.
     const row = (l: Line, room: number) => (
@@ -570,8 +578,9 @@ export const register: Register = on => {
     const [first = { parts: [] }, ...rest] = lines
 
     return withBelow(
-      <Box justifyContent="flex-end" paddingRight={1}>
+      <Box paddingRight={BAR_RIGHT_PAD}>
         <Box width={width} flexDirection="column">
+          <Text key="rule" color="subtle" wrap="truncate-end">{'─'.repeat(width)}</Text>
           <Box key="head">
             {row(first, width - BUTTONS_WIDTH)}
             <Button key="hide" label={STRINGS.hide} plain dimColor hover={{ color: 'claude' }} onPress={() => setHidden(true)} />

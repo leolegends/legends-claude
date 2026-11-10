@@ -1,26 +1,27 @@
 # legends-claude
 
-Um card acima do prompt do Claude Code que mostra o que importa enquanto você trabalha: **modelo e effort**, **custo da sessão e do turno**, **limites de uso** e **cada agente em execução**, com animação. Não mostra barra de contexto.
+Uma barra acima do prompt do Claude Code que mostra o que importa enquanto você trabalha: **modelo e effort**, **custo da sessão e do turno**, **limites de uso** e **cada agente em execução**, com animação. Não mostra barra de contexto.
 
 ```
-⠹ Fable 5.2 · high                                          ▾
-$1.7500 ▲ sessão · turno +$0.2500
-▱▰▰▱▱▱ 1m12s · 14 tools · Bash
-5h ▰▰▱▱▱ 42% ↻2h10m · 7d ▰▱▱▱▱ 18%
-⠋ Explore  buscar rotas HLS               12s · 4 tools · Grep
-⠸ code-reviewer  revisar o diff           48s · 9 tools · Read
-✓ planner  plano da feature                  1m02s · 12.4k tok
+────────────────────────────────────────────────────────────────────────────────────────────────
+✶ Fable 5.2 · high              $1.7500 ▲ sessão · turno +$0.2500  ·  5h ▰▰▱▱▱ 42% · 7d ▰▱▱▱▱ 18%  ▾
+✳✶✻····· 1m12s · 14 tools · Bash
+✻ Explore ✶✻···  buscar rotas HLS                                              12s · 4 tools · Grep
+✢ code-reviewer ·✢✳✶✻  revisar o diff                                          48s · 9 tools · Read
+✓ planner  plano da feature                                                       1m02s · 12.4k tok
 ```
+
+A barra ocupa a largura toda do terminal. Num terminal estreito, modelo, custo e limites empilham em linhas próprias.
 
 ## O que aparece
 
 | Linha | O que mostra |
 | --- | --- |
-| Cabeçalho | Modelo e effort do último pedido. Um giro enquanto o turno roda, `○` quando está ocioso. |
+| Cabeçalho | Modelo e effort do último pedido. A faísca do Claude (`· ✢ ✳ ✶ ✻ ✽`) pulsa enquanto o turno roda e fica apagada quando está ocioso. Custo e limites encostam à direita na mesma linha quando cabem. |
 | Custo | Total da sessão (o mesmo que `/cost` soma, subagentes incluídos) e quanto foi gasto desde o último prompt. O total acende com `▲` por um instante sempre que cresce. |
-| Trabalho | Só durante um turno: barra animada, tempo decorrido, quantas ferramentas foram chamadas e a última delas. |
+| Trabalho | Só durante um turno: um cometa de faíscas `✳✶✻·····` correndo, tempo decorrido, quantas ferramentas foram chamadas e a última delas. |
 | Limites | Janelas de 5 horas e 7 dias, com quanto falta para zerar. Só aparece em contas que reportam limite. |
-| Agentes | Uma linha por subagente, teammate ou agente de workflow: giro e brilho no nome enquanto roda, tempo, ferramentas e a última chamada. Ao terminar vira `✓` com duração e tokens (ou `✗` se falhou) e some depois de 8 segundos. No máximo 6 linhas; o resto vira `+N agentes`. |
+| Agentes | Uma linha por subagente, teammate ou agente de workflow: faísca pulsando, brilho no nome e um cometa próprio enquanto roda, cada um fora de fase do vizinho; tempo, ferramentas e a última chamada. Ao terminar vira `✓` com duração e tokens (ou `✗` se falhou) e some depois de 8 segundos. No máximo 6 linhas; o resto vira `+N agentes`. |
 
 A animação só roda enquanto há trabalho em curso (um turno ou um agente). Parado, o card não redesenha.
 
