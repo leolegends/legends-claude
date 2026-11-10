@@ -24,11 +24,11 @@ A barra ocupa a largura toda do terminal. Num terminal estreito, modelo, custo e
 | Custo | Total da sessão (o mesmo que `/cost` soma, subagentes incluídos) e quanto foi gasto desde o último prompt. Duas casas decimais (`$1.75`). O total acende com `▲` por um instante sempre que cresce. |
 | Trabalho | Só durante um turno: um cometa de faíscas `✳✶✻·····` correndo, tempo decorrido, quantas ferramentas foram chamadas e a última delas. |
 | Limites | Janelas de 5 horas e 7 dias, com quanto falta para zerar. Só aparece em contas que reportam limite. |
-| Agentes | Uma linha por subagente, teammate ou agente de workflow: o nome surge de um punhado de faíscas que assentam letra a letra; depois, faísca pulsando, brilho no nome e um cometa próprio, cada um fora de fase do vizinho; tempo, ferramentas e a última chamada. Ao terminar vira `✓` com um estouro de faíscas que rareia, duração e tokens (ou `✗` se falhou) e some depois de 8 segundos. No máximo 6 linhas; o resto vira `+N agentes`. |
+| Agentes | Uma linha por subagente, teammate ou agente de workflow: o nome surge de um punhado de faíscas que assentam letra a letra; depois, faísca pulsando, brilho no nome e um cometa próprio, cada um fora de fase do vizinho; tempo, ferramentas e a última chamada. Ao terminar vira `✓` com um estouro de faíscas que rareia, duração e tokens (ou `✗` se falhou) e some depois de 8 segundos. Por padrão no máximo 6 linhas (3, 6 ou 10 na aba de ajustes); o resto vira `+N agentes`. |
 
-A animação só roda enquanto há trabalho em curso (um turno, um agente, ou o estouro de quem acabou de terminar). Parada, a barra não redesenha.
+A animação só roda enquanto há trabalho em curso (um turno, um agente, ou a despedida de quem acabou de terminar: o estouro de faíscas e o ajudante sumindo do palco). Parada, a barra não redesenha.
 
-As animações seguem as técnicas da skill `ascii-animations` (onda que se propaga, máquina de estados por caractere com atraso irregular, partículas que rareiam com a idade), adaptadas para o terminal: tudo é função do quadro, sem sorteio, então cada redesenho mostra a mesma coisa.
+As animações seguem as técnicas da skill `ascii-animations` (onda que se propaga, máquina de estados por caractere com atraso irregular, partículas que rareiam com a idade), adaptadas para o terminal: tudo é função do relógio, sem sorteio, então cada redesenho mostra a mesma coisa.
 
 ## Instalação
 
@@ -44,7 +44,7 @@ Ou direto do shell:
 claude plugin install legends-claude --marketplace leolegends/legends-claude
 ```
 
-O Claude Code pergunta `Add marketplace?` (responda `y`) e depois o escopo: escolha **user** para o card valer em todas as sessões. Ele passa a funcionar na hora, sem reiniciar.
+O Claude Code pergunta `Add marketplace?` (responda `y`) e depois o escopo: escolha **user** para a barra valer em todas as sessões. Ele passa a funcionar na hora, sem reiniciar.
 
 No app desktop, onde `/plugin` não roda: clique em **+** ao lado do prompt, depois **Plugins**, **Add marketplace** com `leolegends/legends-claude` e **Add plugin**.
 
@@ -56,7 +56,7 @@ Para remover: `claude plugin uninstall legends-claude`.
 - **Clique no modelo** (`Fable 5.2`) abre um seletor na própria barra: `modelo  ● Fable  Opus  Sonnet  Haiku  ✕`. Clicar num deles roda `/model <nome>`, como se você tivesse digitado: a troca é a da sessão e, como todo `/model`, fica salva como padrão das próximas.
 - **Clique no effort** (`high`) abre `effort  low  medium  ● high  xhigh  max  ✕` e roda `/effort <nível>`.
 - No meio de um turno a troca entra na fila e vale quando o turno termina. `✕` (ou clicar de novo no modelo/effort) fecha o seletor sem trocar nada.
-- `▾` no canto do card esconde; `◂ status` traz de volta.
+- `▾` no canto da barra esconde; `◂ status` traz de volta.
 - **`⚙` abre a aba de ajustes** na própria barra (ou `/legends-claude ajustes`). Cada mudança vale na hora e fica salva para as próximas sessões:
 
 ```
@@ -75,13 +75,14 @@ agentes      3  ● 6  10
 | velocidade | A duração de um quadro: 240, 150 ou 90 ms. Sem efeito com a animação parada. |
 | mostrar | Liga e desliga a régua de cima, o palco, os limites de 5h/7d e o custo do turno. O palco só aparece com a animação `completa`. |
 | agentes | Quantas linhas de agente aparecem antes do resumo `+N agentes`. |
+
 - `/legends-claude` alterna entre escondido e visível.
-- O card precisa de pelo menos 60 colunas de terminal. Abaixo disso ele não desenha.
+- A barra precisa de pelo menos 60 colunas de terminal; abaixo disso ela não desenha. O palco precisa de 40 colunas de pista.
 
 ## Requisitos e limites
 
 - Claude Code com suporte a mods (function hooks). Escrito e testado na versão 2.1.322. Essa API está em acesso antecipado e pode mudar entre versões.
-- O custo por agente não aparece: o Claude Code só expõe o custo total da sessão. Por agente, o card mostra os tokens do último turno.
+- O custo por agente não aparece: o Claude Code só expõe o custo total da sessão. Por agente, a barra mostra os tokens do último turno.
 - O effort aparece a partir do primeiro pedido ao modelo depois que o plugin carrega; antes disso a barra mostra `effort`, já clicável.
 - O seletor de modelo usa os apelidos `fable`, `opus`, `sonnet` e `haiku`; um modelo que a sua conta não tem é recusado pelo próprio `/model`, e a barra avisa.
 - O plugin não acessa rede nem arquivos. Ele lê o uso da sessão e a lista de agentes, guarda o estado na sessão e os ajustes no store do próprio plugin (um JSON na pasta de configuração do Claude Code).
@@ -100,8 +101,8 @@ claude --plugin-dir .        # roda uma sessão com o plugin carregado desta pas
 - `hooks/stage.ts`: o palco (mascote, ajudantes, pilha e prateleira), função pura do relógio; `hooks/stage.test.ts` trava os quadros.
 - `hooks/settings.ts`: paleta, opções e validação dos ajustes salvos.
 - `hooks/settings-panel.tsx`: o desenho da aba de ajustes.
-- `hooks/lines.test.ts`: funções puras (formatos, animações, linhas do card, ajustes, conferência de agentes).
-- `hooks/card.test.tsx`: o card montado em cada superfície, o ciclo de vida de um agente, os seletores e a aba de ajustes.
+- `hooks/lines.test.ts`: funções puras (formatos, animações, linhas da barra, ajustes, conferência de agentes).
+- `hooks/card.test.tsx`: a barra montada em cada superfície, o ciclo de vida de um agente, os seletores, a aba de ajustes e o palco em cena.
 
 ## Créditos e licença
 
