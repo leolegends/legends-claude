@@ -3,7 +3,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { reconcileRows, upsert } from './agents'
 import { SPINNER, burst, noise, reveal, ruleParts, shimmer, spin, trail } from './effects'
 import { clean, fit, fmtCost, fmtSpan, fmtTokens, prettyModel, shortTool } from './format'
-import { agentLine, cardLines, sortAgents } from './lines'
+import { agentLine, cardLines, hudParts, sortAgents } from './lines'
 import { lineWidth, merge } from './parts'
 
 import { DEFAULT_SETTINGS, effectsOf, sanitize } from './settings'
@@ -178,9 +178,8 @@ describe('linhas do card', () => {
   test('enquanto o turno roda a faísca pulsa e o cometa corre na linha de trabalho', () => {
     const lines = card({ isWorking: true, frame: 1 })
     expect(left(lines[0])).toBe('✢ Fable 5.2 · high')
-    expect(lines.length).toBe(4) // cabeçalho, as duas linhas do palco e a linha de trabalho
-    expect(text(lines[1] as Line)).toContain('▐▛███▜▌') // o mascote em cena
-    expect(text(lines[3] as Line)).toBe('✶✻······ 1m12s · 14 tools · Bash')
+    expect(lines.length).toBe(2)
+    expect(text(lines[1] as Line)).toBe('✶✻······ 1m12s · 14 tools · Bash')
   })
 
   test('os limites só aparecem quando há leitura, ao lado do custo ou empilhados', () => {
@@ -216,7 +215,7 @@ describe('linhas do card', () => {
     ]
     expect(sortAgents(list).map(a => a.id)).toEqual(['r6', 'r5', 'r4', 'r3', 'r2', 'r1', 'd'])
     const lines = card({ agents: list }).map(text)
-    expect(lines.length).toBe(1 + 2 + 6 + 1) // cabeçalho, palco, seis agentes, resumo
+    expect(lines.length).toBe(1 + 6 + 1) // cabeçalho, seis agentes, resumo
     expect(lines[lines.length - 1]).toBe('+1 agente')
   })
 
@@ -268,9 +267,10 @@ describe('ajustes', () => {
   })
 
   test('animação parada redesenha uma vez por segundo; a velocidade só vale fora dela', () => {
-    expect(effectsOf(DEFAULT_SETTINGS)).toEqual({ frameMs: 150, isFull: true, isStill: false, hasStage: true })
-    expect(effectsOf({ ...DEFAULT_SETTINGS, speed: 'rapida' }).frameMs).toBe(90)
-    expect(effectsOf({ ...DEFAULT_SETTINGS, motion: 'suave' })).toEqual({ frameMs: 150, isFull: false, isStill: false, hasStage: false })
+    expect(effectsOf(DEFAULT_SETTINGS)).toEqual({ frameMs: 125, isFull: true, isStill: false, hasStage: true })
+    expect(effectsOf({ ...DEFAULT_SETTINGS, speed: 'rapida' }).frameMs).toBe(80)
+    expect(effectsOf({ ...DEFAULT_SETTINGS, speed: 'lenta' }).frameMs).toBe(200)
+    expect(effectsOf({ ...DEFAULT_SETTINGS, motion: 'suave' })).toEqual({ frameMs: 125, isFull: false, isStill: false, hasStage: false })
     expect(effectsOf({ ...DEFAULT_SETTINGS, motion: 'parada', speed: 'rapida' })).toEqual({ frameMs: 1000, isFull: false, isStill: true, hasStage: false })
     expect(effectsOf({ ...DEFAULT_SETTINGS, showStage: false }).hasStage).toBe(false)
   })
@@ -286,16 +286,32 @@ describe('ajustes', () => {
   test('o teto de agentes vem dos ajustes, e o resto vira resumo', () => {
     const list = ['a', 'b', 'c', 'd', 'e'].map((id, n) => agent({ id, startedAt: NOW - 1000 * (n + 1) }))
     const lines = card({ agents: list, settings: set({ maxAgents: 3 }) }).map(text)
-    expect(lines.length).toBe(1 + 2 + 3 + 1)
+    expect(lines.length).toBe(1 + 3 + 1)
     expect(lines.at(-1)).toBe('+2 agentes')
   })
 
-  test('o palco some quando desligado ou fora da animação completa', () => {
-    const working = { isWorking: true, agents: [agent()] }
-    expect(card(working).some(l => text(l).includes('▐▛███▜▌'))).toBe(true)
-    expect(card({ ...working, settings: set({ showStage: false }) }).some(l => text(l).includes('▐▛'))).toBe(false)
-    expect(card({ ...working, settings: set({ motion: 'suave' }) }).some(l => text(l).includes('▐▛'))).toBe(false)
-    expect(card().some(l => text(l).includes('▐▛'))).toBe(false) // parado, sem agentes: não há cena
+  test('com o palco em cena, as linhas dele vêm logo abaixo do cabeçalho e o placar dele substitui a linha de trabalho', () => {
+    const stage = [{ parts: [{ text: 'linha 1 do palco' }] }, { parts: [{ text: 'linha 2 do palco' }] }]
+    const lines = card({ isWorking: true, agents: [agent()], stage }).map(text)
+    expect(lines.slice(1, 3)).toEqual(['linha 1 do palco', 'linha 2 do palco'])
+    expect(lines.some(l => l.includes('1m12s'))).toBe(false) // sem a linha de trabalho: o tempo está no placar do palco
+    expect(lines.length).toBe(1 + 2 + 1) // cabeçalho, palco, o agente
+    const stacked = card({ isWorking: true, stage, max: 40 }).map(text)
+    expect(stacked.slice(2, 4)).toEqual(['linha 1 do palco', 'linha 2 do palco']) // empilhado, depois do custo
+  })
+
+  test('numa faixa baixa a lista de agentes encolhe para caber, e o resto vira resumo', () => {
+    const list = ['a', 'b', 'c', 'd'].map((id, n) => agent({ id, startedAt: NOW - 1000 * (n + 1) }))
+    const lines = card({ agents: list, agentRows: 2 }).map(text)
+    expect(lines.length).toBe(1 + 2 + 1)
+    expect(lines.at(-1)).toBe('+2 agentes')
+    expect(card({ agents: list, agentRows: 99 }).length).toBe(1 + 4) // com folga, valem os ajustes
+  })
+
+  test('o placar do turno: tempo, ferramentas e a última delas', () => {
+    expect(hudParts(MAIN, NOW).map(p => p.text).join('')).toBe('1m12s · 14 tools · Bash')
+    expect(hudParts({ ...MAIN, tools: 0, lastTool: null }, NOW).map(p => p.text).join('')).toBe('1m12s')
+    expect(hudParts(MAIN, NOW).at(-1)).toEqual({ text: 'Bash', color: 'claude' })
   })
 
   test('suave: sem nome surgindo nem estouro, mas a faísca e o cometa seguem', () => {

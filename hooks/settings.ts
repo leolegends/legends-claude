@@ -21,9 +21,9 @@ export const MOTIONS: readonly { id: Motion; label: string }[] = [
 
 // Quanto dura um quadro. `parada` ignora: redesenha uma vez por segundo, só pelo tempo decorrido.
 export const SPEEDS: readonly { id: Speed; label: string; frameMs: number }[] = [
-  { id: 'lenta', label: 'lenta', frameMs: 240 },
-  { id: 'normal', label: 'normal', frameMs: 150 },
-  { id: 'rapida', label: 'rápida', frameMs: 90 },
+  { id: 'lenta', label: 'lenta', frameMs: 200 },
+  { id: 'normal', label: 'normal', frameMs: 125 },
+  { id: 'rapida', label: 'rápida', frameMs: 80 },
 ]
 const STILL_FRAME_MS = 1_000
 
@@ -70,7 +70,7 @@ export const accentColor = (s: Settings) => ACCENTS.find(a => a.id === s.accent)
 export type Effects = { frameMs: number; isFull: boolean; isStill: boolean; hasStage: boolean }
 
 export const effectsOf = (s: Settings): Effects => ({
-  frameMs: s.motion === 'parada' ? STILL_FRAME_MS : (SPEEDS.find(x => x.id === s.speed)?.frameMs ?? 150),
+  frameMs: s.motion === 'parada' ? STILL_FRAME_MS : (SPEEDS.find(x => x.id === s.speed)?.frameMs ?? 125),
   isFull: s.motion === 'completa',
   isStill: s.motion === 'parada',
   hasStage: s.showStage && s.motion === 'completa', // o palco é a animação mais viva: só na completa

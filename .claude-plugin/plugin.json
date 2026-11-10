@@ -1,11 +1,11 @@
 {
   "name": "legends-claude",
-  "version": "0.5.0",
-  "description": "Card acima do prompt do Claude Code com modelo, effort, custo da sessão e do turno, limites de uso e os agentes em execução, animados. Sem barra de contexto.",
+  "version": "0.6.0",
+  "description": "Barra acima do prompt do Claude Code com modelo, effort, custo da sessão e do turno, limites de uso, os agentes em execução e um palco animado onde o mascote constrói, tijolo por tijolo, o que o turno faz. Sem barra de contexto.",
   "author": { "name": "leolegends", "url": "https://github.com/leolegends" },
   "homepage": "https://github.com/leolegends/legends-claude",
   "repository": "https://github.com/leolegends/legends-claude",
   "license": "MIT",
-  "keywords": ["status", "cost", "agents", "statusline", "mod"],
+  "keywords": ["status", "cost", "agents", "statusline", "animation", "mod"],
   "types": "./types/index.d.ts"
 }

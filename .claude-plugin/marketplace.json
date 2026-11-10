@@ -5,7 +5,7 @@
     {
       "name": "legends-claude",
       "source": "./",
-      "description": "Card acima do prompt com modelo, effort, custo da sessão e do turno, limites de uso e os agentes em execução, animados."
+      "description": "Barra acima do prompt com modelo, effort, custo, limites de uso, os agentes em execução e um palco animado com o mascote do Claude Code."
     }
   ]
 }

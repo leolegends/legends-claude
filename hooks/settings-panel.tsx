@@ -6,7 +6,7 @@ import { ACCENTS, AGENT_LIMITS, MOTIONS, SPEEDS, TOGGLES } from './settings'
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
 export const PANEL_STRINGS = {
-  title: 'ajustes', reset: ' restaurar padrão ', close: ' ✕ ',
+  title: 'ajustes', demo: ' ▶ demonstração ', reset: ' restaurar padrão ', close: ' ✕ ',
   accent: 'cor', motion: 'animação', speed: 'velocidade', show: 'mostrar', agents: 'agentes',
   selected: '● ', on: '☑ ', off: '☐ ',
   stillSpeed: '(sem efeito com animação parada)',
@@ -21,11 +21,13 @@ export type PanelProps = {
   accent: string
   onChange: (patch: Partial<Settings>) => void
   onReset: () => void
+  /** Roda a demonstração do palco. */
+  onDemo: () => void
   onClose: () => void
 }
 
 /** A aba de ajustes: uma linha por grupo, cada opção um botão; a escolhida vem marcada com ●. */
-export const SettingsPanel = ({ el, settings: s, accent, onChange, onReset, onClose }: PanelProps): RenderElement[] => {
+export const SettingsPanel = ({ el, settings: s, accent, onChange, onReset, onDemo, onClose }: PanelProps): RenderElement[] => {
   const { Box, Button, Text } = el
   const label = (text: string) => <Text dimColor>{text.padEnd(LABEL_WIDTH)}</Text>
 
@@ -44,6 +46,7 @@ export const SettingsPanel = ({ el, settings: s, accent, onChange, onReset, onCl
       <Text color={accent} bold>⚙ </Text>
       <Text bold>{PANEL_STRINGS.title}</Text>
       <Box flexGrow={1} />
+      <Button key="set-demo" label={PANEL_STRINGS.demo} plain dimColor onPress={onDemo} />
       <Button key="set-reset" label={PANEL_STRINGS.reset} plain dimColor onPress={onReset} />
       <Button key="set-close" label={PANEL_STRINGS.close} plain dimColor onPress={onClose} />
     </Box>,

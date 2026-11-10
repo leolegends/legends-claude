@@ -14,7 +14,7 @@ export type StatusSettings = {
   motion: StatusMotion
   speed: StatusSpeed
   showRule: boolean
-  /** O palco: o mascote carregando arquivos e chamando ajudantes. */
+  /** O palco: o mascote levando os tijolos das ferramentas até a parede, com um ajudante por agente. */
   showStage: boolean
   showLimits: boolean
   showTurnCost: boolean

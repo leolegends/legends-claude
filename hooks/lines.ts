@@ -6,7 +6,7 @@ import { TAIL_GAP, lineWidth, partsWidth } from './parts'
 import type { Line, Part } from './parts'
 import { DEFAULT_SETTINGS, FULL_EFFECTS, effectsOf } from './settings'
 import type { Effects } from './settings'
-import { stageRows, tintOf } from './stage'
+import { tintOf } from './palette'
 import type {
   StatusAgent as Agent,
   StatusAgentState as AgentState,
@@ -75,6 +75,13 @@ const costLine = (f: Figures, m: Main, now: number, showTurn = true): Line => {
     ],
   }
 }
+
+/** "1m12s · 14 tools · Bash": o placar do turno, para o canto do palco. */
+export const hudParts = (m: Main, now: number): Part[] => [
+  { text: fmtSpan(now - m.startedAt), dim: true },
+  ...(m.tools > 0 ? [{ text: ` · ${STRINGS.tools(m.tools)}`, dim: true }] : []),
+  ...(m.lastTool ? [{ text: ' · ', dim: true }, { text: m.lastTool, color: 'claude' }] : []),
+]
 
 // "✳✶✻····· 1m12s · 14 tools · Bash": o turno do loop principal, enquanto roda.
 const workLine = (m: Main, now: number, fr: number, fx: Effects): Line => ({
@@ -175,26 +182,26 @@ export type CardInput = {
   max?: number
   /** Os ajustes da aba ⚙; os padrões quando ausentes. */
   settings?: Settings
+  /** As linhas do palco, já desenhadas; com elas, o placar do palco faz as vezes da linha de trabalho. */
+  stage?: readonly Line[]
+  /** Quantas linhas de agente cabem na faixa; os ajustes mandam quando o número deles é menor. */
+  agentRows?: number
 }
 
 // Puro: as linhas da barra, na largura `max`. Não há linha de contexto: é sobre custo, modelo e quem trabalha.
 // Quando cabe, modelo fica à esquerda e custo e limites encostam à direita da mesma linha; senão, empilham.
 export const cardLines = (input: CardInput): Line[] => {
-  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS } = input
+  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], agentRows = Infinity } = input
   const fx = effectsOf(s)
   const head = headLine(f, isWorking, fr, fx)
   const cost = costLine(f, m, now, s.showTurnCost)
   const limits = s.showLimits ? limitsLine(f, now) : null
   const top: Line = { parts: head.parts, tail: [...cost.parts, ...(limits ? [{ text: '  ·  ', dim: true }, ...limits.parts] : [])] }
   const isOneRow = lineWidth(top) + BUTTONS_WIDTH <= max
-  const work = isWorking && m.startedAt > 0 ? [workLine(m, now, fr, fx)] : []
+  const work = isWorking && m.startedAt > 0 && !stage.length ? [workLine(m, now, fr, fx)] : []
   const sorted = sortAgents(list)
-  const shown = sorted.slice(0, s.maxAgents)
+  const shown = sorted.slice(0, Math.max(0, Math.min(s.maxAgents, agentRows)))
   const hiddenCount = sorted.length - shown.length
-  // O palco: o mascote levando arquivos de um lado ao outro e chamando ajudantes, um por agente.
-  const stage: Line[] = fx.hasStage
-    ? stageRows({ main: m, agents: shown, now, isWorking, width: max, frameMs: fx.frameMs }).map(parts => ({ parts }))
-    : []
   return [
     ...(isOneRow ? [top, ...stage, ...work] : [head, cost, ...stage, ...work, ...(limits ? [limits] : [])]),
     ...shown.map((a, n) => agentLine(a, now, fr, n, max, fx)),

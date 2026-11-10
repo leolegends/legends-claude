@@ -1,11 +1,13 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { tintOf } from './palette'
+
 const SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
-const band = (surface: (typeof SURFACES)[number], isWorking = false, bodyColumns = 120) =>
+const band = (surface: (typeof SURFACES)[number], isWorking = false, bodyColumns = 120, maxRows = 20) =>
   ({
     plugin: 'legends-claude', surface, component: 'AbovePrompt',
-    props: { hasSurvey: false, isCollapsed: false, isWorking, maxRows: 20, bodyColumns, scroll: { offset: 0, bodyRows: 19 }, view: {} },
+    props: { hasSurvey: false, isCollapsed: false, isWorking, maxRows, bodyColumns, scroll: { offset: 0, bodyRows: maxRows - 1 }, view: {} },
   }) as never
 
 type Listed = { id: string; status: string; type: string; description: string }
@@ -123,23 +125,35 @@ test('a animação anda enquanto o turno roda e para quando ele acaba', async ($
   const ui = await $.ui.mount(band('terminal', true))
   await $.turn.start({ text: 'oi', turnId: 't1' })
   expect(await ui.find({ type: 'Text', text: /^· $/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /✻······· 0s/ })).toBeDefined()
-  await clock.advance(150)
+  expect(await ui.find({ type: 'Text', text: /^0s$/ })).toBeDefined() // o placar do palco faz as vezes da linha de trabalho
+  await clock.advance(125)
   expect(await ui.find({ type: 'Text', text: /^✢ $/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /✶✻······ 0s/ })).toBeDefined()
-  await clock.advance(1_050)
-  expect(await ui.find({ type: 'Text', text: /1s/ })).toBeDefined()
+  await clock.advance(1_000)
+  expect(await ui.find({ type: 'Text', text: /^1s$/ })).toBeDefined()
   await ui.unmount()
 
-  // Fim do turno: a faixa volta a ociosa, o próximo quadro para o relógio e nada mais anda.
+  // Fim do turno: passada a comemoração, a faixa volta a ociosa, o relógio para e nada mais anda.
   const idle = await $.ui.mount(band('terminal', false))
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
-  await clock.advance(150)
-  expect(await idle.find({ type: 'Text', text: /^✻ $/ })).toBeDefined()
-  const before = (await idle.find({ type: 'Text', text: /^✻ $/ }))?.text
   await clock.advance(5_000)
-  expect((await idle.find({ type: 'Text', text: /^✻ $/ }))?.text).toBe(before)
+  const drawn = async () => (await idle.findAll({ type: 'Text' })).map(t => t.text).join('|')
+  const before = await drawn()
+  expect(before).toContain('✻ ') // a faísca apagada do cabeçalho
+  await clock.advance(5_000)
+  expect(await drawn()).toBe(before)
   await idle.unmount()
+})
+
+test('com o palco desligado, a linha de trabalho com o cometa volta', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { showStage: false } })
+  const ui = await $.ui.mount(band('terminal', true))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  expect(await ui.find({ type: 'Text', text: /✻······· 0s/ })).toBeDefined()
+  await clock.advance(125)
+  expect(await ui.find({ type: 'Text', text: /✶✻······ 0s/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /█/ })).toBeUndefined() // nenhum mascote
+  await ui.unmount()
 })
 
 test('um agente que já rodava quando o mod carregou é adotado da lista do engine', async ($, on) => {
@@ -353,27 +367,241 @@ test('/legends-claude ajustes abre a aba, mesmo com a barra escondida', async ($
 
 // ─── Palco ────────────────────────────────────────────────────────────────────
 
-test('durante o turno o mascote anda pelo palco com o arquivo; o interruptor "palco" tira a cena', async ($, on) => {
+const BLOCKS = /[▀▄█▌▐▘▝▖▗▛▜▙▟▚▞]/ // os blocos com que o palco desenha
+// A cor de um trecho que contém `text`, em qualquer linha da faixa.
+const paintOf = async (ui: { findAll: (q: { type: string; text: RegExp }) => Promise<{ text: string; props: Record<string, unknown> }[]> }, text: RegExp) =>
+  (await ui.findAll({ type: 'Text', text })).map(t => t.props.color)
+
+test('durante o turno o mascote entra em cena, e cada ferramenta vira um tijolo da cor da família dela', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount(band(surface, true))
+    expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeUndefined() // sem o início de um turno, não há cena
+
+    await $.turn.start({ text: 'oi', turnId: 't1' })
+    await clock.advance(2_500) // o mascote entra e chega ao meio da pista
+    expect(await paintOf(ui, /█████/)).toContain('claude') // o corpo dele, na cor de destaque
+
+    await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+    await clock.settle()
+    expect(await paintOf(ui, /^▀▀$/)).toContain('#F5B841') // o tijolo do shell, na pilha
+    await clock.advance(12_000) // busca, carrega, põe na esteira, e o tijolo chega ao mosaico
+    expect(await ui.find({ type: 'Text', text: /1 tool/ })).toBeDefined()
+    expect(await paintOf(ui, /^▀▀$/)).toContain('#F5B841')
+
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+    await clock.advance(250)
+    expect((await ui.findAll({ type: 'Text', text: /✓/ })).length > 0).toBe(true) // comemora
+    await clock.advance(6_000)
+    expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeUndefined() // e a cena sai
+    await ui.unmount()
+  }
+})
+
+test('um agente vira um ajudante em cena, na cor da faísca dele na lista', async ($, on) => {
   const clock = mock.clock(on, { now: 1_000_000 })
   await startSession($, on)
   const ui = await $.ui.mount(band('terminal', true))
-  expect(await ui.find({ type: 'Text', text: /▐▛███▜▌/ })).toBeUndefined() // parado: sem cena
   await $.turn.start({ text: 'oi', turnId: 't1' })
-  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
-  await clock.settle()
-  await clock.advance(300)
-  expect(await ui.find({ type: 'Text', text: /▐▛███▜▌▤ Bash/ })).toBeDefined() // leva o arquivo da ferramenta em uso
-  const before = (await ui.find({ type: 'Text', text: /▐▛███▜▌/ }))?.text
-  await clock.advance(450)
-  expect((await ui.find({ type: 'Text', text: /▐▛███▜▌/ }))?.text).not.toBe(before) // andou
-
+  await clock.advance(2_500)
+  const before = (await ui.findAll({ type: 'Text', text: BLOCKS })).length
   await $.agent.spawn(SPAWN)
-  await clock.advance(1_500)
-  expect(await ui.find({ type: 'Text', text: /▐▛█▜▌/ })).toBeDefined() // o ajudante entrou em cena
+  await clock.advance(250)
+  expect(await ui.find({ type: 'Text', text: /^!$/ })).toBeDefined() // o mascote grita por ele
+  await clock.advance(2_000)
+  const tint = tintOf('a1') // o agente que o engine de teste devolve
+  expect(await paintOf(ui, /^[·✢✳✶✻✽]$/)).toContain(tint) // a faísca do agente na lista tem a cor dele
+  expect(await paintOf(ui, BLOCKS)).toContain(tint) // e há um bicho dessa cor no palco
+  expect((await ui.findAll({ type: 'Text', text: BLOCKS })).length > before).toBe(true)
+  await ui.unmount()
+})
 
+test('o interruptor "palco" tira a cena, e numa faixa baixa demais ela nem entra', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  const ui = await $.ui.mount(band('terminal', true))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await clock.advance(2_500)
+  expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeDefined()
   await ui.press({ key: 'settings' })
   await ui.press({ key: 'set-showStage' })
   await ui.press({ key: 'set-close' })
-  expect(await ui.find({ type: 'Text', text: /▐▛/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\ds$/ })).toBeDefined() // a linha de trabalho está de volta
+  await ui.unmount()
+
+})
+
+test('numa faixa baixa o palco ainda entra e a lista de agentes encolhe; baixa demais, o palco não entra', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const three = () => ['x', 'y', 'z'].map(id => ({ id, status: 'running', type: `tipo-${id}`, description: 'd' }))
+  await startSession($, on, three)
+  const low = await $.ui.mount(band('terminal', true, 120, 8)) // régua + cabeçalho + palco = 6: sobra uma linha de agente e o resumo
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await clock.advance(3_000)
+  expect(await low.find({ type: 'Text', text: BLOCKS })).toBeDefined()
+  expect((await low.findAll({ type: 'Text', text: /tipo-[xyz]/ })).filter(t => t.props.wrap).length).toBe(1)
+  expect(await low.find({ type: 'Text', text: /\+2 agentes/ })).toBeDefined()
+  await low.unmount()
+
+  const tiny = await $.ui.mount(band('terminal', true, 120, 6))
+  await clock.advance(250)
+  expect(await tiny.find({ type: 'Text', text: BLOCKS })).toBeUndefined()
+  expect((await tiny.findAll({ type: 'Text', text: /tipo-[xyz]/ })).filter(t => t.props.wrap).length).toBe(3) // sem palco, a lista inteira
+  await tiny.unmount()
+})
+
+test('/legends-claude demo mostra o palco em ação sem um turno, e termina sozinho', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  const ui = await $.ui.mount(band('terminal'))
+  expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeUndefined()
+  const said = (await $.command.run({ command: 'legends-claude', args: 'demo' } as never)) as { text: string }
+  expect(said.text).toBe('Demonstração do palco em cena.')
+  await clock.advance(3_000)
+  expect(await ui.find({ type: 'Text', text: /▶ demonstração/ })).toBeDefined()
+  expect(await paintOf(ui, /█████/)).toContain('claude')
+  await clock.advance(12_000) // já com ajudantes e tijolos de várias cores
+  const colors = new Set(await paintOf(ui, BLOCKS))
+  expect(colors.size > 4).toBe(true)
+  await clock.advance(20_000) // o roteiro acaba, o confete cai, a cena sai
+  expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeUndefined()
+  const drawn = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text).join('|')
+  const after = await drawn()
+  await clock.advance(5_000)
+  expect(await drawn()).toBe(after) // e o relógio da animação parou
+  await ui.unmount()
+})
+
+test('a demonstração não começa no meio de um turno nem com o palco desligado; um turno de verdade a encerra', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const demo = async () => ((await $.command.run({ command: 'legends-claude', args: 'demo' } as never)) as { text: string }).text
+  await startSession($, on)
+  const ui = await $.ui.mount(band('terminal'))
+  expect(await demo()).toBe('Demonstração do palco em cena.')
+  await clock.advance(3_000)
+  expect(await ui.find({ type: 'Text', text: /▶ demonstração/ })).toBeDefined()
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await clock.advance(250)
+  expect(await ui.find({ type: 'Text', text: /▶ demonstração/ })).toBeUndefined() // o turno de verdade assumiu a cena
+  expect(await demo()).toMatch(/sessão parada/)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+  await clock.advance(6_000)
+
+  await ui.press({ key: 'settings' })
+  await ui.press({ key: 'set-showStage' })
+  expect(await demo()).toMatch(/palco está desligado/)
+  await ui.unmount()
+})
+
+test('o botão de demonstração da aba de ajustes fecha a aba e põe a cena no ar', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  const ui = await $.ui.mount(band('terminal'))
+  await ui.press({ key: 'settings' })
+  await ui.press({ key: 'set-demo' })
+  await clock.advance(3_000)
+  expect(await ui.find({ type: 'Text', text: /^ajustes$/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /▶ demonstração/ })).toBeDefined()
+  await ui.unmount()
+})
+
+// ─── O relógio da animação não fica ligado à toa ──────────────────────────────
+
+// O relógio da animação confere a lista de agentes uma vez por segundo: se as consultas param, ele parou.
+const countingAgentList = () => {
+  const seen = { calls: 0 }
+  return { seen, listed: () => ((seen.calls += 1), [] as Listed[]) }
+}
+
+test('num terminal estreito demais para o palco, o fim do turno não deixa o relógio ligado', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const { seen, listed } = countingAgentList()
+  await startSession($, on, listed)
+  const working = await $.ui.mount(band('terminal', true, 50))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await $.tool.call({ tool: 'Read', file_path: '/x' } as never)
+  await clock.advance(1_000)
+  await working.unmount()
+  const idle = await $.ui.mount(band('terminal', false, 50))
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+  await clock.advance(5_000)
+  const stopped = seen.calls
+  await clock.advance(10_000)
+  expect(seen.calls).toBe(stopped)
+  await idle.unmount()
+})
+
+test('um turno cujo fim não é avisado se encerra sozinho, e o relógio para', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const { seen, listed } = countingAgentList()
+  await startSession($, on, listed)
+  const working = await $.ui.mount(band('terminal', true))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await clock.advance(2_000)
+  expect(await working.find({ type: 'Text', text: BLOCKS })).toBeDefined()
+  await working.unmount()
+  // a faixa passa a dizer "parada", mas o evento de fim de turno nunca chega
+  const idle = await $.ui.mount(band('terminal', false))
+  await clock.advance(3_000)
+  expect(await idle.find({ type: 'Text', text: BLOCKS })).toBeDefined() // ainda dentro da tolerância: a cena segue
+  await clock.advance(12_000)
+  expect(await idle.find({ type: 'Text', text: BLOCKS })).toBeUndefined() // a cena se despediu
+  const stopped = seen.calls
+  await clock.advance(10_000)
+  expect(seen.calls).toBe(stopped)
+  expect(((await $.command.run({ command: 'legends-claude', args: 'demo' } as never)) as { text: string }).text).toBe('Demonstração do palco em cena.')
+  await idle.unmount()
+})
+
+test('religar o palco no meio de um turno põe a cena no ar na hora', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { showStage: false } })
+  const ui = await $.ui.mount(band('terminal', true))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await clock.advance(1_000)
+  expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeUndefined()
+  await ui.press({ key: 'settings' })
+  await ui.press({ key: 'set-showStage' })
+  await ui.press({ key: 'set-close' })
+  await clock.advance(2_500)
+  expect(await paintOf(ui, /█████/)).toContain('claude')
+  await ui.unmount()
+})
+
+test('num terminal estreito a demonstração avisa que não cabe, em vez de ficar rodando no vazio', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  const ui = await $.ui.mount(band('terminal', false, 50))
+  expect(((await $.command.run({ command: 'legends-claude', args: 'demo' } as never)) as { text: string }).text).toMatch(/60 colunas/)
+  await ui.unmount()
+})
+
+test('um turno interrompido se recolhe sem festa; um turno curto ganha só um pulinho', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  const ui = await $.ui.mount(band('terminal', true))
+  const checks = async () => (await ui.findAll({ type: 'Text', text: /^✓$/ })).length
+
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await clock.advance(2_500)
+  for (const tool of ['Read', 'Edit', 'Bash', 'Grep']) await $.tool.call({ tool } as never)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' } as never)
+  await clock.advance(250)
+  expect(await checks()).toBe(0)
+  expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeUndefined() // a cena já saiu
+
+  await $.turn.start({ text: 'oi', turnId: 't2' })
+  await clock.advance(2_500)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' } as never)
+  await clock.advance(250)
+  expect(await checks()).toBe(1) // comemora
+  // o confete são pontos soltos (um quarto de célula) nas cores dos tijolos: aqui não há nenhum
+  const dots = (await ui.findAll({ type: 'Text', text: /^[▘▝▖▗]+$/ })).filter(t => String(t.props.color).startsWith('#'))
+  expect(dots.length).toBe(0)
+  expect(await paintOf(ui, /^▀▀$/)).toContain('#5FA8FF') // e a parede guarda o tijolo do turno interrompido
+  await clock.advance(3_000)
+  expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeUndefined()
   await ui.unmount()
 })

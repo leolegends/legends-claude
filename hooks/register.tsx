@@ -2,13 +2,17 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
 import { LINGER_MS, isExpired, reconcileRows, upsert } from './agents'
+import { DEMO_FRAMES, applyDemo } from './demo'
 import { BURST_FRAMES, ruleParts } from './effects'
 import { clean, prettyModel, shortTool } from './format'
-import { BUTTONS_WIDTH, EFFORTS, cardLines, fromUsage } from './lines'
+import { BUTTONS_WIDTH, EFFORTS, cardLines, fromUsage, hudParts } from './lines'
+import { kindOf } from './palette'
 import { TAIL_GAP, lineWidth } from './parts'
 import type { Line, Part, Switch } from './parts'
+import { SCENE_ROWS, sceneRows } from './scene'
 import { SettingsPanel } from './settings-panel'
-import { celebrationMs } from './stage'
+import { EMPTY_SIM, MAIN, begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, settle, step, syncHelpers, think } from './sim'
+import type { Sim } from './sim'
 import { DEFAULT_SETTINGS, FULL_EFFECTS, accentColor, effectsOf, sanitize } from './settings'
 import type { Effects } from './settings'
 import type {
@@ -40,6 +44,8 @@ const HIDDEN_RIGHT_PAD = 5 // livre do [-] que o Claude Code desenha no canto da
 const RECONCILE_MS = 1_000 // a lista de agentes do engine é conferida no máximo uma vez por segundo
 const FRAME_WRAP = 1_000_000
 const FLASH_MS = 1_500 // quanto tempo o custo fica aceso depois de crescer
+const HEAL_AFTER_MS = 5_000 // um turno em curso com a faixa dizendo "parada" por esse tempo: o fim dele não foi avisado
+const STAGE_MIN_ROWS = SCENE_ROWS + 3 // a régua, o cabeçalho, o palco e ao menos uma linha de folga: menos que isso, sem palco
 // Os apelidos que o /model aceita: cada um aponta sempre para a versão mais nova da família.
 const MODELS = [
   { value: 'fable', label: 'Fable' },
@@ -53,7 +59,11 @@ const STRINGS = {
   switchFailed: (what: string, why: string) => `Não deu para trocar ${what}: ${why}`,
   hidden: 'Card de status escondido.', shown: 'Card de status visível.',
   tooNarrow: `Card de status visível; ele desenha quando o terminal tiver pelo menos ${MIN_COLUMNS} colunas.`,
-  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre a aba de ajustes',
+  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre os ajustes, "demo" mostra o palco em ação',
+  demo: 'Demonstração do palco em cena.', demoHud: '▶ demonstração',
+  demoBusy: 'A demonstração roda com a sessão parada: espere o turno terminar.',
+  demoOff: 'O palco está desligado: ligue "palco" e a animação "completa" nos ajustes (⚙).',
+  demoNarrow: `A demonstração precisa de um terminal com pelo menos ${MIN_COLUMNS} colunas.`,
 } as const
 
 type Timer = ReturnType<EngineInterface['clock']['every']>
@@ -66,6 +76,10 @@ let lastBandColumns = Infinity
 let tickerMs = 0 // a cadência do ticker em curso: muda com a velocidade dos ajustes
 let lastReconcileAt = -Infinity
 let fx: Effects = FULL_EFFECTS // os efeitos em vigor, lidos dos ajustes
+let sim: Sim = EMPTY_SIM // a cena do palco: anda a cada quadro, recomeça a cada sessão
+let demoFrame = -1 // o quadro da demonstração em curso; -1 quando não há
+let isTurnOn = false // um turno principal está em curso, pelos eventos de início e de fim dele
+let quietSince: number | null = null // desde quando a faixa diz "parada" com um turno em curso
 const reported = new Set<string>()
 
 // Um erro de fundo aparece uma vez por origem, numa linha discreta: nunca é engolido, nunca vira enxurrada.
@@ -81,13 +95,57 @@ const stopTicker = () => {
   tickerMs = 0
 }
 
-// Quanto dura a despedida de quem terminou: o estouro ao lado do ✓ e, com o palco, o ajudante sumindo.
-const lingerMs = () => Math.max(BURST_FRAMES * fx.frameMs, fx.hasStage ? celebrationMs(fx.frameMs) : 0)
+// O palco é enfeite: um erro nele nunca pode derrubar uma ferramenta, um turno ou a barra.
+// Vira uma cena vazia e uma linha de aviso, uma vez.
+const onStage = <T,>($: EngineInterface, run: () => T, fallback: T): T => {
+  try {
+    return run()
+  } catch (err) {
+    report($, 'palco', err)
+    sim = isTurnOn ? { ...EMPTY_SIM, isOn: true } : EMPTY_SIM
+    demoFrame = -1
+    return fallback
+  }
+}
 
-// Há o que animar: o turno, um agente rodando, ou o estouro de faíscas de quem acabou de terminar.
+// Há o que animar: o turno, um agente rodando, o estouro de faíscas de quem acabou de terminar,
+// a demonstração, ou a cena do palco ainda se mexendo (um tijolo na esteira, o confete caindo).
 const hasWork = (list: readonly Agent[], now: number) =>
-  isBandWorking ||
-  list.some(a => a.state === 'running' || (fx.isFull && a.endedAt !== undefined && now - a.endedAt < lingerMs()))
+  isBandWorking || isTurnOn || demoFrame >= 0 || (fx.hasStage && isAnimating(sim)) ||
+  list.some(a => a.state === 'running' || (fx.isFull && a.endedAt !== undefined && now - a.endedAt < BURST_FRAMES * fx.frameMs))
+
+// Um quadro da cena: a demonstração marca os seus eventos, os ajudantes acompanham os agentes, tudo anda.
+const stepScene = ($: EngineInterface, list: readonly Agent[]) =>
+  onStage($, () => {
+    const geo = fx.hasStage ? geometry(lastBandColumns - BAR_RIGHT_PAD) : null
+    if (!geo) {
+      // Sem lugar para o palco a cena não anda: se guardasse a comemoração ou a demonstração, o relógio nunca pararia.
+      sim = blank(sim)
+      demoFrame = -1
+      return
+    }
+    if (demoFrame >= 0) {
+      sim = applyDemo(sim, demoFrame)
+      demoFrame += 1
+    }
+    sim = step(syncHelpers(sim, list), geo)
+    if (demoFrame > DEMO_FRAMES) {
+      demoFrame = -1
+      sim = EMPTY_SIM // o que a demonstração construiu não fica para a sessão
+    } else if (!hasScene(sim)) {
+      sim = fold(sim)
+    }
+  }, undefined)
+
+// O turno principal acabou: pelo evento de fim, ou porque a faixa diz "parada" há tempo demais.
+// Se acabou bem, o mascote comemora; interrompido, com erro ou sem aviso, a cena só se recolhe.
+const endTurn = ($: EngineInterface, isHappy: boolean) => {
+  isTurnOn = false
+  quietSince = null
+  onStage($, () => {
+    if (sim.isOn && demoFrame < 0) sim = isHappy ? finish(sim) : halt(sim)
+  }, undefined)
+}
 
 async function reconcile($: EngineInterface, now: number) {
   const listed = await $.agent.list()
@@ -110,11 +168,19 @@ async function tick($: EngineInterface) {
   if (isTickBusy) return
   isTickBusy = true
   try {
-    await update($, frame, f => (f + 1) % FRAME_WRAP)
     const now = await $.clock.now()
     const isDue = now - lastReconcileAt >= RECONCILE_MS
     if (isDue) lastReconcileAt = now
     const list = isDue ? await reconcile($, now) : await read($, agents)
+    // Um turno cujo fim não foi avisado (um erro no evento dele): a faixa diz "parada" e o turno segue "em curso".
+    if (isTurnOn && !isBandWorking) {
+      quietSince ??= now
+      if (now - quietSince >= HEAL_AFTER_MS) endTurn($, false)
+    } else {
+      quietSince = null
+    }
+    stepScene($, list)
+    await update($, frame, f => (f + 1) % FRAME_WRAP) // por último: o redesenho já vê a cena deste quadro
     if (hasWork(list, now)) return
     stopTicker()
     if (list.length) $.clock.after(LINGER_MS, () => void purge($))
@@ -168,6 +234,12 @@ async function applySettings($: EngineInterface, change: (s: Settings) => Settin
   try {
     const next = await update($, settings, s => sanitize(change(s)))
     fx = effectsOf(next)
+    if (!fx.hasStage) {
+      sim = EMPTY_SIM
+      demoFrame = -1
+    } else if (isTurnOn && !sim.isOn) {
+      sim = begin(sim) // o palco voltou no meio de um turno: a cena entra agora
+    }
     if (ticker) ensureTicker($) // a velocidade pode ter mudado
     await $.store.set(SETTINGS_KEY, next)
   } catch (err) {
@@ -175,11 +247,29 @@ async function applySettings($: EngineInterface, change: (s: Settings) => Settin
   }
 }
 
+// A demonstração: um turno de mentira no palco. Só com a sessão parada e o palco ligado.
+async function startDemo($: EngineInterface): Promise<string> {
+  if (isBandWorking || isTurnOn) return STRINGS.demoBusy
+  if (!fx.hasStage) return STRINGS.demoOff
+  if (lastBandColumns < MIN_COLUMNS) return STRINGS.demoNarrow
+  // A cena é marcada antes de qualquer espera: um turno de verdade que comece no meio encontra a demonstração e a encerra.
+  sim = EMPTY_SIM
+  demoFrame = 0
+  await update($, isHidden, () => false)
+  await update($, picker, () => null)
+  if (demoFrame >= 0) ensureTicker($)
+  return STRINGS.demo
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     try {
       isBandWorking = false
-      await $.command.register({ name: COMMAND, description: STRINGS.commandDescription, argumentHint: '[ajustes]' })
+      isTurnOn = false
+      quietSince = null
+      sim = EMPTY_SIM
+      demoFrame = -1
+      await $.command.register({ name: COMMAND, description: STRINGS.commandDescription, argumentHint: '[ajustes|demo]' })
       // Os ajustes salvos valem antes do primeiro desenho; um valor estragado volta ao padrão campo a campo.
       const saved = await update($, settings, () => sanitize(undefined))
       fx = effectsOf(saved)
@@ -209,6 +299,7 @@ export const register: Register = on => {
       await update($, picker, () => 'settings')
       return { text: STRINGS.opened }
     }
+    if (/^\s*demo\w*\s*$/i.test(e.args)) return { text: await startDemo($) }
     const hidden = await update($, isHidden, h => !h)
     if (hidden) return { text: STRINGS.hidden }
     return { text: lastBandColumns < MIN_COLUMNS ? STRINGS.tooNarrow : STRINGS.shown }
@@ -224,6 +315,14 @@ export const register: Register = on => {
         }))
       } else {
         isBandWorking = true
+        isTurnOn = true
+        quietSince = null
+        // Um turno de verdade encerra a demonstração e abre a cena dele.
+        onStage($, () => {
+          if (demoFrame >= 0) sim = EMPTY_SIM
+          demoFrame = -1
+          if (fx.hasStage) sim = begin(sim)
+        }, undefined)
         const now = await $.clock.now()
         const costAtStart = (await read($, figures)).costUsd ?? 0
         await update($, main, () => ({ startedAt: now, tools: 0, lastTool: null, costAtStart }))
@@ -249,7 +348,14 @@ export const register: Register = on => {
     } catch (err) {
       report($, 'turn.step', err)
     }
-    return yield* next(e)
+    // Enquanto o pedido ao modelo está em curso, quem o fez está pensando.
+    const who = e.agentId ?? MAIN
+    onStage($, () => void (sim = think(sim, who, true)), undefined)
+    try {
+      return yield* next(e)
+    } finally {
+      onStage($, () => void (sim = think(sim, who, false)), undefined)
+    }
   })
 
   on('agent.spawn', async ($, e, next) => {
@@ -267,27 +373,41 @@ export const register: Register = on => {
     return result
   })
 
-  on('tool.call', ($, e, next) => {
-    void noteTool($, e.agentId, String(e.tool)) // sem esperar: a chamada não fica atrás do card
-    return next(e)
+  // Cada chamada de ferramenta conta na barra e vira um tijolo no palco, de quem a fez.
+  on('tool.call', async ($, e, next) => {
+    const who = e.agentId ?? MAIN
+    const tool = String(e.tool)
+    void noteTool($, e.agentId, tool) // sem esperar: a chamada não fica atrás da barra
+    onStage($, () => {
+      if (fx.hasStage && demoFrame < 0 && (who !== MAIN || sim.isOn)) sim = enqueue(sim, who, kindOf(tool), shortTool(tool))
+    }, undefined)
+    try {
+      return await next(e) // o tempo da ferramenta não conta no orçamento deste hook
+    } finally {
+      onStage($, () => void (sim = settle(sim, who)), undefined)
+    }
   })
 
   on('turn.complete', async ($, e, next) => {
-    const result = await next(e)
     try {
-      if (e.agentId) {
-        const state: AgentState = e.isAborted || e.reason === 'error' ? 'failed' : 'done'
-        const u = e.usage
-        const tokens = u ? u.input_tokens + u.output_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens : undefined
-        await touchAgent($, e.agentId, (a, now) => ({ ...a, state, endedAt: now, seenAt: now, tokens }))
-      } else {
-        isBandWorking = false
-        ensureTicker($) // o próximo quadro vê que o trabalho acabou, redesenha e para
+      return await next(e)
+    } finally {
+      // Mesmo que o que está abaixo falhe, o turno acabou: a barra e a cena têm de saber.
+      try {
+        if (e.agentId) {
+          const state: AgentState = e.isAborted || e.reason === 'error' ? 'failed' : 'done'
+          const u = e.usage
+          const tokens = u ? u.input_tokens + u.output_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens : undefined
+          await touchAgent($, e.agentId, (a, now) => ({ ...a, state, endedAt: now, seenAt: now, tokens }))
+        } else {
+          isBandWorking = false
+          endTurn($, e.reason === 'answer' && !e.isAborted) // só uma resposta de verdade merece festa
+          ensureTicker($) // os próximos quadros veem que o trabalho acabou, redesenham e param
+        }
+      } catch (err) {
+        report($, 'turn.complete', err)
       }
-    } catch (err) {
-      report($, 'turn.complete', err)
     }
-    return result
   })
 
   on('session.measure', async ($, e, next) => {
@@ -331,13 +451,21 @@ export const register: Register = on => {
     const f = await read($, figures)
     const s = await read($, settings)
     const fr = await read($, frame)
-    const lines = cardLines({ figures: f, main: await read($, main), agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s })
+    const m = await read($, main)
+    // O palco: a cena do quadro, com o placar do turno no canto. Numa faixa baixa demais ele não entra.
+    const geo = fx.hasStage && e.props.maxRows >= STAGE_MIN_ROWS ? geometry(width) : null
+    const hud: Part[] = demoFrame >= 0 ? [{ text: STRINGS.demoHud, dim: true }] : e.props.isWorking && m.startedAt > 0 ? hudParts(m, now) : []
+    const stage = onStage($, () => (geo && hasScene(sim) ? sceneRows({ sim, geo, hud }).map(parts => ({ parts })) : []), [])
+    // Com o palco em cena numa faixa baixa, é a lista de agentes que encolhe (o resto vira "+N agentes").
+    const chrome = (s.showRule ? 1 : 0) + 1
+    const agentRows = stage.length ? Math.max(1, e.props.maxRows - chrome - stage.length - 1) : undefined
+    const lines = cardLines({ figures: f, main: m, agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s, stage, agentRows })
     const open = await read($, picker)
     const toggle = (kind: Exclude<Picker, null>) => update($, picker, p => (p === kind ? null : kind))
     // A cor de destaque dos ajustes entra aqui, no desenho: as linhas falam 'claude', a barra pinta com a escolhida.
     const accent = accentColor(s)
     const paint = (color: string | undefined) => (color === 'claude' ? accent : color)
-    const run = (q: Part) => <Text color={paint(q.color)} dimColor={q.dim} bold={q.bold}>{q.text}</Text>
+    const run = (q: Part) => <Text color={paint(q.color)} backgroundColor={paint(q.bg)} dimColor={q.dim} bold={q.bold}>{q.text}</Text>
     const gap = (l: Line, room: number) =>
       ' '.repeat(Math.max(l.tail?.length ? TAIL_GAP : 0, room - lineWidth(l) + (l.tail?.length ? TAIL_GAP : 0)))
     // Uma linha é um Text só, cortado na borda da barra; o trecho da direita encosta na borda.
@@ -391,6 +519,7 @@ export const register: Register = on => {
                 el: { Box, Button, Text } as never, settings: s, accent,
                 onChange: patch => void applySettings($, cur => ({ ...cur, ...patch })),
                 onReset: () => void applySettings($, () => DEFAULT_SETTINGS),
+                onDemo: () => void startDemo($).then(text => text === STRINGS.demo || $.ui.toast(text)),
                 onClose: () => void update($, picker, () => null),
               })
             : [...(pickerRow ? [pickerRow] : []), ...rest.map(l => row(l, width))]}
