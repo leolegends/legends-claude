@@ -1,0 +1,11 @@
+{
+  "name": "legends-claude",
+  "owner": { "name": "leolegends" },
+  "plugins": [
+    {
+      "name": "legends-claude",
+      "source": "./",
+      "description": "Card acima do prompt com modelo, effort, custo da sessão e do turno, limites de uso e os agentes em execução, animados."
+    }
+  ]
+}
