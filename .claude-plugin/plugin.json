@@ -1,6 +1,6 @@
 {
   "name": "legends-claude",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Card acima do prompt do Claude Code com modelo, effort, custo da sessão e do turno, limites de uso e os agentes em execução, animados. Sem barra de contexto.",
   "author": { "name": "leolegends", "url": "https://github.com/leolegends" },
   "homepage": "https://github.com/leolegends/legends-claude",

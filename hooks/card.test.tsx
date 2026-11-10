@@ -350,3 +350,30 @@ test('/legends-claude ajustes abre a aba, mesmo com a barra escondida', async ($
   expect(await ui.find({ type: 'Text', text: /^ajustes$/ })).toBeDefined()
   await ui.unmount()
 })
+
+// ─── Palco ────────────────────────────────────────────────────────────────────
+
+test('durante o turno o mascote anda pelo palco com o arquivo; o interruptor "palco" tira a cena', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  const ui = await $.ui.mount(band('terminal', true))
+  expect(await ui.find({ type: 'Text', text: /▐▛███▜▌/ })).toBeUndefined() // parado: sem cena
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  await clock.settle()
+  await clock.advance(300)
+  expect(await ui.find({ type: 'Text', text: /▐▛███▜▌▤ Bash/ })).toBeDefined() // leva o arquivo da ferramenta em uso
+  const before = (await ui.find({ type: 'Text', text: /▐▛███▜▌/ }))?.text
+  await clock.advance(450)
+  expect((await ui.find({ type: 'Text', text: /▐▛███▜▌/ }))?.text).not.toBe(before) // andou
+
+  await $.agent.spawn(SPAWN)
+  await clock.advance(1_500)
+  expect(await ui.find({ type: 'Text', text: /▐▛█▜▌/ })).toBeDefined() // o ajudante entrou em cena
+
+  await ui.press({ key: 'settings' })
+  await ui.press({ key: 'set-showStage' })
+  await ui.press({ key: 'set-close' })
+  expect(await ui.find({ type: 'Text', text: /▐▛/ })).toBeUndefined()
+  await ui.unmount()
+})

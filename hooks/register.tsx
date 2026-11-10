@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { AgentInfo, EngineInterface, Register, RenderElement, SessionUsage } from 'claude-code'
 
 import { SettingsPanel } from './settings-panel'
+import { celebrationMs, stageRows, tintOf } from './stage'
 import { DEFAULT_SETTINGS, FULL_EFFECTS, accentColor, effectsOf, sanitize } from './settings'
 import type { Effects } from './settings'
 import type {
@@ -342,7 +343,8 @@ export const agentLine = (a: Agent, now: number, fr: number, index: number, max:
   // cada agente pulsa e corre fora de fase do vizinho
   const head: Part[] = a.state === 'running'
     ? [
-        { text: fx.isStill ? IDLE_GLYPH : spin(fr, index * 3), color: 'claude', bold: true },
+        // com o palco ligado, a faísca do agente tem a cor do ajudante dele em cena
+        { text: fx.isStill ? IDLE_GLYPH : spin(fr, index * 3), color: fx.hasStage ? tintOf(a.id) : 'claude', bold: true },
         { text: ' ' },
         // o nome surge de faíscas quando o agente nasce; depois, o brilho passa por ele
         ...(fx.isFull ? (reveal(type, age(a.startedAt), seedOf(a.id)) ?? shimmer(type, fr + index * 5)) : [{ text: type, bold: true }]),
@@ -396,8 +398,12 @@ export const cardLines = (input: CardInput): Line[] => {
   const sorted = sortAgents(list)
   const shown = sorted.slice(0, s.maxAgents)
   const hiddenCount = sorted.length - shown.length
+  // O palco: o mascote levando arquivos de um lado ao outro e chamando ajudantes, um por agente.
+  const stage: Line[] = fx.hasStage
+    ? stageRows({ main: m, agents: shown, now, isWorking, width: max, frameMs: fx.frameMs }).map(parts => ({ parts }))
+    : []
   return [
-    ...(isOneRow ? [top, ...work] : [head, cost, ...work, ...(limits ? [limits] : [])]),
+    ...(isOneRow ? [top, ...stage, ...work] : [head, cost, ...stage, ...work, ...(limits ? [limits] : [])]),
     ...shown.map((a, n) => agentLine(a, now, fr, n, max, fx)),
     ...(hiddenCount > 0 ? [{ parts: [{ text: STRINGS.more(hiddenCount), dim: true }] }] : []),
   ]
@@ -468,10 +474,13 @@ const stopTicker = () => {
   tickerMs = 0
 }
 
+// Quanto dura a despedida de quem terminou: o estouro ao lado do ✓ e, com o palco, o ajudante sumindo.
+const lingerMs = () => Math.max(BURST.length * fx.frameMs, fx.hasStage ? celebrationMs(fx.frameMs) : 0)
+
 // Há o que animar: o turno, um agente rodando, ou o estouro de faíscas de quem acabou de terminar.
 const hasWork = (list: readonly Agent[], now: number) =>
   isBandWorking ||
-  list.some(a => a.state === 'running' || (fx.isFull && a.endedAt !== undefined && now - a.endedAt < BURST.length * fx.frameMs))
+  list.some(a => a.state === 'running' || (fx.isFull && a.endedAt !== undefined && now - a.endedAt < lingerMs()))
 
 async function reconcile($: EngineInterface, now: number) {
   const listed = await $.agent.list()

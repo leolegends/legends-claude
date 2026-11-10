@@ -31,12 +31,13 @@ export const AGENT_LIMITS = [3, 6, 10] as const
 
 export const DEFAULT_SETTINGS: Settings = {
   accent: 'claude', motion: 'completa', speed: 'normal',
-  showRule: true, showLimits: true, showTurnCost: true, maxAgents: 6,
+  showRule: true, showStage: true, showLimits: true, showTurnCost: true, maxAgents: 6,
 }
 
 /** Os interruptores da linha "mostrar", na ordem em que aparecem. */
 export const TOGGLES = [
   { key: 'showRule', label: 'régua' },
+  { key: 'showStage', label: 'palco' },
   { key: 'showLimits', label: 'limites' },
   { key: 'showTurnCost', label: 'custo do turno' },
 ] as const
@@ -56,6 +57,7 @@ export const sanitize = (raw: unknown): Settings => {
     motion: oneOf(idsOf(MOTIONS), r.motion, d.motion),
     speed: oneOf(idsOf(SPEEDS), r.speed, d.speed),
     showRule: flag(r.showRule, d.showRule),
+    showStage: flag(r.showStage, d.showStage),
     showLimits: flag(r.showLimits, d.showLimits),
     showTurnCost: flag(r.showTurnCost, d.showTurnCost),
     maxAgents: oneOf(AGENT_LIMITS, r.maxAgents, d.maxAgents),
@@ -65,12 +67,13 @@ export const sanitize = (raw: unknown): Settings => {
 export const accentColor = (s: Settings) => ACCENTS.find(a => a.id === s.accent)?.color ?? 'claude'
 
 /** O que as animações leem dos ajustes: a duração do quadro e quanto se mexe. */
-export type Effects = { frameMs: number; isFull: boolean; isStill: boolean }
+export type Effects = { frameMs: number; isFull: boolean; isStill: boolean; hasStage: boolean }
 
 export const effectsOf = (s: Settings): Effects => ({
   frameMs: s.motion === 'parada' ? STILL_FRAME_MS : (SPEEDS.find(x => x.id === s.speed)?.frameMs ?? 150),
   isFull: s.motion === 'completa',
   isStill: s.motion === 'parada',
+  hasStage: s.showStage && s.motion === 'completa', // o palco é a animação mais viva: só na completa
 })
 
 export const FULL_EFFECTS: Effects = effectsOf(DEFAULT_SETTINGS)

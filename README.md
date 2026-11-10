@@ -4,10 +4,11 @@ Uma barra acima do prompt do Claude Code que mostra o que importa enquanto você
 
 ```
 ──────────────────────────────────────────━━━─────────────────────────────━━━──────────────────
-✶ Fable 5.2 · high                      $1.75 ▲ sessão · turno +$0.25  ·  5h ▰▰▱▱▱ 42% · 7d ▰▱▱▱▱ 18%  ⚙  ▾
+✶ Fable 5.2 · high                 $1.75 ▲ sessão · turno +$0.25  ·  5h ▰▰▱▱▱ 42% · 7d ▰▱▱▱▱ 18%  ⚙  ▾
+          ▐▛█▜▌▤                           ▐▛███▜▌▤ Bash
+▤▤▤        ▘ ▝                              ▘▘ ▝▝                                        ▤ 14
 ✳✶✻····· 1m12s · 14 tools · Bash
 ✻ Explore ✶✻···  buscar rotas HLS                                              12s · 4 tools · Grep
-✢ ✳✶de-✻e✢ie·er ·✢✳✶✻  revisar o diff                                           0s
 ✓ planner ✶✳✢  plano da feature                                                  1m02s · 12.4k tok
 ```
 
@@ -18,6 +19,7 @@ A barra ocupa a largura toda do terminal. Num terminal estreito, modelo, custo e
 | Linha | O que mostra |
 | --- | --- |
 | Régua | A linha de cima. Com trabalho em curso, um pulso `━` nasce no centro e corre para as duas pontas. |
+| Palco | O mascote do Claude Code pega um arquivo `▤` na pilha da esquerda e o leva até a prateleira da direita, com o nome da ferramenta que o turno está usando (`▤ Bash`); entrega, a prateleira acende e conta, e ele volta para buscar outro. Quando o Claude dispara um agente, o mascote grita `!` e um **ajudante menor brota atrás dele** em faíscas, corre até a pilha e passa a carregar os próprios arquivos, na cor do agente (a mesma da faísca dele na lista). Quem termina para, ganha `✓` (ou `✗`) e some em faíscas; quem espera cochila (`z`). Quem passa na frente esconde quem está atrás. |
 | Cabeçalho | Modelo e effort do último pedido, **clicáveis** (veja Uso). A faísca do Claude (`· ✢ ✳ ✶ ✻ ✽`) pulsa enquanto o turno roda e fica apagada quando está ocioso. Custo e limites encostam à direita na mesma linha quando cabem. |
 | Custo | Total da sessão (o mesmo que `/cost` soma, subagentes incluídos) e quanto foi gasto desde o último prompt. Duas casas decimais (`$1.75`). O total acende com `▲` por um instante sempre que cresce. |
 | Trabalho | Só durante um turno: um cometa de faíscas `✳✶✻·····` correndo, tempo decorrido, quantas ferramentas foram chamadas e a última delas. |
@@ -62,7 +64,7 @@ Para remover: `claude plugin uninstall legends-claude`.
 cor          ● Claude  Azul  Verde  Roxo  Rosa  Ciano  Âmbar  Mono
 animação     ● completa  suave  parada
 velocidade   lenta  ● normal  rápida
-mostrar      ☑ régua  ☑ limites  ☑ custo do turno
+mostrar      ☑ régua  ☑ palco  ☑ limites  ☑ custo do turno
 agentes      3  ● 6  10
 ```
 
@@ -71,7 +73,7 @@ agentes      3  ● 6  10
 | cor | A cor de destaque: faísca, modelo, cometa, pulso da régua, custo aceso. Cada opção já aparece na própria cor. `Claude` e `Mono` seguem o tema claro/escuro do Claude Code. |
 | animação | `completa` é tudo; `suave` deixa só a faísca pulsando e o cometa (sem pulso na régua, nome surgindo, brilho nem estouro); `parada` não mexe nada e só atualiza o tempo uma vez por segundo. |
 | velocidade | A duração de um quadro: 240, 150 ou 90 ms. Sem efeito com a animação parada. |
-| mostrar | Liga e desliga a régua de cima, os limites de 5h/7d e o custo do turno. |
+| mostrar | Liga e desliga a régua de cima, o palco, os limites de 5h/7d e o custo do turno. O palco só aparece com a animação `completa`. |
 | agentes | Quantas linhas de agente aparecem antes do resumo `+N agentes`. |
 - `/legends-claude` alterna entre escondido e visível.
 - O card precisa de pelo menos 60 colunas de terminal. Abaixo disso ele não desenha.
@@ -95,6 +97,7 @@ claude --plugin-dir .        # roda uma sessão com o plugin carregado desta pas
 
 - `hooks/register.tsx`: o módulo de hooks (eventos, estado e desenho).
 - `types/index.d.ts`: o contrato do estado que o plugin guarda.
+- `hooks/stage.ts`: o palco (mascote, ajudantes, pilha e prateleira), função pura do relógio; `hooks/stage.test.ts` trava os quadros.
 - `hooks/settings.ts`: paleta, opções e validação dos ajustes salvos.
 - `hooks/settings-panel.tsx`: o desenho da aba de ajustes.
 - `hooks/lines.test.ts`: funções puras (formatos, animações, linhas do card, ajustes, conferência de agentes).
