@@ -1,6 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { AgentInfo, EngineInterface, Register, RenderElement, SessionUsage } from 'claude-code'
 
+import { SettingsPanel } from './settings-panel'
+import { DEFAULT_SETTINGS, FULL_EFFECTS, accentColor, effectsOf, sanitize } from './settings'
+import type { Effects } from './settings'
 import type {
   StatusAgent as Agent,
   StatusAgentState as AgentState,
@@ -8,6 +11,7 @@ import type {
   StatusLimit as Limit,
   StatusMain as Main,
   StatusPicker as Picker,
+  StatusSettings as Settings,
 } from '../types'
 
 const EMPTY: Figures = { model: null, effort: null }
@@ -20,17 +24,18 @@ const agents = atom({ plugin: 'legends-claude', key: 'agents' } as const, NO_AGE
 const frame = atom({ plugin: 'legends-claude', key: 'frame' } as const, 0)
 const isHidden = atom({ plugin: 'legends-claude', key: 'isHidden' } as const, false)
 const picker = atom({ plugin: 'legends-claude', key: 'picker' } as const, null as Picker)
+const settings = atom({ plugin: 'legends-claude', key: 'settings' } as const, DEFAULT_SETTINGS)
+const SETTINGS_KEY = 'settings' // a chave no $.store: os ajustes valem para todas as sessões
 
 const COMMAND = 'legends-claude'
 const MIN_COLUMNS = 60 // mais estreito que isso o card cobriria a conversa: não desenha
 const DEFAULT_WIDTH = 100 // largura das linhas quando quem chama não diz (a barra passa a da faixa)
 const BAR_RIGHT_PAD = 1 // a barra vai de ponta a ponta da faixa, menos essa folga à direita
-const BUTTONS_WIDTH = 3 // o botão ' ▾ ' à direita da primeira linha
+const BUTTONS_WIDTH = 6 // os botões ' ⚙ ' e ' ▾ ' à direita da primeira linha
 const TAIL_GAP = 2 // colunas entre o texto de uma linha e o que fica encostado à direita
 const HIDDEN_RIGHT_PAD = 5 // livre do [-] que o Claude Code desenha no canto da faixa
-const FRAME_MS = 150 // um quadro da animação
+const RECONCILE_MS = 1_000 // a lista de agentes do engine é conferida no máximo uma vez por segundo
 const FRAME_WRAP = 1_000_000
-const RECONCILE_EVERY = 7 // a cada tantos quadros (~1 s) a lista de agentes do engine é conferida
 const LINGER_MS = 8_000 // um agente terminado fica esse tempo no card
 const STALE_MS = 600_000 // um agente fora da lista do engine e mudo por esse tempo é dado como perdido
 const FLASH_MS = 1_500 // quanto tempo o custo fica aceso depois de crescer
@@ -45,7 +50,6 @@ const WAVE_REST = 8 // colunas "fora da régua" que o pulso percorre antes de re
 const REVEAL_LEAD = 1 // quadros de faíscas antes de a primeira letra assentar
 const REVEAL_JITTER = 0.35 // fração das letras que assenta um quadro depois da vizinha
 const SHIMMER_GAP = 6 // quadros de pausa entre uma passada do brilho e a seguinte
-const MAX_AGENT_ROWS = 6
 const TYPE_MAX = 20
 const TOOL_MAX = 14
 const DESC_MIN = 6
@@ -64,18 +68,21 @@ export const SPINNER = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '
 const IDLE_GLYPH = '✻'
 
 export const STRINGS = {
-  hide: ' ▾ ', show: '◂ status', session: ' sessão', turn: 'turno +', noCost: 'custo ',
+  hide: ' ▾ ', show: '◂ status', settings: ' ⚙ ', saveFailed: (why: string) => `Não deu para salvar os ajustes: ${why}`,
+  opened: 'Ajustes abertos na barra.', session: ' sessão', turn: 'turno +', noCost: 'custo ',
   noEffort: 'effort', pickModel: 'modelo ', pickEffort: 'effort ', current: '● ', close: ' ✕ ',
   switchFailed: (what: string, why: string) => `Não deu para trocar ${what}: ${why}`,
   waiting: 'aguardando', failed: 'falhou', more: (n: number) => `+${n} ${n === 1 ? 'agente' : 'agentes'}`,
   tools: (n: number) => `${n} ${n === 1 ? 'tool' : 'tools'}`,
   hidden: 'Card de status escondido.', shown: 'Card de status visível.',
   tooNarrow: `Card de status visível; ele desenha quando o terminal tiver pelo menos ${MIN_COLUMNS} colunas.`,
-  commandDescription: 'Mostra ou esconde o card de status (modelo, custo, agentes)',
+  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre a aba de ajustes',
 } as const
 
 /** Um trecho de linha; com `action`, um clique nele abre o seletor de modelo ou de effort. */
-export type Part = { text: string; color?: string; dim?: boolean; bold?: boolean; action?: Exclude<Picker, null> }
+export type Part = { text: string; color?: string; dim?: boolean; bold?: boolean; action?: Switch }
+/** O que um clique no cabeçalho troca: o modelo ou o effort. */
+type Switch = 'model' | 'effort'
 /** Uma linha do card: o texto e, opcionalmente, um trecho encostado à direita. */
 export type Line = { parts: Part[]; tail?: Part[] }
 
@@ -215,7 +222,6 @@ export const reveal = (text: string, age: number, seed = 0): Part[] | null => {
 
 // Um estouro de faíscas ao lado do ✓ de quem acabou de terminar: denso no começo, ralo no fim.
 const BURST = ['✽  ', '✻✶ ', '✶✳✢', '✳✢·', '✢· ', '·  ']
-const BURST_MS = BURST.length * FRAME_MS
 export const burst = (age: number): Part[] => {
   const sparks = age >= 0 ? BURST[age] : undefined
   return sparks ? [{ text: ' ' }, { text: sparks, color: 'success' }] : []
@@ -249,9 +255,10 @@ export const fromUsage = (u: Pick<SessionUsage, 'rateLimits' | 'cost'>): Pick<Fi
 
 // "✶ Fable 5.2 · high": a faísca pulsa enquanto o turno roda e fica apagada fora dele.
 // Modelo e effort são clicáveis: cada um abre o seu seletor.
-const headLine = (f: Figures, isWorking: boolean, fr: number): Line => ({
+const headLine = (f: Figures, isWorking: boolean, fr: number, fx: Effects): Line => ({
   parts: [
-    isWorking ? { text: `${spin(fr)} `, color: 'claude', bold: true } : { text: `${IDLE_GLYPH} `, dim: true },
+    !isWorking ? { text: `${IDLE_GLYPH} `, dim: true }
+      : { text: `${fx.isStill ? IDLE_GLYPH : spin(fr)} `, color: 'claude', bold: true },
     { text: f.model ? prettyModel(f.model) : PENDING, color: 'claude', bold: true, action: 'model' },
     { text: ' · ', dim: true },
     f.effort
@@ -261,7 +268,7 @@ const headLine = (f: Figures, isWorking: boolean, fr: number): Line => ({
 })
 
 // "$1.23 sessão · turno +$0.04": o total aceso por um instante quando cresce.
-const costLine = (f: Figures, m: Main, now: number): Line => {
+const costLine = (f: Figures, m: Main, now: number, showTurn = true): Line => {
   if (f.costUsd === undefined) return { parts: [{ text: STRINGS.noCost, dim: true }, { text: PENDING, dim: true }] }
   const isFresh = f.costMovedAt !== undefined && now >= f.costMovedAt && now - f.costMovedAt < FLASH_MS
   const turn = m.costAtStart === null ? 0 : f.costUsd - m.costAtStart
@@ -270,15 +277,15 @@ const costLine = (f: Figures, m: Main, now: number): Line => {
       { text: fmtCost(f.costUsd), bold: true, ...(isFresh && { color: 'claude' }) },
       ...(isFresh ? [{ text: ' ▲', color: 'claude' }] : []),
       { text: STRINGS.session, dim: true },
-      ...(turn >= MIN_TURN_COST ? [{ text: ' · ', dim: true }, { text: `${STRINGS.turn}${fmtCost(turn)}` }] : []),
+      ...(showTurn && turn >= MIN_TURN_COST ? [{ text: ' · ', dim: true }, { text: `${STRINGS.turn}${fmtCost(turn)}` }] : []),
     ],
   }
 }
 
 // "✳✶✻····· 1m12s · 14 tools · Bash": o turno do loop principal, enquanto roda.
-const workLine = (m: Main, now: number, fr: number): Line => ({
+const workLine = (m: Main, now: number, fr: number, fx: Effects): Line => ({
   parts: [
-    ...trail(fr),
+    ...(fx.isStill ? [{ text: IDLE_GLYPH, color: 'claude' }] : trail(fr)),
     { text: ` ${fmtSpan(now - m.startedAt)}` },
     ...(m.tools > 0 ? [{ text: ` · ${STRINGS.tools(m.tools)}`, dim: true }] : []),
     ...(m.lastTool ? [{ text: ' · ', dim: true }, { text: m.lastTool, color: 'claude' }] : []),
@@ -328,24 +335,24 @@ const agentTail = (a: Agent, now: number): Part[] => {
 }
 
 // "✶ Explore ✳✶✻··  buscar rotas HLS        12s · 4 tools · Grep": a descrição cede espaço antes de tudo.
-export const agentLine = (a: Agent, now: number, fr: number, index: number, max: number): Line => {
+export const agentLine = (a: Agent, now: number, fr: number, index: number, max: number, fx: Effects = FULL_EFFECTS): Line => {
+  const age = (since: number) => Math.floor((now - since) / fx.frameMs)
   const type = fit(a.type, TYPE_MAX)
   const tail = agentTail(a, now)
   // cada agente pulsa e corre fora de fase do vizinho
   const head: Part[] = a.state === 'running'
     ? [
-        { text: spin(fr, index * 3), color: 'claude', bold: true },
+        { text: fx.isStill ? IDLE_GLYPH : spin(fr, index * 3), color: 'claude', bold: true },
         { text: ' ' },
         // o nome surge de faíscas quando o agente nasce; depois, o brilho passa por ele
-        ...(reveal(type, Math.floor((now - a.startedAt) / FRAME_MS), seedOf(a.id)) ?? shimmer(type, fr + index * 5)),
-        { text: ' ' },
-        ...trail(fr + index * 2, AGENT_TRAIL_WIDTH),
+        ...(fx.isFull ? (reveal(type, age(a.startedAt), seedOf(a.id)) ?? shimmer(type, fr + index * 5)) : [{ text: type, bold: true }]),
+        ...(fx.isStill ? [] : [{ text: ' ' }, ...trail(fr + index * 2, AGENT_TRAIL_WIDTH)]),
       ]
     : [
         GLYPH[a.state],
         { text: ' ' },
         { text: type, dim: a.state !== 'failed' },
-        ...(a.state === 'done' && a.endedAt !== undefined ? burst(Math.floor((now - a.endedAt) / FRAME_MS)) : []),
+        ...(fx.isFull && a.state === 'done' && a.endedAt !== undefined ? burst(age(a.endedAt)) : []),
       ]
   const room = max - partsWidth(head) - 2 - TAIL_GAP - partsWidth(tail)
   const description = a.description && room >= DESC_MIN ? [{ text: `  ${fit(a.description, room)}`, dim: true }] : []
@@ -371,23 +378,27 @@ export type CardInput = {
   frame: number
   isWorking: boolean
   max?: number
+  /** Os ajustes da aba ⚙; os padrões quando ausentes. */
+  settings?: Settings
 }
 
 // Puro: as linhas da barra, na largura `max`. Não há linha de contexto: é sobre custo, modelo e quem trabalha.
 // Quando cabe, modelo fica à esquerda e custo e limites encostam à direita da mesma linha; senão, empilham.
-export const cardLines = ({ figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH }: CardInput): Line[] => {
-  const head = headLine(f, isWorking, fr)
-  const cost = costLine(f, m, now)
-  const limits = limitsLine(f, now)
+export const cardLines = (input: CardInput): Line[] => {
+  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS } = input
+  const fx = effectsOf(s)
+  const head = headLine(f, isWorking, fr, fx)
+  const cost = costLine(f, m, now, s.showTurnCost)
+  const limits = s.showLimits ? limitsLine(f, now) : null
   const top: Line = { parts: head.parts, tail: [...cost.parts, ...(limits ? [{ text: '  ·  ', dim: true }, ...limits.parts] : [])] }
   const isOneRow = lineWidth(top) + BUTTONS_WIDTH <= max
-  const work = isWorking && m.startedAt > 0 ? [workLine(m, now, fr)] : []
+  const work = isWorking && m.startedAt > 0 ? [workLine(m, now, fr, fx)] : []
   const sorted = sortAgents(list)
-  const shown = sorted.slice(0, MAX_AGENT_ROWS)
+  const shown = sorted.slice(0, s.maxAgents)
   const hiddenCount = sorted.length - shown.length
   return [
     ...(isOneRow ? [top, ...work] : [head, cost, ...work, ...(limits ? [limits] : [])]),
-    ...shown.map((a, n) => agentLine(a, now, fr, n, max)),
+    ...shown.map((a, n) => agentLine(a, now, fr, n, max, fx)),
     ...(hiddenCount > 0 ? [{ parts: [{ text: STRINGS.more(hiddenCount), dim: true }] }] : []),
   ]
 }
@@ -439,6 +450,9 @@ let ticker: Timer | null = null
 let isTickBusy = false
 let isBandWorking = false
 let lastBandColumns = Infinity
+let tickerMs = 0 // a cadência do ticker em curso: muda com a velocidade dos ajustes
+let lastReconcileAt = -Infinity
+let fx: Effects = FULL_EFFECTS // os efeitos em vigor, lidos dos ajustes
 const reported = new Set<string>()
 
 // Um erro de fundo aparece uma vez por origem, numa linha discreta: nunca é engolido, nunca vira enxurrada.
@@ -451,11 +465,13 @@ const report = ($: EngineInterface, where: string, err: unknown) => {
 const stopTicker = () => {
   ticker?.cancel()
   ticker = null
+  tickerMs = 0
 }
 
 // Há o que animar: o turno, um agente rodando, ou o estouro de faíscas de quem acabou de terminar.
 const hasWork = (list: readonly Agent[], now: number) =>
-  isBandWorking || list.some(a => a.state === 'running' || (a.endedAt !== undefined && now - a.endedAt < BURST_MS))
+  isBandWorking ||
+  list.some(a => a.state === 'running' || (fx.isFull && a.endedAt !== undefined && now - a.endedAt < BURST.length * fx.frameMs))
 
 async function reconcile($: EngineInterface, now: number) {
   const listed = await $.agent.list()
@@ -478,9 +494,11 @@ async function tick($: EngineInterface) {
   if (isTickBusy) return
   isTickBusy = true
   try {
-    const fr = await update($, frame, f => (f + 1) % FRAME_WRAP)
+    await update($, frame, f => (f + 1) % FRAME_WRAP)
     const now = await $.clock.now()
-    const list = fr % RECONCILE_EVERY === 0 ? await reconcile($, now) : await read($, agents)
+    const isDue = now - lastReconcileAt >= RECONCILE_MS
+    if (isDue) lastReconcileAt = now
+    const list = isDue ? await reconcile($, now) : await read($, agents)
     if (hasWork(list, now)) return
     stopTicker()
     if (list.length) $.clock.after(LINGER_MS, () => void purge($))
@@ -491,8 +509,12 @@ async function tick($: EngineInterface) {
   }
 }
 
+// Um ticker só, na cadência dos ajustes: trocar a velocidade troca o ticker em curso.
 const ensureTicker = ($: EngineInterface) => {
-  ticker ??= $.clock.every(FRAME_MS, () => void tick($))
+  if (ticker && tickerMs === fx.frameMs) return
+  stopTicker()
+  tickerMs = fx.frameMs
+  ticker = $.clock.every(fx.frameMs, () => void tick($))
 }
 
 async function touchAgent($: EngineInterface, id: string, fn: (a: Agent, now: number) => Agent) {
@@ -514,7 +536,7 @@ async function noteTool($: EngineInterface, agentId: string | undefined, tool: s
 
 // Um clique num item do seletor: roda /model ou /effort como se a pessoa tivesse digitado. O comando
 // entra na fila e roda quando a sessão fica ociosa; a troca é a da sessão, não um desvio do mod.
-async function switchTo($: EngineInterface, command: Exclude<Picker, null>, value: string) {
+async function switchTo($: EngineInterface, command: Switch, value: string) {
   try {
     await update($, picker, () => null)
     await $.command.run({ command, args: value })
@@ -525,11 +547,32 @@ async function switchTo($: EngineInterface, command: Exclude<Picker, null>, valu
   }
 }
 
+// Uma mudança na aba de ajustes: vale na hora nesta sessão e fica salva para as próximas.
+async function applySettings($: EngineInterface, change: (s: Settings) => Settings) {
+  try {
+    const next = await update($, settings, s => sanitize(change(s)))
+    fx = effectsOf(next)
+    if (ticker) ensureTicker($) // a velocidade pode ter mudado
+    await $.store.set(SETTINGS_KEY, next)
+  } catch (err) {
+    $.ui.toast(STRINGS.saveFailed(clean(err instanceof Error ? err.message : String(err), 120)))
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     try {
       isBandWorking = false
-      await $.command.register({ name: COMMAND, description: STRINGS.commandDescription })
+      await $.command.register({ name: COMMAND, description: STRINGS.commandDescription, argumentHint: '[ajustes]' })
+      // Os ajustes salvos valem antes do primeiro desenho; um valor estragado volta ao padrão campo a campo.
+      const saved = await update($, settings, () => sanitize(undefined))
+      fx = effectsOf(saved)
+      try {
+        const stored = sanitize(await $.store.get(SETTINGS_KEY))
+        fx = effectsOf(await update($, settings, () => stored))
+      } catch (err) {
+        report($, 'settings', err)
+      }
       const model = await $.session.model()
       const usage = fromUsage(await $.session.usage())
       await update($, figures, f => ({ ...f, ...usage, model: model || f.model }))
@@ -544,7 +587,12 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: COMMAND }, async $ => {
+  on('command.run', { command: COMMAND }, async ($, e) => {
+    if (/^\s*(ajustes|settings|config)\s*$/i.test(e.args)) {
+      await update($, isHidden, () => false)
+      await update($, picker, () => 'settings')
+      return { text: STRINGS.opened }
+    }
     const hidden = await update($, isHidden, h => !h)
     if (hidden) return { text: STRINGS.hidden }
     return { text: lastBandColumns < MIN_COLUMNS ? STRINGS.tooNarrow : STRINGS.shown }
@@ -665,11 +713,15 @@ export const register: Register = on => {
     // A barra ocupa a faixa toda, de ponta a ponta.
     const width = e.props.bodyColumns - BAR_RIGHT_PAD
     const f = await read($, figures)
+    const s = await read($, settings)
     const fr = await read($, frame)
-    const lines = cardLines({ figures: f, main: await read($, main), agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width })
+    const lines = cardLines({ figures: f, main: await read($, main), agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s })
     const open = await read($, picker)
     const toggle = (kind: Exclude<Picker, null>) => update($, picker, p => (p === kind ? null : kind))
-    const run = (q: Part) => <Text color={q.color} dimColor={q.dim} bold={q.bold}>{q.text}</Text>
+    // A cor de destaque dos ajustes entra aqui, no desenho: as linhas falam 'claude', a barra pinta com a escolhida.
+    const accent = accentColor(s)
+    const paint = (color: string | undefined) => (color === 'claude' ? accent : color)
+    const run = (q: Part) => <Text color={paint(q.color)} dimColor={q.dim} bold={q.bold}>{q.text}</Text>
     const gap = (l: Line, room: number) =>
       ' '.repeat(Math.max(l.tail?.length ? TAIL_GAP : 0, room - lineWidth(l) + (l.tail?.length ? TAIL_GAP : 0)))
     // Uma linha é um Text só, cortado na borda da barra; o trecho da direita encosta na borda.
@@ -688,16 +740,17 @@ export const register: Register = on => {
     })
     const current = f.model ? prettyModel(f.model).toLowerCase() : ''
     const choices =
-      open === 'model'
+      open === 'settings' ? []
+      : open === 'model'
         ? MODELS.map(m => ({ value: m.value, label: m.label, isCurrent: current.startsWith(m.value) }))
         : EFFORTS.map(level => ({ value: level, label: level, isCurrent: f.effort === level }))
-    const pickerRow = open ? (
+    const pickerRow = open === 'model' || open === 'effort' ? (
       <Box key="picker">
         <Text dimColor>{open === 'model' ? STRINGS.pickModel : STRINGS.pickEffort}</Text>
         {choices.flatMap(c => [
           <Text> </Text>,
           <Button key={`pick-${c.value}`} plain onPress={() => void switchTo($, open, c.value)}>
-            <Text color={c.isCurrent ? 'claude' : undefined} bold={c.isCurrent}>{c.isCurrent ? `${STRINGS.current}${c.label}` : c.label}</Text>
+            <Text color={c.isCurrent ? accent : undefined} bold={c.isCurrent}>{c.isCurrent ? `${STRINGS.current}${c.label}` : c.label}</Text>
           </Button>,
         ])}
         <Button key="pick-close" label={STRINGS.close} plain dimColor onPress={() => void toggle(open)} />
@@ -707,16 +760,24 @@ export const register: Register = on => {
     return withBelow(
       <Box paddingRight={BAR_RIGHT_PAD}>
         <Box width={width} flexDirection="column">
-          <Text key="rule" wrap="truncate-end">{ruleParts(width, fr, isActive).map(run)}</Text>
+          {s.showRule ? <Text key="rule" wrap="truncate-end">{ruleParts(width, fr, isActive && fx.isFull).map(run)}</Text> : null}
           <Box key="head">
             {headParts}
             <Text wrap="truncate-end">
               {gap(first, width - BUTTONS_WIDTH)}
               {(first.tail ?? []).map(run)}
             </Text>
-            <Button key="hide" label={STRINGS.hide} plain dimColor hover={{ color: 'claude' }} onPress={() => setHidden(true)} />
+            <Button key="settings" label={STRINGS.settings} plain dimColor={open !== 'settings'} hover={{ color: accent }} onPress={() => void toggle('settings')} />
+            <Button key="hide" label={STRINGS.hide} plain dimColor hover={{ color: accent }} onPress={() => setHidden(true)} />
           </Box>
-          {[...(pickerRow ? [pickerRow] : []), ...rest.map(l => row(l, width))]}
+          {open === 'settings'
+            ? SettingsPanel({
+                el: { Box, Button, Text } as never, settings: s, accent,
+                onChange: patch => void applySettings($, cur => ({ ...cur, ...patch })),
+                onReset: () => void applySettings($, () => DEFAULT_SETTINGS),
+                onClose: () => void update($, picker, () => null),
+              })
+            : [...(pickerRow ? [pickerRow] : []), ...rest.map(l => row(l, width))]}
         </Box>
       </Box>,
     )

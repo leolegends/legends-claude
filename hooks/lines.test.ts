@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { agentLine, burst, cardLines, clean, fit, fmtCost, fmtSpan, fmtTokens, lineWidth, merge, noise, prettyModel, reconcileRows, reveal, ruleParts, shimmer, shortTool, sortAgents, spin, trail, upsert } from './register'
 import { SPINNER } from './register'
+import { DEFAULT_SETTINGS, effectsOf, sanitize } from './settings'
 import type { Line } from './register'
 import type { StatusAgent } from '../types'
 
@@ -248,5 +249,54 @@ describe('agentes', () => {
     const lost = agent({ id: 'lost', seenAt: NOW - 700_000 })
     const workflow = agent({ id: 'wf', seenAt: NOW - 5_000 }) // agente de workflow: fora da lista, mas vivo
     expect(reconcileRows([ended, recent, lost, workflow], [], NOW).map(a => a.id)).toEqual(['new', 'wf'])
+  })
+})
+
+describe('ajustes', () => {
+  test('o que vem do store é conferido campo a campo; lixo vira o padrão', () => {
+    expect(sanitize(undefined)).toEqual(DEFAULT_SETTINGS)
+    expect(sanitize('qualquer coisa')).toEqual(DEFAULT_SETTINGS)
+    expect(sanitize({ accent: 'roxo', motion: 'voando', maxAgents: 10, showRule: 'sim' })).toEqual({
+      ...DEFAULT_SETTINGS, accent: 'roxo', maxAgents: 10,
+    })
+  })
+
+  test('animação parada redesenha uma vez por segundo; a velocidade só vale fora dela', () => {
+    expect(effectsOf(DEFAULT_SETTINGS)).toEqual({ frameMs: 150, isFull: true, isStill: false })
+    expect(effectsOf({ ...DEFAULT_SETTINGS, speed: 'rapida' }).frameMs).toBe(90)
+    expect(effectsOf({ ...DEFAULT_SETTINGS, motion: 'suave' })).toEqual({ frameMs: 150, isFull: false, isStill: false })
+    expect(effectsOf({ ...DEFAULT_SETTINGS, motion: 'parada', speed: 'rapida' })).toEqual({ frameMs: 1000, isFull: false, isStill: true })
+  })
+
+  const set = (over: Partial<typeof DEFAULT_SETTINGS>) => ({ ...DEFAULT_SETTINGS, ...over })
+
+  test('custo do turno e limites somem quando desligados', () => {
+    const limited = { figures: { ...FIGURES, fiveHour: { pct: 42 } } }
+    expect(right(card({ ...limited, settings: set({ showTurnCost: false }) })[0])).toBe('$1.50 sessão  ·  5h ▰▰▱▱▱ 42%')
+    expect(right(card({ ...limited, settings: set({ showLimits: false }) })[0])).toBe('$1.50 sessão · turno +$0.25')
+  })
+
+  test('o teto de agentes vem dos ajustes, e o resto vira resumo', () => {
+    const list = ['a', 'b', 'c', 'd', 'e'].map((id, n) => agent({ id, startedAt: NOW - 1000 * (n + 1) }))
+    const lines = card({ agents: list, settings: set({ maxAgents: 3 }) }).map(text)
+    expect(lines.length).toBe(1 + 3 + 1)
+    expect(lines.at(-1)).toBe('+2 agentes')
+  })
+
+  test('suave: sem nome surgindo nem estouro, mas a faísca e o cometa seguem', () => {
+    const fx = effectsOf(set({ motion: 'suave' }))
+    expect(left(agentLine(agent({ startedAt: NOW }), NOW, 0, 0, 80, fx))).toBe('· Explore ✻····  buscar rotas HLS')
+    expect(left(agentLine(agent({ state: 'done', endedAt: NOW }), NOW + 150, 0, 0, 80, fx))).toBe('✓ Explore  buscar rotas HLS')
+  })
+
+  test('parada: o cabeçalho, o trabalho e os agentes ficam com a faísca acesa e imóvel', () => {
+    const still = { isWorking: true, settings: set({ motion: 'parada' }) }
+    for (const frame of [0, 3, 7]) {
+      const lines = card({ ...still, frame })
+      expect(left(lines[0])).toBe('✻ Fable 5.2 · high')
+      expect(text(lines[1] as Line)).toBe('✻ 1m12s · 14 tools · Bash')
+    }
+    const fx = effectsOf(set({ motion: 'parada' }))
+    expect(left(agentLine(agent({ startedAt: NOW }), NOW, 5, 0, 80, fx))).toBe('✻ Explore  buscar rotas HLS')
   })
 })

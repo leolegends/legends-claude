@@ -4,7 +4,7 @@ Uma barra acima do prompt do Claude Code que mostra o que importa enquanto você
 
 ```
 ──────────────────────────────────────────━━━─────────────────────────────━━━──────────────────
-✶ Fable 5.2 · high                      $1.75 ▲ sessão · turno +$0.25  ·  5h ▰▰▱▱▱ 42% · 7d ▰▱▱▱▱ 18%  ▾
+✶ Fable 5.2 · high                      $1.75 ▲ sessão · turno +$0.25  ·  5h ▰▰▱▱▱ 42% · 7d ▰▱▱▱▱ 18%  ⚙  ▾
 ✳✶✻····· 1m12s · 14 tools · Bash
 ✻ Explore ✶✻···  buscar rotas HLS                                              12s · 4 tools · Grep
 ✢ ✳✶de-✻e✢ie·er ·✢✳✶✻  revisar o diff                                           0s
@@ -55,6 +55,24 @@ Para remover: `claude plugin uninstall legends-claude`.
 - **Clique no effort** (`high`) abre `effort  low  medium  ● high  xhigh  max  ✕` e roda `/effort <nível>`.
 - No meio de um turno a troca entra na fila e vale quando o turno termina. `✕` (ou clicar de novo no modelo/effort) fecha o seletor sem trocar nada.
 - `▾` no canto do card esconde; `◂ status` traz de volta.
+- **`⚙` abre a aba de ajustes** na própria barra (ou `/legends-claude ajustes`). Cada mudança vale na hora e fica salva para as próximas sessões:
+
+```
+⚙ ajustes                                                              restaurar padrão   ✕
+cor          ● Claude  Azul  Verde  Roxo  Rosa  Ciano  Âmbar  Mono
+animação     ● completa  suave  parada
+velocidade   lenta  ● normal  rápida
+mostrar      ☑ régua  ☑ limites  ☑ custo do turno
+agentes      3  ● 6  10
+```
+
+| Ajuste | O que faz |
+| --- | --- |
+| cor | A cor de destaque: faísca, modelo, cometa, pulso da régua, custo aceso. Cada opção já aparece na própria cor. `Claude` e `Mono` seguem o tema claro/escuro do Claude Code. |
+| animação | `completa` é tudo; `suave` deixa só a faísca pulsando e o cometa (sem pulso na régua, nome surgindo, brilho nem estouro); `parada` não mexe nada e só atualiza o tempo uma vez por segundo. |
+| velocidade | A duração de um quadro: 240, 150 ou 90 ms. Sem efeito com a animação parada. |
+| mostrar | Liga e desliga a régua de cima, os limites de 5h/7d e o custo do turno. |
+| agentes | Quantas linhas de agente aparecem antes do resumo `+N agentes`. |
 - `/legends-claude` alterna entre escondido e visível.
 - O card precisa de pelo menos 60 colunas de terminal. Abaixo disso ele não desenha.
 
@@ -64,7 +82,8 @@ Para remover: `claude plugin uninstall legends-claude`.
 - O custo por agente não aparece: o Claude Code só expõe o custo total da sessão. Por agente, o card mostra os tokens do último turno.
 - O effort aparece a partir do primeiro pedido ao modelo depois que o plugin carrega; antes disso a barra mostra `effort`, já clicável.
 - O seletor de modelo usa os apelidos `fable`, `opus`, `sonnet` e `haiku`; um modelo que a sua conta não tem é recusado pelo próprio `/model`, e a barra avisa.
-- O plugin não acessa rede nem arquivos. Ele lê o uso da sessão e a lista de agentes, e guarda o próprio estado na sessão.
+- O plugin não acessa rede nem arquivos. Ele lê o uso da sessão e a lista de agentes, guarda o estado na sessão e os ajustes no store do próprio plugin (um JSON na pasta de configuração do Claude Code).
+- O ícone `⚙` é desenhado como texto na maioria dos terminais; num terminal que o mostre como emoji largo, a primeira linha pode perder uma coluna à direita.
 
 ## Desenvolvimento
 
@@ -76,8 +95,10 @@ claude --plugin-dir .        # roda uma sessão com o plugin carregado desta pas
 
 - `hooks/register.tsx`: o módulo de hooks (eventos, estado e desenho).
 - `types/index.d.ts`: o contrato do estado que o plugin guarda.
-- `hooks/lines.test.ts`: funções puras (formatos, animações, linhas do card, conferência de agentes).
-- `hooks/card.test.tsx`: o card montado em cada superfície e o ciclo de vida de um agente.
+- `hooks/settings.ts`: paleta, opções e validação dos ajustes salvos.
+- `hooks/settings-panel.tsx`: o desenho da aba de ajustes.
+- `hooks/lines.test.ts`: funções puras (formatos, animações, linhas do card, ajustes, conferência de agentes).
+- `hooks/card.test.tsx`: o card montado em cada superfície, o ciclo de vida de um agente, os seletores e a aba de ajustes.
 
 ## Créditos e licença
 

@@ -11,7 +11,14 @@ const band = (surface: (typeof SURFACES)[number], isWorking = false, bodyColumns
 type Listed = { id: string; status: string; type: string; description: string }
 
 // O mundo abaixo de uma sessão iniciada: modelo, custo, lista de agentes e os eventos que o engine responderia.
-const startSession = async ($: { session: { start: (e: never) => Promise<unknown> } }, on: On, listed: () => Listed[] = () => [], model: () => string = () => 'claude-fable-5-2') => {
+const startSession = async (
+  $: { session: { start: (e: never) => Promise<unknown> } }, on: On, listed: () => Listed[] = () => [],
+  model: () => string = () => 'claude-fable-5-2', store: Record<string, unknown> = {},
+) => {
+  // o store do plugin, em memória: o que o mod salva fica em `saved`, para o teste conferir
+  const saved: unknown[] = []
+  on('store.get', ($, e) => ({ value: store[e.key] }) as never)
+  on('store.set', ($, e) => ((store[e.key] = e.value), saved.push(e.value), { value: undefined }) as never)
   on('command.register', () => ({ value: { command: 'legends-claude' } }))
   on('session.model', () => ({ value: model() }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 1.5 } } }) as never)
@@ -23,6 +30,7 @@ const startSession = async ($: { session: { start: (e: never) => Promise<unknown
   on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'a1' }))
   on('tool.call', () => ({ result: {} }) as never)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true } as never)
+  return { saved, store }
 }
 
 const SPAWN = { tool_use_id: 't1', prompt: 'p', description: 'buscar rotas HLS', subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-fable-5-2' } as never
@@ -221,5 +229,124 @@ test('se o comando de troca é recusado, a pessoa é avisada e o card segue como
   await ui.press({ key: 'pick-haiku' })
   expect(toasts.some(t => /Não deu para trocar model: /.test(t))).toBe(true)
   expect(await ui.find({ type: 'Text', text: /Fable 5\.2/ })).toBeDefined()
+  await ui.unmount()
+})
+
+// ─── Aba de ajustes ───────────────────────────────────────────────────────────
+
+const colorOf = async (ui: { find: (q: { type: string; text: RegExp }) => Promise<{ props: Record<string, unknown> } | undefined> }, text: RegExp) =>
+  (await ui.find({ type: 'Text', text }))?.props.color
+
+test('o ⚙ abre a aba de ajustes no lugar das linhas, e ✕ fecha', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount(band(surface))
+    expect(await ui.find({ type: 'Text', text: /^ajustes$/ })).toBeUndefined()
+    await ui.press({ key: 'settings' })
+    expect(await ui.find({ type: 'Text', text: /^ajustes$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^● Claude$/ })).toBeDefined() // a cor atual vem marcada
+    expect(await ui.find({ type: 'Text', text: /^Azul$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^☑ régua$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Fable 5\.2/ })).toBeDefined() // o cabeçalho continua
+    await ui.press({ key: 'set-close' })
+    expect(await ui.find({ type: 'Text', text: /^ajustes$/ })).toBeUndefined()
+    await ui.unmount()
+  }
+})
+
+test('escolher uma cor pinta a barra na hora e salva no store', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { saved } = await startSession($, on)
+  const ui = await $.ui.mount(band('terminal'))
+  expect(await colorOf(ui, /^Fable 5\.2$/)).toBe('claude')
+  await ui.press({ key: 'settings' })
+  await ui.press({ key: 'set-accent-azul' })
+  expect(await colorOf(ui, /^Fable 5\.2$/)).toBe('#5FA8FF')
+  expect(await ui.find({ type: 'Text', text: /^● Azul$/ })).toBeDefined()
+  expect(saved.at(-1)).toMatchObject({ accent: 'azul' })
+  await ui.unmount()
+})
+
+test('os ajustes salvos valem desde a abertura da sessão; um campo estragado volta ao padrão', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  await startSession($, on, () => [], () => 'claude-fable-5-2', {
+    settings: { accent: 'verde', showRule: false, showTurnCost: 'talvez', maxAgents: 99 },
+  })
+  const ui = await $.ui.mount(band('terminal'))
+  expect(await colorOf(ui, /^Fable 5\.2$/)).toBe('#4EC98B')
+  expect(await ui.find({ type: 'Text', text: /─{10}/ })).toBeUndefined() // régua desligada
+  await ui.press({ key: 'settings' })
+  expect(await ui.find({ type: 'Text', text: /^☑ custo do turno$/ })).toBeDefined() // 'talvez' voltou a true
+  expect(await ui.find({ type: 'Text', text: /^● 6$/ })).toBeDefined() // 99 voltou a 6
+  await ui.unmount()
+})
+
+test('desligar a régua e os limites tira as duas coisas da barra', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 42 }], cost: { usd: 1.5 }, changed: ['rateLimits'] } as never)
+  const ui = await $.ui.mount(band('terminal'))
+  expect(await ui.find({ type: 'Text', text: /5h ▰▰▱▱▱ 42%/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /─{10}/ })).toBeDefined()
+  await ui.press({ key: 'settings' })
+  await ui.press({ key: 'set-showLimits' })
+  await ui.press({ key: 'set-showRule' })
+  expect(await ui.find({ type: 'Text', text: /^☐ limites$/ })).toBeDefined()
+  await ui.press({ key: 'set-close' })
+  expect(await ui.find({ type: 'Text', text: /5h/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /─{10}/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('restaurar padrão volta tudo e salva', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { saved } = await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { accent: 'rosa', motion: 'parada' } })
+  const ui = await $.ui.mount(band('terminal'))
+  await ui.press({ key: 'settings' })
+  expect(await ui.find({ type: 'Text', text: /^● Rosa$/ })).toBeDefined()
+  await ui.press({ key: 'set-reset' })
+  expect(await ui.find({ type: 'Text', text: /^● Claude$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^● completa$/ })).toBeDefined()
+  expect(saved.at(-1)).toMatchObject({ accent: 'claude', motion: 'completa', speed: 'normal', maxAgents: 6 })
+  await ui.unmount()
+})
+
+test('animação parada: nada pulsa, mas o tempo do turno continua contando', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { motion: 'parada' } })
+  const ui = await $.ui.mount(band('terminal', true))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  expect(await ui.find({ type: 'Text', text: /^✻ $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^✻$/ })).toBeDefined() // a linha de trabalho sem cometa
+  await clock.advance(450)
+  expect(await ui.find({ type: 'Text', text: /^✻ $/ })).toBeDefined() // mesmo glifo, não girou
+  await clock.advance(2_000)
+  expect(await ui.find({ type: 'Text', text: /^ 2s$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a velocidade troca a cadência da animação em curso', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  const ui = await $.ui.mount(band('terminal', true))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await ui.press({ key: 'settings' })
+  await ui.press({ key: 'set-speed-rapida' })
+  await ui.press({ key: 'set-close' })
+  expect(await ui.find({ type: 'Text', text: /^· $/ })).toBeDefined()
+  await clock.advance(90) // um quadro rápido; no normal seriam 150
+  expect(await ui.find({ type: 'Text', text: /^✢ $/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('/legends-claude ajustes abre a aba, mesmo com a barra escondida', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  await startSession($, on)
+  const ui = await $.ui.mount(band('terminal'))
+  await ui.press({ key: 'hide' })
+  const r = (await $.command.run({ command: 'legends-claude', args: 'ajustes' } as never)) as { text: string }
+  expect(r.text).toBe('Ajustes abertos na barra.')
+  expect(await ui.find({ type: 'Text', text: /^ajustes$/ })).toBeDefined()
   await ui.unmount()
 })

@@ -1,5 +1,23 @@
-/** Qual seletor a barra tem aberto: o de modelo, o de effort, ou nenhum. */
-export type StatusPicker = 'model' | 'effort' | null
+/** O que a barra tem aberto sob o cabeçalho: o seletor de modelo, o de effort, a aba de ajustes, ou nada. */
+export type StatusPicker = 'model' | 'effort' | 'settings' | null
+
+/** A cor de destaque escolhida nos ajustes. */
+export type StatusAccent = 'claude' | 'azul' | 'verde' | 'roxo' | 'rosa' | 'ciano' | 'ambar' | 'mono'
+/** Quanto a barra se mexe: tudo, só a faísca e o cometa, ou nada. */
+export type StatusMotion = 'completa' | 'suave' | 'parada'
+/** A duração de um quadro da animação. */
+export type StatusSpeed = 'lenta' | 'normal' | 'rapida'
+
+/** Os ajustes da aba ⚙: guardados no store do plugin, valem para todas as sessões. */
+export type StatusSettings = {
+  accent: StatusAccent
+  motion: StatusMotion
+  speed: StatusSpeed
+  showRule: boolean
+  showLimits: boolean
+  showTurnCost: boolean
+  maxAgents: 3 | 6 | 10
+}
 
 /** Uma janela de limite de uso (5 horas, 7 dias): quanto já foi e quando zera. */
 export type StatusLimit = { pct: number; resetsAt?: string }
@@ -53,8 +71,10 @@ declare module 'claude-code' {
       /** O quadro da animação: anda só enquanto há trabalho em curso. */
       frame: number
       isHidden: boolean
-      /** O seletor aberto por um clique no modelo ou no effort. */
+      /** O seletor ou a aba aberta por um clique no modelo, no effort ou no ⚙. */
       picker: StatusPicker
+      /** Os ajustes em vigor nesta sessão (espelho do store). */
+      settings: StatusSettings
     }
   }
 }
