@@ -1,3 +1,6 @@
+/** Qual seletor a barra tem aberto: o de modelo, o de effort, ou nenhum. */
+export type StatusPicker = 'model' | 'effort' | null
+
 /** Uma janela de limite de uso (5 horas, 7 dias): quanto já foi e quando zera. */
 export type StatusLimit = { pct: number; resetsAt?: string }
 
@@ -50,6 +53,8 @@ declare module 'claude-code' {
       /** O quadro da animação: anda só enquanto há trabalho em curso. */
       frame: number
       isHidden: boolean
+      /** O seletor aberto por um clique no modelo ou no effort. */
+      picker: StatusPicker
     }
   }
 }

@@ -7,6 +7,7 @@ import type {
   StatusFigures as Figures,
   StatusLimit as Limit,
   StatusMain as Main,
+  StatusPicker as Picker,
 } from '../types'
 
 const EMPTY: Figures = { model: null, effort: null }
@@ -18,6 +19,7 @@ const main = atom({ plugin: 'legends-claude', key: 'main' } as const, IDLE)
 const agents = atom({ plugin: 'legends-claude', key: 'agents' } as const, NO_AGENTS)
 const frame = atom({ plugin: 'legends-claude', key: 'frame' } as const, 0)
 const isHidden = atom({ plugin: 'legends-claude', key: 'isHidden' } as const, false)
+const picker = atom({ plugin: 'legends-claude', key: 'picker' } as const, null as Picker)
 
 const COMMAND = 'legends-claude'
 const MIN_COLUMNS = 60 // mais estreito que isso o card cobriria a conversa: não desenha
@@ -32,11 +34,16 @@ const RECONCILE_EVERY = 7 // a cada tantos quadros (~1 s) a lista de agentes do 
 const LINGER_MS = 8_000 // um agente terminado fica esse tempo no card
 const STALE_MS = 600_000 // um agente fora da lista do engine e mudo por esse tempo é dado como perdido
 const FLASH_MS = 1_500 // quanto tempo o custo fica aceso depois de crescer
-const COST_DECIMALS = 4 // $0.0123, não $0.01
-const MIN_TURN_COST = 0.00005 // abaixo disso arredonda para $0.0000: não mostra
+const COST_DECIMALS = 2 // $1.75, como um preço
+const MIN_TURN_COST = 0.005 // abaixo disso arredonda para $0.00: não mostra
 const LIMIT_GAUGE = 5
 const TRAIL_WIDTH = 8 // o rastro de faíscas da linha de trabalho
 const AGENT_TRAIL_WIDTH = 5 // o rastro de cada agente rodando
+const WAVE_SPEED = 4 // colunas que o pulso da régua anda por quadro
+const WAVE_WIDTH = 4 // colunas acesas de cada lado da frente do pulso
+const WAVE_REST = 8 // colunas "fora da régua" que o pulso percorre antes de recomeçar: a pausa
+const REVEAL_LEAD = 1 // quadros de faíscas antes de a primeira letra assentar
+const REVEAL_JITTER = 0.35 // fração das letras que assenta um quadro depois da vizinha
 const SHIMMER_GAP = 6 // quadros de pausa entre uma passada do brilho e a seguinte
 const MAX_AGENT_ROWS = 6
 const TYPE_MAX = 20
@@ -44,6 +51,13 @@ const TOOL_MAX = 14
 const DESC_MIN = 6
 const PENDING = '—'
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+// Os apelidos que o /model aceita: cada um aponta sempre para a versão mais nova da família.
+const MODELS = [
+  { value: 'fable', label: 'Fable' },
+  { value: 'opus', label: 'Opus' },
+  { value: 'sonnet', label: 'Sonnet' },
+  { value: 'haiku', label: 'Haiku' },
+] as const
 
 // A faísca do Claude pulsando: cresce de · até ✽ e volta, como o giro do próprio Claude Code.
 export const SPINNER = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢']
@@ -51,6 +65,8 @@ const IDLE_GLYPH = '✻'
 
 export const STRINGS = {
   hide: ' ▾ ', show: '◂ status', session: ' sessão', turn: 'turno +', noCost: 'custo ',
+  noEffort: 'effort', pickModel: 'modelo ', pickEffort: 'effort ', current: '● ', close: ' ✕ ',
+  switchFailed: (what: string, why: string) => `Não deu para trocar ${what}: ${why}`,
   waiting: 'aguardando', failed: 'falhou', more: (n: number) => `+${n} ${n === 1 ? 'agente' : 'agentes'}`,
   tools: (n: number) => `${n} ${n === 1 ? 'tool' : 'tools'}`,
   hidden: 'Card de status escondido.', shown: 'Card de status visível.',
@@ -58,7 +74,8 @@ export const STRINGS = {
   commandDescription: 'Mostra ou esconde o card de status (modelo, custo, agentes)',
 } as const
 
-export type Part = { text: string; color?: string; dim?: boolean; bold?: boolean }
+/** Um trecho de linha; com `action`, um clique nele abre o seletor de modelo ou de effort. */
+export type Part = { text: string; color?: string; dim?: boolean; bold?: boolean; action?: Exclude<Picker, null> }
 /** Uma linha do card: o texto e, opcionalmente, um trecho encostado à direita. */
 export type Line = { parts: Part[]; tail?: Part[] }
 
@@ -94,7 +111,7 @@ const UNSAFE = /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028-\u202e\u206
 export const clean = (v: unknown, max: number) =>
   typeof v === 'string' ? [...v.replace(UNSAFE, ' ')].slice(0, max).join('').replace(/\s+/g, ' ').trim() : ''
 
-// O custo com quatro casas e milhares agrupados: $1,234.5678.
+// O custo com duas casas e milhares agrupados: $1,234.57.
 export const fmtCost = (usd: number) => {
   if (!Number.isFinite(usd)) return PENDING
   const [int = '0', frac = ''] = Math.abs(usd).toFixed(COST_DECIMALS).split('.')
@@ -148,6 +165,62 @@ export const trail = (f: number, width = TRAIL_WIDTH): Part[] => {
   return Array.from({ length: width }, (_, i) => COMET[head - i] ?? TRAIL_DOT)
 }
 
+const isSameStyle = (a: Part, b: Part) => a.color === b.color && a.dim === b.dim && a.bold === b.bold && a.action === b.action
+
+// Junta trechos vizinhos de mesmo estilo: menos pedaços para desenhar, o mesmo texto.
+export const merge = (parts: readonly Part[]): Part[] =>
+  parts.reduce<Part[]>((out, p) => {
+    const last = out[out.length - 1]
+    return last && isSameStyle(last, p) ? [...out.slice(0, -1), { ...last, text: last.text + p.text }] : [...out, p]
+  }, [])
+
+// Um número em [0, 1) que depende só das entradas: o "acaso" das animações, igual a cada redesenho.
+export const noise = (a: number, b = 0) => {
+  const mixed = (Math.imul(a | 0, 0x9e3779b1) ^ Math.imul((b | 0) + 0x7f4a7c15, 0x85ebca6b)) >>> 0
+  const folded = Math.imul(mixed ^ (mixed >>> 15), 0x2c1b3c6d) >>> 0
+  return ((folded ^ (folded >>> 12)) >>> 0) / 4294967296
+}
+
+const seedOf = (id: string) => [...id].reduce((n, ch) => (n * 31 + (ch.codePointAt(0) ?? 0)) | 0, 7)
+
+// A régua de cima. Parada, é uma linha fina; com trabalho em curso, um pulso nasce no centro e corre
+// para as duas pontas: grosso na frente, aceso logo atrás, e a régua volta a apagar depois que ele passa.
+export const ruleParts = (width: number, fr: number, isActive: boolean): Part[] => {
+  if (!isActive || width <= 0) return [{ text: '─'.repeat(Math.max(0, width)), color: 'subtle' }]
+  const mid = (width - 1) / 2
+  const front = (fr * WAVE_SPEED) % (mid + WAVE_WIDTH + WAVE_REST)
+  return merge(
+    Array.from({ length: width }, (_, i): Part => {
+      const delta = Math.abs(Math.abs(i - mid) - front)
+      if (delta < 1) return { text: '━', color: 'claude', bold: true }
+      return delta <= WAVE_WIDTH ? { text: '─', color: 'claude' } : { text: '─', color: 'subtle' }
+    }),
+  )
+}
+
+// Um nome que surge de faíscas: cada letra ferve por alguns quadros e assenta, da esquerda para a
+// direita com um atraso irregular. `null` quando todas já assentaram.
+export const reveal = (text: string, age: number, seed = 0): Part[] | null => {
+  const chars = [...text]
+  const settlesAt = (i: number) => REVEAL_LEAD + Math.floor(i / 2) + (noise(i, seed) < REVEAL_JITTER ? 1 : 0)
+  if (age < 0 || chars.every((_, i) => age >= settlesAt(i))) return null
+  return merge(
+    chars.map((ch, i): Part =>
+      age >= settlesAt(i)
+        ? { text: ch, bold: true }
+        : { text: SPINNER[Math.floor(noise(i * 31 + age, seed) * 6)] ?? '·', color: 'claude', dim: true },
+    ),
+  )
+}
+
+// Um estouro de faíscas ao lado do ✓ de quem acabou de terminar: denso no começo, ralo no fim.
+const BURST = ['✽  ', '✻✶ ', '✶✳✢', '✳✢·', '✢· ', '·  ']
+const BURST_MS = BURST.length * FRAME_MS
+export const burst = (age: number): Part[] => {
+  const sparks = age >= 0 ? BURST[age] : undefined
+  return sparks ? [{ text: ' ' }, { text: sparks, color: 'success' }] : []
+}
+
 // Um brilho que percorre o texto, uma letra por quadro, e descansa antes de voltar.
 export const shimmer = (text: string, f: number): Part[] => {
   const chars = [...text]
@@ -175,15 +248,19 @@ export const fromUsage = (u: Pick<SessionUsage, 'rateLimits' | 'cost'>): Pick<Fi
 }
 
 // "✶ Fable 5.2 · high": a faísca pulsa enquanto o turno roda e fica apagada fora dele.
+// Modelo e effort são clicáveis: cada um abre o seu seletor.
 const headLine = (f: Figures, isWorking: boolean, fr: number): Line => ({
   parts: [
     isWorking ? { text: `${spin(fr)} `, color: 'claude', bold: true } : { text: `${IDLE_GLYPH} `, dim: true },
-    { text: f.model ? prettyModel(f.model) : PENDING, color: 'claude', bold: true },
-    ...(f.effort ? [{ text: ' · ', dim: true }, { text: f.effort, ...(EFFORTS.includes(f.effort) && { color: 'claude' }) }] : []),
+    { text: f.model ? prettyModel(f.model) : PENDING, color: 'claude', bold: true, action: 'model' },
+    { text: ' · ', dim: true },
+    f.effort
+      ? { text: f.effort, ...(EFFORTS.includes(f.effort) && { color: 'claude' }), action: 'effort' }
+      : { text: STRINGS.noEffort, dim: true, action: 'effort' },
   ],
 })
 
-// "$1.2345 sessão · turno +$0.0421": o total aceso por um instante quando cresce.
+// "$1.23 sessão · turno +$0.04": o total aceso por um instante quando cresce.
 const costLine = (f: Figures, m: Main, now: number): Line => {
   if (f.costUsd === undefined) return { parts: [{ text: STRINGS.noCost, dim: true }, { text: PENDING, dim: true }] }
   const isFresh = f.costMovedAt !== undefined && now >= f.costMovedAt && now - f.costMovedAt < FLASH_MS
@@ -259,11 +336,17 @@ export const agentLine = (a: Agent, now: number, fr: number, index: number, max:
     ? [
         { text: spin(fr, index * 3), color: 'claude', bold: true },
         { text: ' ' },
-        ...shimmer(type, fr + index * 5),
+        // o nome surge de faíscas quando o agente nasce; depois, o brilho passa por ele
+        ...(reveal(type, Math.floor((now - a.startedAt) / FRAME_MS), seedOf(a.id)) ?? shimmer(type, fr + index * 5)),
         { text: ' ' },
         ...trail(fr + index * 2, AGENT_TRAIL_WIDTH),
       ]
-    : [GLYPH[a.state], { text: ' ' }, { text: type, dim: a.state !== 'failed' }]
+    : [
+        GLYPH[a.state],
+        { text: ' ' },
+        { text: type, dim: a.state !== 'failed' },
+        ...(a.state === 'done' && a.endedAt !== undefined ? burst(Math.floor((now - a.endedAt) / FRAME_MS)) : []),
+      ]
   const room = max - partsWidth(head) - 2 - TAIL_GAP - partsWidth(tail)
   const description = a.description && room >= DESC_MIN ? [{ text: `  ${fit(a.description, room)}`, dim: true }] : []
   return { parts: [...head, ...description], tail }
@@ -370,7 +453,9 @@ const stopTicker = () => {
   ticker = null
 }
 
-const hasWork = (list: readonly Agent[]) => isBandWorking || list.some(a => a.state === 'running')
+// Há o que animar: o turno, um agente rodando, ou o estouro de faíscas de quem acabou de terminar.
+const hasWork = (list: readonly Agent[], now: number) =>
+  isBandWorking || list.some(a => a.state === 'running' || (a.endedAt !== undefined && now - a.endedAt < BURST_MS))
 
 async function reconcile($: EngineInterface, now: number) {
   const listed = await $.agent.list()
@@ -394,8 +479,9 @@ async function tick($: EngineInterface) {
   isTickBusy = true
   try {
     const fr = await update($, frame, f => (f + 1) % FRAME_WRAP)
-    const list = fr % RECONCILE_EVERY === 0 ? await reconcile($, await $.clock.now()) : await read($, agents)
-    if (hasWork(list)) return
+    const now = await $.clock.now()
+    const list = fr % RECONCILE_EVERY === 0 ? await reconcile($, now) : await read($, agents)
+    if (hasWork(list, now)) return
     stopTicker()
     if (list.length) $.clock.after(LINGER_MS, () => void purge($))
   } catch (err) {
@@ -426,6 +512,19 @@ async function noteTool($: EngineInterface, agentId: string | undefined, tool: s
   }
 }
 
+// Um clique num item do seletor: roda /model ou /effort como se a pessoa tivesse digitado. O comando
+// entra na fila e roda quando a sessão fica ociosa; a troca é a da sessão, não um desvio do mod.
+async function switchTo($: EngineInterface, command: Exclude<Picker, null>, value: string) {
+  try {
+    await update($, picker, () => null)
+    await $.command.run({ command, args: value })
+    const model = await $.session.model()
+    await update($, figures, f => ({ ...f, model: model || f.model, ...(command === 'effort' && { effort: value }) }))
+  } catch (err) {
+    $.ui.toast(STRINGS.switchFailed(command, clean(err instanceof Error ? err.message : String(err), 120)))
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     try {
@@ -435,8 +534,9 @@ export const register: Register = on => {
       const usage = fromUsage(await $.session.usage())
       await update($, figures, f => ({ ...f, ...usage, model: model || f.model }))
       // O que o módulo anterior deixou (o estado sobrevive ao reload) é conferido com o engine.
-      const list = await reconcile($, await $.clock.now())
-      if (hasWork(list)) ensureTicker($)
+      const startedAt = await $.clock.now()
+      const list = await reconcile($, startedAt)
+      if (hasWork(list, startedAt)) ensureTicker($)
       else if (list.length) $.clock.after(LINGER_MS, () => void purge($))
     } catch (err) {
       report($, 'session.start', err)
@@ -559,33 +659,64 @@ export const register: Register = on => {
       )
 
     const list = await read($, agents)
-    if (hasWork(list)) ensureTicker($)
+    const now = await $.clock.now()
+    const isActive = hasWork(list, now)
+    if (isActive) ensureTicker($)
     // A barra ocupa a faixa toda, de ponta a ponta.
     const width = e.props.bodyColumns - BAR_RIGHT_PAD
-    const lines = cardLines({
-      figures: await read($, figures), main: await read($, main), agents: list,
-      now: await $.clock.now(), frame: await read($, frame), isWorking: e.props.isWorking, max: width,
-    })
-    const runs = (parts: Part[]) => parts.map(q => <Text color={q.color} dimColor={q.dim} bold={q.bold}>{q.text}</Text>)
-    // Uma linha é um Text só, cortado na borda do card; o trecho da direita encosta na borda.
+    const f = await read($, figures)
+    const fr = await read($, frame)
+    const lines = cardLines({ figures: f, main: await read($, main), agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width })
+    const open = await read($, picker)
+    const toggle = (kind: Exclude<Picker, null>) => update($, picker, p => (p === kind ? null : kind))
+    const run = (q: Part) => <Text color={q.color} dimColor={q.dim} bold={q.bold}>{q.text}</Text>
+    const gap = (l: Line, room: number) =>
+      ' '.repeat(Math.max(l.tail?.length ? TAIL_GAP : 0, room - lineWidth(l) + (l.tail?.length ? TAIL_GAP : 0)))
+    // Uma linha é um Text só, cortado na borda da barra; o trecho da direita encosta na borda.
     const row = (l: Line, room: number) => (
       <Text wrap="truncate-end">
-        {runs(l.parts)}
-        {' '.repeat(Math.max(l.tail?.length ? TAIL_GAP : 0, room - lineWidth(l) + (l.tail?.length ? TAIL_GAP : 0)))}
-        {runs(l.tail ?? [])}
+        {l.parts.map(run)}
+        {gap(l, room)}
+        {(l.tail ?? []).map(run)}
       </Text>
     )
     const [first = { parts: [] }, ...rest] = lines
+    // Na primeira linha, modelo e effort são botões: um clique abre o seletor logo abaixo.
+    const headParts = first.parts.map(q => {
+      const action = q.action
+      return action ? <Button key={action} plain onPress={() => void toggle(action)}>{run(q)}</Button> : run(q)
+    })
+    const current = f.model ? prettyModel(f.model).toLowerCase() : ''
+    const choices =
+      open === 'model'
+        ? MODELS.map(m => ({ value: m.value, label: m.label, isCurrent: current.startsWith(m.value) }))
+        : EFFORTS.map(level => ({ value: level, label: level, isCurrent: f.effort === level }))
+    const pickerRow = open ? (
+      <Box key="picker">
+        <Text dimColor>{open === 'model' ? STRINGS.pickModel : STRINGS.pickEffort}</Text>
+        {choices.flatMap(c => [
+          <Text> </Text>,
+          <Button key={`pick-${c.value}`} plain onPress={() => void switchTo($, open, c.value)}>
+            <Text color={c.isCurrent ? 'claude' : undefined} bold={c.isCurrent}>{c.isCurrent ? `${STRINGS.current}${c.label}` : c.label}</Text>
+          </Button>,
+        ])}
+        <Button key="pick-close" label={STRINGS.close} plain dimColor onPress={() => void toggle(open)} />
+      </Box>
+    ) : null
 
     return withBelow(
       <Box paddingRight={BAR_RIGHT_PAD}>
         <Box width={width} flexDirection="column">
-          <Text key="rule" color="subtle" wrap="truncate-end">{'─'.repeat(width)}</Text>
+          <Text key="rule" wrap="truncate-end">{ruleParts(width, fr, isActive).map(run)}</Text>
           <Box key="head">
-            {row(first, width - BUTTONS_WIDTH)}
+            {headParts}
+            <Text wrap="truncate-end">
+              {gap(first, width - BUTTONS_WIDTH)}
+              {(first.tail ?? []).map(run)}
+            </Text>
             <Button key="hide" label={STRINGS.hide} plain dimColor hover={{ color: 'claude' }} onPress={() => setHidden(true)} />
           </Box>
-          {rest.map(l => row(l, width))}
+          {[...(pickerRow ? [pickerRow] : []), ...rest.map(l => row(l, width))]}
         </Box>
       </Box>,
     )
