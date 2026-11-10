@@ -1,6 +1,8 @@
 /** O que a barra tem aberto sob o cabeçalho: o seletor de modelo, o de effort, a aba de ajustes, ou nada. */
 export type StatusPicker = 'model' | 'effort' | 'settings' | null
 
+/** O idioma dos textos da barra. */
+export type StatusLanguage = 'pt' | 'en'
 /** A cor de destaque escolhida nos ajustes. */
 export type StatusAccent = 'claude' | 'azul' | 'verde' | 'roxo' | 'rosa' | 'ciano' | 'ambar' | 'mono'
 /** Quanto a barra se mexe: tudo, só a faísca e o cometa, ou nada. */
@@ -10,6 +12,7 @@ export type StatusSpeed = 'lenta' | 'normal' | 'rapida'
 
 /** Os ajustes da aba ⚙: guardados no store do plugin, valem para todas as sessões. */
 export type StatusSettings = {
+  language: StatusLanguage
   accent: StatusAccent
   motion: StatusMotion
   speed: StatusSpeed

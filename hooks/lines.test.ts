@@ -3,6 +3,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { reconcileRows, upsert } from './agents'
 import { SPINNER, burst, noise, reveal, ruleParts, shimmer, spin, trail } from './effects'
 import { clean, fit, fmtCost, fmtSpan, fmtTokens, prettyModel, shortTool } from './format'
+import { stringsOf } from './i18n'
 import { agentLine, cardLines, hudParts, sortAgents } from './lines'
 import { lineWidth, merge } from './parts'
 
@@ -329,5 +330,51 @@ describe('ajustes', () => {
     }
     const fx = effectsOf(set({ motion: 'parada' }))
     expect(left(agentLine(agent({ startedAt: NOW }), NOW, 5, 0, 80, fx))).toBe('✻ Explore  buscar rotas HLS')
+  })
+})
+
+describe('idiomas', () => {
+  const english = { ...DEFAULT_SETTINGS, language: 'en' as const }
+  const EN = stringsOf('en')
+
+  test('o idioma salvo vale; sem um válido, vale o padrão de quem pergunta', () => {
+    expect(sanitize(undefined).language).toBe('pt')
+    expect(sanitize(undefined, 'en').language).toBe('en')
+    expect(sanitize({ language: 'en' }).language).toBe('en')
+    expect(sanitize({ language: 'pt' }, 'en').language).toBe('pt')
+    expect(sanitize({ language: 'fr' }, 'en').language).toBe('en')
+    expect(sanitize({ accent: 'roxo' }).language).toBe('pt') // ajustes salvos antes de haver idiomas: português
+  })
+
+  test('em inglês, as linhas da barra falam inglês', () => {
+    const limited = { figures: { ...FIGURES, fiveHour: { pct: 42 } } }
+    expect(right(card({ ...limited, settings: english })[0])).toBe('$1.50 session · turn +$0.25  ·  5h ▰▰▱▱▱ 42%')
+    expect(text(card({ max: 12, figures: { model: null, effort: null }, settings: english })[1] as Line)).toBe('cost —')
+    expect(text(card({ isWorking: true, frame: 1, settings: english })[1] as Line)).toBe('✶✻······ 1m12s · 14 tools · Bash')
+    const crowd = ['a', 'b', 'c', 'd', 'e'].map((id, n) => agent({ id, startedAt: NOW - 1000 * (n + 1) }))
+    expect(card({ agents: crowd, settings: { ...english, maxAgents: 3 } }).map(text).at(-1)).toBe('+2 agents')
+  })
+
+  test('em inglês, a linha de um agente fala inglês; em português, português', () => {
+    const fx = effectsOf(DEFAULT_SETTINGS)
+    const tail = (a: StatusAgent, strings = stringsOf('pt')) => (agentLine(a, NOW, 0, 0, 80, fx, strings).tail ?? []).map(p => p.text).join('')
+    expect(tail(agent({ state: 'waiting' }), EN)).toBe('waiting')
+    expect(tail(agent({ state: 'waiting' }))).toBe('aguardando')
+    expect(tail(agent({ state: 'failed', endedAt: NOW }), EN)).toBe('failed · 12s')
+    expect(tail(agent({ state: 'failed', endedAt: NOW }))).toBe('falhou · 12s')
+    expect(tail(agent({ tools: 1 }), EN)).toBe('12s · 1 tool · Grep')
+  })
+
+  test('um agente cujo tipo ainda não chegou é chamado de "agente", no idioma em vigor', () => {
+    const fx = effectsOf({ ...DEFAULT_SETTINGS, motion: 'suave' }) // sem o nome surgindo aos poucos
+    const unknown = agent({ type: '', description: '' })
+    expect(left(agentLine(unknown, NOW, 0, 0, 80, fx))).toBe('· agente ✻····')
+    expect(left(agentLine(unknown, NOW, 0, 0, 80, fx, EN))).toBe('· agent ✻····')
+    expect(left(agentLine(agent({ description: '' }), NOW, 0, 0, 80, fx, EN))).toBe('· Explore ✻····') // um tipo conhecido não é traduzido
+  })
+
+  test('o placar do palco conta as ferramentas no idioma pedido', () => {
+    expect(hudParts({ ...MAIN, tools: 1 }, NOW, EN).map(p => p.text).join('')).toBe('1m12s · 1 tool · Bash')
+    expect(hudParts(MAIN, NOW).map(p => p.text).join('')).toBe('1m12s · 14 tools · Bash')
   })
 })

@@ -1,11 +1,22 @@
 {
   "name": "legends-claude",
-  "version": "0.6.0",
-  "description": "Barra acima do prompt do Claude Code com modelo, effort, custo da sessão e do turno, limites de uso, os agentes em execução e um palco animado onde o mascote constrói, tijolo por tijolo, o que o turno faz. Sem barra de contexto.",
-  "author": { "name": "leolegends", "url": "https://github.com/leolegends" },
+  "version": "0.7.0",
+  "description": "Status bar above the Claude Code prompt: model, effort, cost, usage limits, running agents and an animated stage where the mascot builds what the turn does. — Barra de status acima do prompt do Claude Code: modelo, effort, custo, limites, agentes e um palco animado onde o mascote constrói o que o turno faz.",
+  "author": {
+    "name": "leolegends",
+    "url": "https://github.com/leolegends"
+  },
   "homepage": "https://github.com/leolegends/legends-claude",
   "repository": "https://github.com/leolegends/legends-claude",
   "license": "MIT",
-  "keywords": ["status", "cost", "agents", "statusline", "animation", "mod"],
+  "keywords": [
+    "status",
+    "cost",
+    "agents",
+    "statusline",
+    "animation",
+    "i18n",
+    "mod"
+  ],
   "types": "./types/index.d.ts"
 }

@@ -16,7 +16,7 @@ const STATE_OF: Record<AgentInfo['status'], AgentState> = {
 }
 
 const newAgent = (id: string, now: number): Agent => ({
-  id, type: 'agente', description: '', model: null, state: 'running', startedAt: now, seenAt: now, tools: 0, lastTool: null,
+  id, type: '', description: '', model: null, state: 'running', startedAt: now, seenAt: now, tools: 0, lastTool: null, // tipo ainda desconhecido
 })
 
 // Puro: aplica `fn` ao agente `id`, criando a linha quando ainda não existe.
@@ -37,13 +37,13 @@ export const reconcileRows = (rows: readonly Agent[], listed: readonly AgentInfo
       return {
         ...a,
         state,
-        type: a.type === 'agente' ? clean(info.type, 40) || a.type : a.type,
+        type: a.type || clean(info.type, 40),
         description: a.description || clean(info.description, 120),
         ...(!isLive({ ...a, state }) && { endedAt: now }),
       }
     })
   const adopted = listed
     .filter(i => (i.status === 'running' || i.status === 'pending') && !rows.some(a => a.id === i.id))
-    .map(i => ({ ...newAgent(i.id, now), type: clean(i.type, 40) || 'agente', description: clean(i.description, 120) }))
+    .map(i => ({ ...newAgent(i.id, now), type: clean(i.type, 40), description: clean(i.description, 120) }))
   return [...kept, ...adopted]
 }

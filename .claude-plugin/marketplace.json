@@ -1,11 +1,13 @@
 {
   "name": "legends-claude",
-  "owner": { "name": "leolegends" },
+  "owner": {
+    "name": "leolegends"
+  },
   "plugins": [
     {
       "name": "legends-claude",
       "source": "./",
-      "description": "Barra acima do prompt com modelo, effort, custo, limites de uso, os agentes em execução e um palco animado com o mascote do Claude Code."
+      "description": "Status bar above the Claude Code prompt: model, effort, cost, usage limits, running agents and an animated stage where the mascot builds what the turn does. — Barra de status acima do prompt do Claude Code: modelo, effort, custo, limites, agentes e um palco animado onde o mascote constrói o que o turno faz."
     }
   ]
 }

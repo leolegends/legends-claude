@@ -2,6 +2,8 @@ import type { SessionUsage } from 'claude-code'
 
 import { IDLE_GLYPH, burst, reveal, seedOf, shimmer, spin, trail } from './effects'
 import { PENDING, fit, fmtCost, fmtEta, fmtSpan, fmtTokens, prettyModel } from './format'
+import { stringsOf } from './i18n'
+import type { Strings } from './i18n'
 import { TAIL_GAP, lineWidth, partsWidth } from './parts'
 import type { Line, Part } from './parts'
 import { DEFAULT_SETTINGS, FULL_EFFECTS, effectsOf } from './settings'
@@ -29,12 +31,8 @@ const TYPE_MAX = 20
 const DESC_MIN = 6
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
 
-export const LINE_STRINGS = {
-  session: ' sessão', turn: 'turno +', noCost: 'custo ', noEffort: 'effort',
-  waiting: 'aguardando', failed: 'falhou', more: (n: number) => `+${n} ${n === 1 ? 'agente' : 'agentes'}`,
-  tools: (n: number) => `${n} ${n === 1 ? 'tool' : 'tools'}`,
-} as const
-const STRINGS = LINE_STRINGS
+// Os textos de quem chama uma linha sem dizer o idioma: os do idioma padrão.
+const BASE = stringsOf(DEFAULT_SETTINGS.language)
 
 const levelColor = (pct: number) => (pct >= 85 ? 'error' : pct >= 60 ? 'warning' : 'claude')
 
@@ -49,7 +47,7 @@ export const fromUsage = (u: Pick<SessionUsage, 'rateLimits' | 'cost'>): Pick<Fi
 
 // "✶ Fable 5.2 · high": a faísca pulsa enquanto o turno roda e fica apagada fora dele.
 // Modelo e effort são clicáveis: cada um abre o seu seletor.
-const headLine = (f: Figures, isWorking: boolean, fr: number, fx: Effects): Line => ({
+const headLine = (f: Figures, isWorking: boolean, fr: number, fx: Effects, t: Strings): Line => ({
   parts: [
     !isWorking ? { text: `${IDLE_GLYPH} `, dim: true }
       : { text: `${fx.isStill ? IDLE_GLYPH : spin(fr)} `, color: 'claude', bold: true },
@@ -57,38 +55,38 @@ const headLine = (f: Figures, isWorking: boolean, fr: number, fx: Effects): Line
     { text: ' · ', dim: true },
     f.effort
       ? { text: f.effort, ...(EFFORTS.includes(f.effort) && { color: 'claude' }), action: 'effort' }
-      : { text: STRINGS.noEffort, dim: true, action: 'effort' },
+      : { text: t.noEffort, dim: true, action: 'effort' },
   ],
 })
 
 // "$1.23 sessão · turno +$0.04": o total aceso por um instante quando cresce.
-const costLine = (f: Figures, m: Main, now: number, showTurn = true): Line => {
-  if (f.costUsd === undefined) return { parts: [{ text: STRINGS.noCost, dim: true }, { text: PENDING, dim: true }] }
+const costLine = (f: Figures, m: Main, now: number, showTurn: boolean, t: Strings): Line => {
+  if (f.costUsd === undefined) return { parts: [{ text: t.noCost, dim: true }, { text: PENDING, dim: true }] }
   const isFresh = f.costMovedAt !== undefined && now >= f.costMovedAt && now - f.costMovedAt < FLASH_MS
   const turn = m.costAtStart === null ? 0 : f.costUsd - m.costAtStart
   return {
     parts: [
       { text: fmtCost(f.costUsd), bold: true, ...(isFresh && { color: 'claude' }) },
       ...(isFresh ? [{ text: ' ▲', color: 'claude' }] : []),
-      { text: STRINGS.session, dim: true },
-      ...(showTurn && turn >= MIN_TURN_COST ? [{ text: ' · ', dim: true }, { text: `${STRINGS.turn}${fmtCost(turn)}` }] : []),
+      { text: t.session, dim: true },
+      ...(showTurn && turn >= MIN_TURN_COST ? [{ text: ' · ', dim: true }, { text: `${t.turn}${fmtCost(turn)}` }] : []),
     ],
   }
 }
 
 /** "1m12s · 14 tools · Bash": o placar do turno, para o canto do palco. */
-export const hudParts = (m: Main, now: number): Part[] => [
+export const hudParts = (m: Main, now: number, t: Strings = BASE): Part[] => [
   { text: fmtSpan(now - m.startedAt), dim: true },
-  ...(m.tools > 0 ? [{ text: ` · ${STRINGS.tools(m.tools)}`, dim: true }] : []),
+  ...(m.tools > 0 ? [{ text: ` · ${t.tools(m.tools)}`, dim: true }] : []),
   ...(m.lastTool ? [{ text: ' · ', dim: true }, { text: m.lastTool, color: 'claude' }] : []),
 ]
 
 // "✳✶✻····· 1m12s · 14 tools · Bash": o turno do loop principal, enquanto roda.
-const workLine = (m: Main, now: number, fr: number, fx: Effects): Line => ({
+const workLine = (m: Main, now: number, fr: number, fx: Effects, t: Strings): Line => ({
   parts: [
     ...(fx.isStill ? [{ text: IDLE_GLYPH, color: 'claude' }] : trail(fr)),
     { text: ` ${fmtSpan(now - m.startedAt)}` },
-    ...(m.tools > 0 ? [{ text: ` · ${STRINGS.tools(m.tools)}`, dim: true }] : []),
+    ...(m.tools > 0 ? [{ text: ` · ${t.tools(m.tools)}`, dim: true }] : []),
     ...(m.lastTool ? [{ text: ' · ', dim: true }, { text: m.lastTool, color: 'claude' }] : []),
   ],
 })
@@ -123,23 +121,23 @@ const GLYPH: Record<Exclude<AgentState, 'running'>, Part> = {
 }
 
 // O que fica à direita na linha de um agente: tempo, ferramentas e a última delas, ou como terminou.
-const agentTail = (a: Agent, now: number): Part[] => {
-  if (a.state === 'waiting') return [{ text: STRINGS.waiting, dim: true }]
+const agentTail = (a: Agent, now: number, t: Strings): Part[] => {
+  if (a.state === 'waiting') return [{ text: t.waiting, dim: true }]
   const span = fmtSpan((a.endedAt ?? now) - a.startedAt)
-  if (a.state === 'failed') return [{ text: `${STRINGS.failed} · ${span}`, color: 'error' }]
+  if (a.state === 'failed') return [{ text: `${t.failed} · ${span}`, color: 'error' }]
   if (a.state === 'done') return [{ text: a.tokens ? `${span} · ${fmtTokens(a.tokens)}` : span, dim: true }]
   return [
     { text: span },
-    ...(a.tools > 0 ? [{ text: ` · ${STRINGS.tools(a.tools)}`, dim: true }] : []),
+    ...(a.tools > 0 ? [{ text: ` · ${t.tools(a.tools)}`, dim: true }] : []),
     ...(a.lastTool ? [{ text: ' · ', dim: true }, { text: a.lastTool, color: 'claude' }] : []),
   ]
 }
 
 // "✶ Explore ✳✶✻··  buscar rotas HLS        12s · 4 tools · Grep": a descrição cede espaço antes de tudo.
-export const agentLine = (a: Agent, now: number, fr: number, index: number, max: number, fx: Effects = FULL_EFFECTS): Line => {
+export const agentLine = (a: Agent, now: number, fr: number, index: number, max: number, fx: Effects = FULL_EFFECTS, t: Strings = BASE): Line => {
   const age = (since: number) => Math.floor((now - since) / fx.frameMs)
-  const type = fit(a.type, TYPE_MAX)
-  const tail = agentTail(a, now)
+  const type = fit(a.type || t.agent, TYPE_MAX) // um agente cujo tipo ainda não chegou é só "agente"
+  const tail = agentTail(a, now, t)
   // cada agente pulsa e corre fora de fase do vizinho
   const head: Part[] = a.state === 'running'
     ? [
@@ -193,18 +191,19 @@ export type CardInput = {
 export const cardLines = (input: CardInput): Line[] => {
   const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], agentRows = Infinity } = input
   const fx = effectsOf(s)
-  const head = headLine(f, isWorking, fr, fx)
-  const cost = costLine(f, m, now, s.showTurnCost)
+  const t = stringsOf(s.language)
+  const head = headLine(f, isWorking, fr, fx, t)
+  const cost = costLine(f, m, now, s.showTurnCost, t)
   const limits = s.showLimits ? limitsLine(f, now) : null
   const top: Line = { parts: head.parts, tail: [...cost.parts, ...(limits ? [{ text: '  ·  ', dim: true }, ...limits.parts] : [])] }
   const isOneRow = lineWidth(top) + BUTTONS_WIDTH <= max
-  const work = isWorking && m.startedAt > 0 && !stage.length ? [workLine(m, now, fr, fx)] : []
+  const work = isWorking && m.startedAt > 0 && !stage.length ? [workLine(m, now, fr, fx, t)] : []
   const sorted = sortAgents(list)
   const shown = sorted.slice(0, Math.max(0, Math.min(s.maxAgents, agentRows)))
   const hiddenCount = sorted.length - shown.length
   return [
     ...(isOneRow ? [top, ...stage, ...work] : [head, cost, ...stage, ...work, ...(limits ? [limits] : [])]),
-    ...shown.map((a, n) => agentLine(a, now, fr, n, max, fx)),
-    ...(hiddenCount > 0 ? [{ parts: [{ text: STRINGS.more(hiddenCount), dim: true }] }] : []),
+    ...shown.map((a, n) => agentLine(a, now, fr, n, max, fx, t)),
+    ...(hiddenCount > 0 ? [{ parts: [{ text: t.more(hiddenCount), dim: true }] }] : []),
   ]
 }

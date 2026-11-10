@@ -16,12 +16,16 @@ type Listed = { id: string; status: string; type: string; description: string }
 const startSession = async (
   $: { session: { start: (e: never) => Promise<unknown> } }, on: On, listed: () => Listed[] = () => [],
   model: () => string = () => 'claude-fable-5-2', store: Record<string, unknown> = {},
+  env: Record<string, string> = { LANG: 'pt_BR.UTF-8' }, // os testes de sempre rodam num sistema em português
 ) => {
+  mock.env(on, env)
   // o store do plugin, em memória: o que o mod salva fica em `saved`, para o teste conferir
   const saved: unknown[] = []
+  // o comando como foi registrado a cada vez: a descrição e a dica mudam com o idioma
+  const registered: { description?: string; argumentHint?: string }[] = []
   on('store.get', ($, e) => ({ value: store[e.key] }) as never)
   on('store.set', ($, e) => ((store[e.key] = e.value), saved.push(e.value), { value: undefined }) as never)
-  on('command.register', () => ({ value: { command: 'legends-claude' } }))
+  on('command.register', ($, e) => (registered.push(e as never), { value: { command: 'legends-claude' } }))
   on('session.model', () => ({ value: model() }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 1.5 } } }) as never)
   on('agent.list', () => ({ value: listed() }) as never)
@@ -32,7 +36,7 @@ const startSession = async (
   on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'a1' }))
   on('tool.call', () => ({ result: {} }) as never)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true } as never)
-  return { saved, store }
+  return { saved, store, registered }
 }
 
 const SPAWN = { tool_use_id: 't1', prompt: 'p', description: 'buscar rotas HLS', subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-fable-5-2' } as never
@@ -174,9 +178,9 @@ test('o botão ▾ esconde o card, ◂ status traz de volta, e o comando alterna
   expect(await ui.find({ type: 'Text', text: /Fable/ })).toBeUndefined()
   await ui.press({ key: 'show' })
   expect(await ui.find({ type: 'Text', text: /Fable/ })).toBeDefined()
-  expect((await $.command.run({ command: 'legends-claude', args: '' } as never) as { text: string }).text).toBe('Card de status escondido.')
+  expect((await $.command.run({ command: 'legends-claude', args: '' } as never) as { text: string }).text).toBe('Barra de status escondida.')
   expect(await ui.find({ type: 'Text', text: /Fable/ })).toBeUndefined()
-  expect((await $.command.run({ command: 'legends-claude', args: '' } as never) as { text: string }).text).toBe('Card de status visível.')
+  expect((await $.command.run({ command: 'legends-claude', args: '' } as never) as { text: string }).text).toBe('Barra de status visível.')
   await ui.unmount()
 })
 
@@ -605,3 +609,90 @@ test('um turno interrompido se recolhe sem festa; um turno curto ganha só um pu
   expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeUndefined()
   await ui.unmount()
 })
+
+// ─── Idiomas ──────────────────────────────────────────────────────────────────
+
+const find = (ui: { find: (q: { type: string; text: RegExp }) => Promise<unknown> }, text: RegExp) => ui.find({ type: 'Text', text })
+
+test('o idioma é a primeira linha da aba de ajustes; trocar muda a barra inteira na hora e fica salvo', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { saved, registered } = await startSession($, on)
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|demo]' })
+  const ui = await $.ui.mount(band('terminal'))
+  await ui.press({ key: 'settings' })
+  for (const text of [/^ajustes$/, /^● Português$/, /^English$/, /^Azul$/, /^● completa$/, /^☑ palco$/, / sessão$/]) expect(await find(ui, text)).toBeDefined()
+  expect((await ui.findAll({ type: 'Box' })).map(b => b.key).filter(k => k?.startsWith('set-'))[1]).toBe('set-language') // logo abaixo do cabeçalho da aba
+
+  await ui.press({ key: 'set-language-en' })
+  for (const text of [/^settings$/, /^● English$/, /^Português$/, /^Blue$/, /^● full$/, /^☑ stage$/, / session$/]) expect(await find(ui, text)).toBeDefined()
+  for (const text of [/^ajustes$/, /^Azul$/, /^☑ palco$/, / sessão$/]) expect(await find(ui, text)).toBeUndefined()
+  expect(saved.at(-1)).toMatchObject({ language: 'en' })
+  // o comando foi registrado de novo, com a descrição e a dica em inglês
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[settings|demo]' })
+  expect(registered.at(-1)?.description).toMatch(/^Shows or hides the status bar/)
+
+  await ui.press({ key: 'set-language-pt' })
+  expect(await find(ui, /^ajustes$/)).toBeDefined()
+  expect(saved.at(-1)).toMatchObject({ language: 'pt' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|demo]' })
+  await ui.unmount()
+})
+
+test('em inglês, o comando responde em inglês e aceita "settings"', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { language: 'en' } })
+  const run = async (args: string) => ((await $.command.run({ command: 'legends-claude', args } as never)) as { text: string }).text
+  const ui = await $.ui.mount(band('terminal'))
+  expect(await run('')).toBe('Status bar hidden.')
+  expect(await run('')).toBe('Status bar visible.')
+  expect(await run('settings')).toBe('Settings opened in the bar.')
+  expect(await find(ui, /^settings$/)).toBeDefined()
+  expect(await run('demo')).toBe('Stage demo playing.')
+  await ui.unmount()
+})
+
+test('em inglês, a demonstração e o placar dela falam inglês', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { language: 'en' } })
+  const ui = await $.ui.mount(band('terminal'))
+  await $.command.run({ command: 'legends-claude', args: 'demo' } as never)
+  await clock.advance(3_000)
+  expect(await find(ui, /▶ demo$/)).toBeDefined()
+  expect(await find(ui, /demonstração/)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('restaurar padrão volta a aparência, mas não mexe no idioma', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { saved } = await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { language: 'en', accent: 'rosa', motion: 'suave' } })
+  const ui = await $.ui.mount(band('terminal'))
+  await ui.press({ key: 'settings' })
+  expect(await find(ui, /^● Pink$/)).toBeDefined()
+  await ui.press({ key: 'set-reset' })
+  expect(await find(ui, /^● Claude$/)).toBeDefined()
+  expect(await find(ui, /^● full$/)).toBeDefined()
+  expect(await find(ui, /^● English$/)).toBeDefined()
+  expect(saved.at(-1)).toMatchObject({ language: 'en', accent: 'claude', motion: 'completa' })
+  await ui.unmount()
+})
+
+// De onde vem o idioma quando a pessoa ainda não escolheu um na aba.
+const FIRST_LANGUAGE: { name: string; store: Record<string, unknown>; env: Record<string, string>; title: RegExp }[] = [
+  { name: 'instalação nova num sistema em português: português', store: {}, env: { LANG: 'pt_BR.UTF-8' }, title: /^ajustes$/ },
+  { name: 'instalação nova num sistema em inglês: inglês', store: {}, env: { LANG: 'en_US.UTF-8' }, title: /^settings$/ },
+  { name: 'instalação nova sem idioma no ambiente: inglês', store: {}, env: {}, title: /^settings$/ },
+  { name: 'instalação nova: LC_ALL vale mais que LANG', store: {}, env: { LC_ALL: 'pt_BR.UTF-8', LANG: 'en_US.UTF-8' }, title: /^ajustes$/ },
+  { name: 'ajustes salvos antes de haver idiomas continuam em português, mesmo num sistema em inglês', store: { settings: { accent: 'ambar' } }, env: { LANG: 'en_US.UTF-8' }, title: /^ajustes$/ },
+  { name: 'o idioma escolhido na aba vale mais que o do sistema', store: { settings: { language: 'en' } }, env: { LANG: 'pt_BR.UTF-8' }, title: /^settings$/ },
+  { name: 'um store estragado conta como instalação nova', store: { settings: 'lixo' }, env: { LANG: 'en_US.UTF-8' }, title: /^settings$/ },
+]
+for (const { name, store, env, title } of FIRST_LANGUAGE) {
+  test(`o primeiro idioma — ${name}`, async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    await startSession($, on, () => [], () => 'claude-fable-5-2', store, env)
+    const ui = await $.ui.mount(band('terminal'))
+    await ui.press({ key: 'settings' })
+    expect(await find(ui, title)).toBeDefined()
+    await ui.unmount()
+  })
+}

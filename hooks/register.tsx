@@ -5,6 +5,8 @@ import { LINGER_MS, isExpired, reconcileRows, upsert } from './agents'
 import { DEMO_FRAMES, applyDemo } from './demo'
 import { BURST_FRAMES, ruleParts } from './effects'
 import { clean, prettyModel, shortTool } from './format'
+import { localeLanguage, stringsOf } from './i18n'
+import type { Strings } from './i18n'
 import { BUTTONS_WIDTH, EFFORTS, cardLines, fromUsage, hudParts } from './lines'
 import { kindOf } from './palette'
 import { TAIL_GAP, lineWidth } from './parts'
@@ -38,7 +40,7 @@ const settings = atom({ plugin: 'legends-claude', key: 'settings' } as const, DE
 const SETTINGS_KEY = 'settings' // a chave no $.store: os ajustes valem para todas as sessões
 
 const COMMAND = 'legends-claude'
-const MIN_COLUMNS = 60 // mais estreito que isso o card cobriria a conversa: não desenha
+const MIN_COLUMNS = 60 // mais estreito que isso a barra cobriria a conversa: não desenha
 const BAR_RIGHT_PAD = 1 // a barra vai de ponta a ponta da faixa, menos essa folga à direita
 const HIDDEN_RIGHT_PAD = 5 // livre do [-] que o Claude Code desenha no canto da faixa
 const RECONCILE_MS = 1_000 // a lista de agentes do engine é conferida no máximo uma vez por segundo
@@ -53,18 +55,8 @@ const MODELS = [
   { value: 'sonnet', label: 'Sonnet' },
   { value: 'haiku', label: 'Haiku' },
 ] as const
-const STRINGS = {
-  hide: ' ▾ ', show: '◂ status', settings: ' ⚙ ', saveFailed: (why: string) => `Não deu para salvar os ajustes: ${why}`,
-  opened: 'Ajustes abertos na barra.', pickModel: 'modelo ', pickEffort: 'effort ', current: '● ', close: ' ✕ ',
-  switchFailed: (what: string, why: string) => `Não deu para trocar ${what}: ${why}`,
-  hidden: 'Card de status escondido.', shown: 'Card de status visível.',
-  tooNarrow: `Card de status visível; ele desenha quando o terminal tiver pelo menos ${MIN_COLUMNS} colunas.`,
-  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre os ajustes, "demo" mostra o palco em ação',
-  demo: 'Demonstração do palco em cena.', demoHud: '▶ demonstração',
-  demoBusy: 'A demonstração roda com a sessão parada: espere o turno terminar.',
-  demoOff: 'O palco está desligado: ligue "palco" e a animação "completa" nos ajustes (⚙).',
-  demoNarrow: `A demonstração precisa de um terminal com pelo menos ${MIN_COLUMNS} colunas.`,
-} as const
+// Os sinais da barra, iguais em qualquer idioma. Os textos vêm de i18n.ts, no idioma dos ajustes.
+const MARKS = { hide: ' ▾ ', show: '◂ status', settings: ' ⚙ ', current: '● ', close: ' ✕ ' } as const
 
 type Timer = ReturnType<EngineInterface['clock']['every']>
 
@@ -76,6 +68,7 @@ let lastBandColumns = Infinity
 let tickerMs = 0 // a cadência do ticker em curso: muda com a velocidade dos ajustes
 let lastReconcileAt = -Infinity
 let fx: Effects = FULL_EFFECTS // os efeitos em vigor, lidos dos ajustes
+let strings: Strings = stringsOf(DEFAULT_SETTINGS.language) // os textos no idioma em vigor, para o que fala fora do desenho
 let sim: Sim = EMPTY_SIM // a cena do palco: anda a cada quadro, recomeça a cada sessão
 let demoFrame = -1 // o quadro da demonstração em curso; -1 quando não há
 let isTurnOn = false // um turno principal está em curso, pelos eventos de início e de fim dele
@@ -101,7 +94,7 @@ const onStage = <T,>($: EngineInterface, run: () => T, fallback: T): T => {
   try {
     return run()
   } catch (err) {
-    report($, 'palco', err)
+    report($, 'stage', err)
     sim = isTurnOn ? { ...EMPTY_SIM, isOn: true } : EMPTY_SIM
     demoFrame = -1
     return fallback
@@ -225,15 +218,32 @@ async function switchTo($: EngineInterface, command: Switch, value: string) {
     const model = await $.session.model()
     await update($, figures, f => ({ ...f, model: model || f.model, ...(command === 'effort' && { effort: value }) }))
   } catch (err) {
-    $.ui.toast(STRINGS.switchFailed(command, clean(err instanceof Error ? err.message : String(err), 120)))
+    $.ui.toast(strings.switchFailed(command, clean(err instanceof Error ? err.message : String(err), 120)))
   }
+}
+
+// O idioma em vigor: os textos dos avisos e o que o comando mostra no menu (registrar de novo substitui).
+async function speak($: EngineInterface, language: Settings['language']) {
+  strings = stringsOf(language)
+  await $.command.register({ name: COMMAND, description: strings.commandDescription, argumentHint: strings.argumentHint })
+}
+
+// Os ajustes desta sessão: os salvos, conferidos campo a campo. Quando nenhum idioma foi salvo:
+// quem já tinha ajustes de antes de haver idiomas continua em português, a única língua da barra até
+// então; numa instalação nova, vale o idioma do sistema.
+async function loadSettings($: EngineInterface): Promise<Settings> {
+  const stored = await $.store.get(SETTINGS_KEY)
+  if (stored && typeof stored === 'object') return sanitize(stored)
+  const locales = await Promise.all([$.env.get('LC_ALL'), $.env.get('LC_MESSAGES'), $.env.get('LANG')]).catch(() => [])
+  return sanitize(undefined, localeLanguage(...locales))
 }
 
 // Uma mudança na aba de ajustes: vale na hora nesta sessão e fica salva para as próximas.
 async function applySettings($: EngineInterface, change: (s: Settings) => Settings) {
   try {
-    const next = await update($, settings, s => sanitize(change(s)))
+    const next = await update($, settings, s => sanitize(change(s), s.language))
     fx = effectsOf(next)
+    if (stringsOf(next.language) !== strings) await speak($, next.language)
     if (!fx.hasStage) {
       sim = EMPTY_SIM
       demoFrame = -1
@@ -243,22 +253,22 @@ async function applySettings($: EngineInterface, change: (s: Settings) => Settin
     if (ticker) ensureTicker($) // a velocidade pode ter mudado
     await $.store.set(SETTINGS_KEY, next)
   } catch (err) {
-    $.ui.toast(STRINGS.saveFailed(clean(err instanceof Error ? err.message : String(err), 120)))
+    $.ui.toast(strings.saveFailed(clean(err instanceof Error ? err.message : String(err), 120)))
   }
 }
 
 // A demonstração: um turno de mentira no palco. Só com a sessão parada e o palco ligado.
 async function startDemo($: EngineInterface): Promise<string> {
-  if (isBandWorking || isTurnOn) return STRINGS.demoBusy
-  if (!fx.hasStage) return STRINGS.demoOff
-  if (lastBandColumns < MIN_COLUMNS) return STRINGS.demoNarrow
+  if (isBandWorking || isTurnOn) return strings.demoBusy
+  if (!fx.hasStage) return strings.demoOff
+  if (lastBandColumns < MIN_COLUMNS) return strings.demoNarrow(MIN_COLUMNS)
   // A cena é marcada antes de qualquer espera: um turno de verdade que comece no meio encontra a demonstração e a encerra.
   sim = EMPTY_SIM
   demoFrame = 0
   await update($, isHidden, () => false)
   await update($, picker, () => null)
   if (demoFrame >= 0) ensureTicker($)
-  return STRINGS.demo
+  return strings.demo
 }
 
 export const register: Register = on => {
@@ -269,16 +279,11 @@ export const register: Register = on => {
       quietSince = null
       sim = EMPTY_SIM
       demoFrame = -1
-      await $.command.register({ name: COMMAND, description: STRINGS.commandDescription, argumentHint: '[ajustes|demo]' })
       // Os ajustes salvos valem antes do primeiro desenho; um valor estragado volta ao padrão campo a campo.
-      const saved = await update($, settings, () => sanitize(undefined))
-      fx = effectsOf(saved)
-      try {
-        const stored = sanitize(await $.store.get(SETTINGS_KEY))
-        fx = effectsOf(await update($, settings, () => stored))
-      } catch (err) {
-        report($, 'settings', err)
-      }
+      const initial = await loadSettings($).catch(err => (report($, 'settings', err), DEFAULT_SETTINGS))
+      const loaded = await update($, settings, () => initial)
+      fx = effectsOf(loaded)
+      await speak($, loaded.language) // registra o comando, já no idioma dos ajustes
       const model = await $.session.model()
       const usage = fromUsage(await $.session.usage())
       await update($, figures, f => ({ ...f, ...usage, model: model || f.model }))
@@ -297,12 +302,12 @@ export const register: Register = on => {
     if (/^\s*(ajustes|settings|config)\s*$/i.test(e.args)) {
       await update($, isHidden, () => false)
       await update($, picker, () => 'settings')
-      return { text: STRINGS.opened }
+      return { text: strings.opened }
     }
     if (/^\s*demo\w*\s*$/i.test(e.args)) return { text: await startDemo($) }
     const hidden = await update($, isHidden, h => !h)
-    if (hidden) return { text: STRINGS.hidden }
-    return { text: lastBandColumns < MIN_COLUMNS ? STRINGS.tooNarrow : STRINGS.shown }
+    if (hidden) return { text: strings.hidden }
+    return { text: lastBandColumns < MIN_COLUMNS ? strings.tooNarrow(MIN_COLUMNS) : strings.shown }
   })
 
   on('turn.start', async ($, e, next) => {
@@ -438,7 +443,7 @@ export const register: Register = on => {
     if (await read($, isHidden))
       return withBelow(
         <Box justifyContent="flex-end" paddingRight={HIDDEN_RIGHT_PAD}>
-          <Button key="show" label={STRINGS.show} dimColor onPress={() => setHidden(false)} />
+          <Button key="show" label={MARKS.show} dimColor onPress={() => setHidden(false)} />
         </Box>,
       )
 
@@ -452,9 +457,12 @@ export const register: Register = on => {
     const s = await read($, settings)
     const fr = await read($, frame)
     const m = await read($, main)
+    // O idioma e os efeitos saem dos ajustes lidos neste desenho: uma troca na aba vale já no quadro que ela provoca.
+    const t = stringsOf(s.language)
+    const shown = effectsOf(s)
     // O palco: a cena do quadro, com o placar do turno no canto. Numa faixa baixa demais ele não entra.
-    const geo = fx.hasStage && e.props.maxRows >= STAGE_MIN_ROWS ? geometry(width) : null
-    const hud: Part[] = demoFrame >= 0 ? [{ text: STRINGS.demoHud, dim: true }] : e.props.isWorking && m.startedAt > 0 ? hudParts(m, now) : []
+    const geo = shown.hasStage && e.props.maxRows >= STAGE_MIN_ROWS ? geometry(width) : null
+    const hud: Part[] = demoFrame >= 0 ? [{ text: t.demoHud, dim: true }] : e.props.isWorking && m.startedAt > 0 ? hudParts(m, now, t) : []
     const stage = onStage($, () => (geo && hasScene(sim) ? sceneRows({ sim, geo, hud }).map(parts => ({ parts })) : []), [])
     // Com o palco em cena numa faixa baixa, é a lista de agentes que encolhe (o resto vira "+N agentes").
     const chrome = (s.showRule ? 1 : 0) + 1
@@ -490,36 +498,36 @@ export const register: Register = on => {
         : EFFORTS.map(level => ({ value: level, label: level, isCurrent: f.effort === level }))
     const pickerRow = open === 'model' || open === 'effort' ? (
       <Box key="picker">
-        <Text dimColor>{open === 'model' ? STRINGS.pickModel : STRINGS.pickEffort}</Text>
+        <Text dimColor>{open === 'model' ? t.pickModel : t.pickEffort}</Text>
         {choices.flatMap(c => [
           <Text> </Text>,
           <Button key={`pick-${c.value}`} plain onPress={() => void switchTo($, open, c.value)}>
-            <Text color={c.isCurrent ? accent : undefined} bold={c.isCurrent}>{c.isCurrent ? `${STRINGS.current}${c.label}` : c.label}</Text>
+            <Text color={c.isCurrent ? accent : undefined} bold={c.isCurrent}>{c.isCurrent ? `${MARKS.current}${c.label}` : c.label}</Text>
           </Button>,
         ])}
-        <Button key="pick-close" label={STRINGS.close} plain dimColor onPress={() => void toggle(open)} />
+        <Button key="pick-close" label={MARKS.close} plain dimColor onPress={() => void toggle(open)} />
       </Box>
     ) : null
 
     return withBelow(
       <Box paddingRight={BAR_RIGHT_PAD}>
         <Box width={width} flexDirection="column">
-          {s.showRule ? <Text key="rule" wrap="truncate-end">{ruleParts(width, fr, isActive && fx.isFull).map(run)}</Text> : null}
+          {s.showRule ? <Text key="rule" wrap="truncate-end">{ruleParts(width, fr, isActive && shown.isFull).map(run)}</Text> : null}
           <Box key="head">
             {headParts}
             <Text wrap="truncate-end">
               {gap(first, width - BUTTONS_WIDTH)}
               {(first.tail ?? []).map(run)}
             </Text>
-            <Button key="settings" label={STRINGS.settings} plain dimColor={open !== 'settings'} hover={{ color: accent }} onPress={() => void toggle('settings')} />
-            <Button key="hide" label={STRINGS.hide} plain dimColor hover={{ color: accent }} onPress={() => setHidden(true)} />
+            <Button key="settings" label={MARKS.settings} plain dimColor={open !== 'settings'} hover={{ color: accent }} onPress={() => void toggle('settings')} />
+            <Button key="hide" label={MARKS.hide} plain dimColor hover={{ color: accent }} onPress={() => setHidden(true)} />
           </Box>
           {open === 'settings'
             ? SettingsPanel({
-                el: { Box, Button, Text } as never, settings: s, accent,
+                el: { Box, Button, Text } as never, settings: s, strings: t, accent,
                 onChange: patch => void applySettings($, cur => ({ ...cur, ...patch })),
-                onReset: () => void applySettings($, () => DEFAULT_SETTINGS),
-                onDemo: () => void startDemo($).then(text => text === STRINGS.demo || $.ui.toast(text)),
+                onReset: () => void applySettings($, cur => ({ ...DEFAULT_SETTINGS, language: cur.language })), // o idioma não é aparência: fica
+                onDemo: () => void startDemo($).then(text => text === strings.demo || $.ui.toast(text)),
                 onClose: () => void update($, picker, () => null),
               })
             : [...(pickerRow ? [pickerRow] : []), ...rest.map(l => row(l, width))]}

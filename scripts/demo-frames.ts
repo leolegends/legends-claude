@@ -1,10 +1,13 @@
 // Gera os quadros do GIF do README: a barra inteira (régua, cabeçalho, palco, linhas de agente) ao longo
 // de um turno de mentira, com as mesmas funções que desenham a barra de verdade. Sai JSON no stdout.
 //
-//   bun run scripts/demo-frames.ts [colunas] | python3 scripts/demo-gif.py docs/demo.gif
+//   bun run scripts/demo-frames.ts [colunas] [en|pt] | python3 scripts/demo-gif.py docs/demo.gif
+//
+// O idioma é o dos textos da barra no GIF: `en` (o padrão, para o README.md) ou `pt` (para o README.pt-BR.md).
 //
 // Não faz parte do mod: roda fora do Claude Code, só para documentação.
 import { ruleParts } from '../hooks/effects'
+import { stringsOf } from '../hooks/i18n'
 import { cardLines, hudParts } from '../hooks/lines'
 import { kindOf } from '../hooks/palette'
 import { TAIL_GAP, lineWidth } from '../hooks/parts'
@@ -16,6 +19,9 @@ import type { Sim } from '../hooks/sim'
 import type { StatusAgent } from '../types'
 
 const WIDTH = Number(process.argv[2] ?? 100)
+const LANGUAGE = process.argv[3] === 'pt' ? 'pt' : 'en'
+const SETTINGS = { ...DEFAULT_SETTINGS, language: LANGUAGE } as const
+const STRINGS = stringsOf(LANGUAGE)
 const FRAME_MS = 125
 const T0 = 1_000_000
 const LAST_FRAME = 232
@@ -44,9 +50,10 @@ const BATCHES: Batch[] = [
 // Quando o modelo começa e para de pensar (o turno principal).
 const THINKING: [number, boolean][] = [[0, true], [18, false], [20, true], [52, false], [160, true], [TURN_ENDS, false]]
 // Os agentes: quando nascem e quando terminam.
+const TASKS = LANGUAGE === 'pt' ? ['mapear as rotas de vídeo', 'revisar o diff do palco'] : ['map the video routes', 'review the stage diff']
 const AGENTS = [
-  { id: 'a1', type: 'Explore', description: 'mapear as rotas de vídeo', from: 84, to: 146, tokens: 18_400 },
-  { id: 'b2', type: 'code-reviewer', description: 'revisar o diff do palco', from: 98, to: 156, tokens: 9_700 },
+  { id: 'a1', type: 'Explore', description: TASKS[0] ?? '', from: 84, to: 146, tokens: 18_400 },
+  { id: 'b2', type: 'code-reviewer', description: TASKS[1] ?? '', from: 98, to: 156, tokens: 9_700 },
 ]
 const LINGER_FRAMES = 64 // quanto uma linha de agente terminado fica na barra
 
@@ -89,8 +96,8 @@ const barAt = (sim: Sim, frame: number): Part[][] => {
     model: 'claude-fable-5-2', effort: 'high', costUsd: 1.5 + costSteps * 0.03, costMovedAt: T0 + costSteps * 14 * FRAME_MS,
     fiveHour: { pct: 42, resetsAt: new Date(now + 7_800_000).toISOString() }, week: { pct: 18 },
   }
-  const stage = hasScene(sim) ? sceneRows({ sim, geo, hud: isWorking ? hudParts(main, now) : [] }).map(parts => ({ parts })) : []
-  const [head = { parts: [] }, ...rest] = cardLines({ figures, main, agents, now, frame, isWorking, max: WIDTH, settings: DEFAULT_SETTINGS, stage })
+  const stage = hasScene(sim) ? sceneRows({ sim, geo, hud: isWorking ? hudParts(main, now, STRINGS) : [] }).map(parts => ({ parts })) : []
+  const [head = { parts: [] }, ...rest] = cardLines({ figures, main, agents, now, frame, isWorking, max: WIDTH, settings: SETTINGS, stage })
   return [
     ruleParts(WIDTH, frame, isWorking || agents.some(a => a.state === 'running') || isAnimating(sim)),
     [...laidOut(head, WIDTH - BUTTONS), { text: ' ⚙ ', dim: true }, { text: ' ▾ ', dim: true }],

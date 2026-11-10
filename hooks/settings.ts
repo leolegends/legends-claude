@@ -1,46 +1,53 @@
-import type { StatusAccent as Accent, StatusMotion as Motion, StatusSettings as Settings, StatusSpeed as Speed } from '../types'
+import { LANGUAGES } from './i18n'
+import type { ToggleKey } from './i18n'
+import type {
+  StatusAccent as Accent,
+  StatusLanguage as Language,
+  StatusMotion as Motion,
+  StatusSettings as Settings,
+  StatusSpeed as Speed,
+} from '../types'
+
+// As opções da aba de ajustes, só com o que não muda de um idioma para outro: os nomes delas vêm de i18n.ts.
 
 // A cor de destaque: a faísca, o modelo, o cometa, o pulso da régua, o custo aceso.
 // `claude` e `text` são cores do tema (seguem claro/escuro); as outras são tons médios que leem bem nos dois.
-export const ACCENTS: readonly { id: Accent; label: string; color: string }[] = [
-  { id: 'claude', label: 'Claude', color: 'claude' },
-  { id: 'azul', label: 'Azul', color: '#5FA8FF' },
-  { id: 'verde', label: 'Verde', color: '#4EC98B' },
-  { id: 'roxo', label: 'Roxo', color: '#A78BFA' },
-  { id: 'rosa', label: 'Rosa', color: '#F472B6' },
-  { id: 'ciano', label: 'Ciano', color: '#22D3EE' },
-  { id: 'ambar', label: 'Âmbar', color: '#F5B841' },
-  { id: 'mono', label: 'Mono', color: 'text' },
+export const ACCENTS: readonly { id: Accent; color: string }[] = [
+  { id: 'claude', color: 'claude' },
+  { id: 'azul', color: '#5FA8FF' },
+  { id: 'verde', color: '#4EC98B' },
+  { id: 'roxo', color: '#A78BFA' },
+  { id: 'rosa', color: '#F472B6' },
+  { id: 'ciano', color: '#22D3EE' },
+  { id: 'ambar', color: '#F5B841' },
+  { id: 'mono', color: 'text' },
 ]
 
-export const MOTIONS: readonly { id: Motion; label: string }[] = [
-  { id: 'completa', label: 'completa' }, // tudo: pulso, nome surgindo, estouro, brilho, faísca, cometa
-  { id: 'suave', label: 'suave' }, // só a faísca pulsando e o cometa
-  { id: 'parada', label: 'parada' }, // nada se mexe; o relógio segue contando
+export const MOTIONS: readonly { id: Motion }[] = [
+  { id: 'completa' }, // tudo: palco, pulso, nome surgindo, estouro, brilho, faísca, cometa
+  { id: 'suave' }, // só a faísca pulsando e o cometa
+  { id: 'parada' }, // nada se mexe; o relógio segue contando
 ]
 
 // Quanto dura um quadro. `parada` ignora: redesenha uma vez por segundo, só pelo tempo decorrido.
-export const SPEEDS: readonly { id: Speed; label: string; frameMs: number }[] = [
-  { id: 'lenta', label: 'lenta', frameMs: 200 },
-  { id: 'normal', label: 'normal', frameMs: 125 },
-  { id: 'rapida', label: 'rápida', frameMs: 80 },
+export const SPEEDS: readonly { id: Speed; frameMs: number }[] = [
+  { id: 'lenta', frameMs: 200 },
+  { id: 'normal', frameMs: 125 },
+  { id: 'rapida', frameMs: 80 },
 ]
 const STILL_FRAME_MS = 1_000
 
 export const AGENT_LIMITS = [3, 6, 10] as const
 
+// O idioma do padrão é o português, em que a barra nasceu. Numa instalação nova quem decide é o idioma
+// do sistema (veja `sanitize` e quem a chama); "restaurar padrão" não mexe no idioma.
 export const DEFAULT_SETTINGS: Settings = {
-  accent: 'claude', motion: 'completa', speed: 'normal',
+  language: 'pt', accent: 'claude', motion: 'completa', speed: 'normal',
   showRule: true, showStage: true, showLimits: true, showTurnCost: true, maxAgents: 6,
 }
 
 /** Os interruptores da linha "mostrar", na ordem em que aparecem. */
-export const TOGGLES = [
-  { key: 'showRule', label: 'régua' },
-  { key: 'showStage', label: 'palco' },
-  { key: 'showLimits', label: 'limites' },
-  { key: 'showTurnCost', label: 'custo do turno' },
-] as const
+export const TOGGLES: readonly ToggleKey[] = ['showRule', 'showStage', 'showLimits', 'showTurnCost']
 
 const oneOf = <T extends string | number>(ids: readonly T[], v: unknown, fallback: T): T =>
   ids.includes(v as T) ? (v as T) : fallback
@@ -48,11 +55,13 @@ const idsOf = <T extends string>(list: readonly { id: T }[]): T[] => list.map(x 
 const flag = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback)
 
 // O que vem do store é de outra versão, editado à mão ou corrompido: cada campo é conferido sozinho,
-// e um campo inválido volta ao padrão sem derrubar os outros.
-export const sanitize = (raw: unknown): Settings => {
+// e um campo inválido volta ao padrão sem derrubar os outros. O idioma tem um padrão à parte, `language`:
+// o que vale quando nenhum idioma válido foi salvo.
+export const sanitize = (raw: unknown, language: Language = DEFAULT_SETTINGS.language): Settings => {
   const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
   const d = DEFAULT_SETTINGS
   return {
+    language: oneOf(idsOf(LANGUAGES), r.language, language),
     accent: oneOf(idsOf(ACCENTS), r.accent, d.accent),
     motion: oneOf(idsOf(MOTIONS), r.motion, d.motion),
     speed: oneOf(idsOf(SPEEDS), r.speed, d.speed),

@@ -1,142 +1,152 @@
 # legends-claude
 
-Uma barra acima do prompt do Claude Code que mostra o que importa enquanto você trabalha: **modelo e effort**, **custo da sessão e do turno**, **limites de uso**, **cada agente em execução** e um **palco** onde o mascote do Claude Code constrói, tijolo por tijolo, o que o turno está fazendo. Não mostra barra de contexto.
+**English** · [Português](README.pt-BR.md)
 
-![A barra durante um turno: o mascote carrega tijolos, chama ajudantes e comemora no fim](docs/demo.gif)
+A bar above the Claude Code prompt that shows what matters while you work: **model and effort**, **session and turn cost**, **usage limits**, **every running agent**, and a **stage** where the Claude Code mascot builds, brick by brick, what the turn is doing. It does not show a context bar.
 
-A barra ocupa a largura toda do terminal. Num terminal estreito, modelo, custo e limites empilham em linhas próprias.
+![The bar during a turn: the mascot carries bricks, calls helpers and celebrates at the end](docs/demo.gif)
 
-## O que aparece
+The bar spans the full width of the terminal. On a narrow terminal, model, cost and limits stack on lines of their own.
 
-| Linha | O que mostra |
+## What it shows
+
+| Line | What it shows |
 | --- | --- |
-| Régua | A linha de cima. Com trabalho em curso, um pulso `━` nasce no centro e corre para as duas pontas. |
-| Cabeçalho | Modelo e effort do último pedido, **clicáveis** (veja Uso). A faísca do Claude (`· ✢ ✳ ✶ ✻ ✽`) pulsa enquanto o turno roda e fica apagada quando está ocioso. Custo e limites encostam à direita na mesma linha quando cabem. |
-| Custo | Total da sessão (o mesmo que `/cost` soma, subagentes incluídos) e quanto foi gasto desde o último prompt. Duas casas decimais (`$1.75`). O total acende com `▲` por um instante sempre que cresce. |
-| Limites | Janelas de 5 horas e 7 dias, com quanto falta para zerar. Só aparece em contas que reportam limite. |
-| Palco | Quatro linhas de cena, enquanto há um turno ou um agente rodando. Veja abaixo. |
-| Trabalho | Com o palco desligado: um cometa de faíscas `✳✶✻·····`, tempo decorrido, quantas ferramentas foram chamadas e a última delas. Com o palco ligado, essas informações ficam no placar do canto dele. |
-| Agentes | Uma linha por subagente, teammate ou agente de workflow: o nome surge de um punhado de faíscas que assentam letra a letra; depois, faísca pulsando (na cor do ajudante dele no palco), brilho no nome e um cometa próprio, cada um fora de fase do vizinho; tempo, ferramentas e a última chamada. Ao terminar vira `✓` com um estouro de faíscas que rareia, duração e tokens (ou `✗` se falhou) e some depois de 8 segundos. Por padrão no máximo 6 linhas (3, 6 ou 10 na aba de ajustes); o resto vira `+N agentes`. |
+| Rule | The top line. While there is work in progress, a `━` pulse starts at the center and runs to both ends. |
+| Header | Model and effort of the last request, both **clickable** (see Usage). The Claude spark (`· ✢ ✳ ✶ ✻ ✽`) pulses while the turn runs and stays dim when idle. Cost and limits sit at the right end of the same line when they fit. |
+| Cost | Session total (the same sum `/cost` gives, subagents included) and how much was spent since the last prompt. Two decimal places (`$1.75`). The total lights up with `▲` for a moment whenever it grows. |
+| Limits | The 5-hour and 7-day windows, with the time left until each resets. Only shown on accounts that report a limit. |
+| Stage | Four lines of scene, while a turn or an agent is running. See below. |
+| Work | With the stage off: a comet of sparks `✳✶✻·····`, elapsed time, how many tools were called and the last one. With the stage on, this information moves to the scoreboard in its corner. |
+| Agents | One line per subagent, teammate or workflow agent: the name emerges from a handful of sparks that settle letter by letter; then a pulsing spark (in the color of its helper on the stage), a shimmer over the name and a comet of its own, each out of phase with its neighbor; elapsed time, tools and the last call. When it finishes it becomes `✓` with a burst of sparks that thins out, duration and tokens (or `✗` if it failed), and leaves after 8 seconds. Up to 6 lines by default (3, 6 or 10 in the settings tab); the rest becomes `+N agents`. |
 
-## O palco
+## The stage
 
-O palco não é um desenho em loop: ele reage ao que está acontecendo de verdade.
+The stage is not a looping drawing: it reacts to what is actually happening.
 
-- **O mascote** é o do logo do Claude Code (`▐▛███▜▌` / `▝▜█████▛▘` / `▘▘ ▝▝`), ponto a ponto. Ele entra pela esquerda quando o turno começa e espera no meio da pista.
-- **Pensando ou esperando.** Enquanto o modelo pensa, a faísca do Claude pulsa sobre a cabeça dele e os olhos vão de um lado para o outro. Enquanto uma ferramenta roda, aparece o nome dela (`Bash···`) e ele sobe e desce as garras.
-- **Cada ferramenta é um tijolo.** Uma chamada de ferramenta vira um tijolo na pilha da esquerda, na cor da família dela. O mascote vai buscar, leva na cabeça (até seis por viagem; com a pilha grande ele aperta o passo), põe na esteira, e a esteira leva até a **parede** que cresce à direita, em fiadas alternadas. O tijolo recém-chegado acende. A parede fica de um turno para o outro: é o retrato do que a sessão fez.
-- **Ajudantes.** Quando o Claude dispara um subagente, o mascote para, grita `!`, e um ajudante menor brota atrás dele numa nuvem de faíscas, na cor do agente (a mesma da faísca dele na lista). O ajudante carrega os tijolos das ferramentas do próprio agente. Agente à espera: o ajudante senta e dorme (`z`). Agente terminado: ele pula, ganha `✓` e some em faíscas; se falhou, apaga e leva `✗`. Até seis ajudantes em cena.
-- **O fim.** Quando o turno termina com uma resposta, o mascote comemora: com três ferramentas ou mais, pulos e confete nas cores dos tijolos; num turno curto, só um pulinho. Um turno interrompido ou que acabou em erro não tem festa: a cena se recolhe.
-- **O placar** no canto de cima à direita mostra o tempo do turno, quantas ferramentas ele chamou e a última delas.
+- **The mascot** is the one from the Claude Code logo (`▐▛███▜▌` / `▝▜█████▛▘` / `▘▘ ▝▝`), dot for dot. It walks in from the left when the turn starts and waits in the middle of the lane.
+- **Thinking or waiting.** While the model thinks, the Claude spark pulses over its head and its eyes move from side to side. While a tool runs, the tool's name appears (`Bash···`) and it raises and lowers its claws.
+- **Every tool is a brick.** A tool call becomes a brick on the pile at the left, in the color of its family. The mascot fetches it, carries it on its head (up to six per trip; with a big pile it picks up the pace), puts it on the conveyor belt, and the belt takes it to the **wall** growing at the right, in alternating courses. The brick that just arrived lights up. The wall stays from one turn to the next: it is the picture of what the session did.
+- **Helpers.** When Claude starts a subagent, the mascot stops, shouts `!`, and a smaller helper pops up behind it in a cloud of sparks, in the agent's color (the same as its spark in the list). The helper carries the bricks of its own agent's tools. Agent waiting: the helper sits down and sleeps (`z`). Agent finished: it jumps, gets a `✓` and vanishes in sparks; if it failed, it dims and gets a `✗`. Up to six helpers on stage.
+- **The end.** When the turn ends with an answer, the mascot celebrates: with three tools or more, jumps and confetti in the colors of the bricks; on a short turn, just a little hop. A turn that was interrupted or ended in an error gets no party: the scene simply packs up.
+- **The scoreboard** in the top right corner shows the turn's elapsed time, how many tools it called and the last one.
 
-As cores dos tijolos:
+The brick colors:
 
-| Cor | Família | Exemplos |
+| Color | Family | Examples |
 | --- | --- | --- |
-| azul | ler | `Read`, `NotebookRead` |
-| lilás | buscar | `Grep`, `Glob`, `ToolSearch` |
-| verde | editar e escrever | `Edit`, `Write`, `NotebookEdit` |
-| âmbar | shell | `Bash`, `KillShell` |
-| ciano | web | `WebFetch`, `WebSearch` |
-| rosa | agentes | `Agent`, `Task`, `SendMessage` |
-| laranja | ferramentas MCP | `mcp__servidor__ferramenta` |
-| cinza | o resto | `TodoWrite`, `Skill`, `AskUserQuestion` |
+| blue | read | `Read`, `NotebookRead` |
+| lilac | search | `Grep`, `Glob`, `ToolSearch` |
+| green | edit and write | `Edit`, `Write`, `NotebookEdit` |
+| amber | shell | `Bash`, `KillShell` |
+| cyan | web | `WebFetch`, `WebSearch` |
+| pink | agents | `Agent`, `Task`, `SendMessage` |
+| orange | MCP tools | `mcp__server__tool` |
+| gray | everything else | `TodoWrite`, `Skill`, `AskUserQuestion` |
 
-Para ver o palco sem esperar um turno: `/legends-claude demo` (ou o botão **▶ demonstração** na aba de ajustes) roda um turno de mentira de uns 25 segundos, com ajudantes e confete.
+To see the stage without waiting for a turn: `/legends-claude demo` (or the **▶ demo** button in the settings tab) plays a make-believe turn of about 25 seconds, with helpers and confetti.
 
-Como é desenhado: cada célula do terminal vale 2×2 "subpixels", desenhados com os blocos de quadrante (`▘▝▖▗▀▄▌▐…`), e a cor de fundo permite duas cores na mesma célula. Por isso o mascote anda de meia em meia célula e pula de meia em meia linha. A cena é uma simulação pura, quadro a quadro, sem sorteio: o mesmo estado desenha sempre o mesmo quadro.
+How it is drawn: every terminal cell counts as 2×2 "subpixels", drawn with the quadrant block characters (`▘▝▖▗▀▄▌▐…`), and the background color allows two colors in the same cell. That is why the mascot walks half a cell at a time and jumps half a line at a time. The scene is a pure simulation, frame by frame, with no randomness: the same state always draws the same frame.
 
-A animação só roda enquanto há o que mostrar (um turno, um agente, a demonstração, ou a cena terminando: um tijolo na esteira, o confete caindo). Parada, a barra não redesenha e não gasta nada.
+The animation only runs while there is something to show (a turn, an agent, the demo, or the scene winding down: a brick on the belt, confetti falling). When idle, the bar does not redraw and costs nothing.
 
-## Instalação
+## Installation
 
-No prompt de uma sessão do Claude Code no terminal:
+At the prompt of a Claude Code session in the terminal:
 
 ```
 /plugin install legends-claude --marketplace leolegends/legends-claude
 ```
 
-Ou direto do shell:
+Or straight from the shell:
 
 ```
 claude plugin install legends-claude --marketplace leolegends/legends-claude
 ```
 
-O Claude Code pergunta `Add marketplace?` (responda `y`) e depois o escopo: escolha **user** para a barra valer em todas as sessões. Ele passa a funcionar na hora, sem reiniciar.
+Claude Code asks `Add marketplace?` (answer `y`) and then the scope: choose **user** for the bar to apply to every session. It starts working right away, with no restart.
 
-No app desktop, onde `/plugin` não roda: clique em **+** ao lado do prompt, depois **Plugins**, **Add marketplace** com `leolegends/legends-claude` e **Add plugin**.
+In the desktop app, where `/plugin` does not run: click **+** next to the prompt, then **Plugins**, **Add marketplace** with `leolegends/legends-claude`, and **Add plugin**.
 
-Para atualizar: `claude plugin update legends-claude` e depois `/reload-plugins`.
-Para remover: `claude plugin uninstall legends-claude`.
+To update: `claude plugin update legends-claude` and then `/reload-plugins`.
+To remove: `claude plugin uninstall legends-claude`.
 
-## Uso
+## Usage
 
-- **Clique no modelo** (`Fable 5.2`) abre um seletor na própria barra: `modelo  ● Fable  Opus  Sonnet  Haiku  ✕`. Clicar num deles roda `/model <nome>`, como se você tivesse digitado: a troca é a da sessão e, como todo `/model`, fica salva como padrão das próximas.
-- **Clique no effort** (`high`) abre `effort  low  medium  ● high  xhigh  max  ✕` e roda `/effort <nível>`.
-- No meio de um turno a troca entra na fila e vale quando o turno termina. `✕` (ou clicar de novo no modelo/effort) fecha o seletor sem trocar nada.
-- `▾` no canto da barra esconde; `◂ status` traz de volta. `/legends-claude` alterna entre escondido e visível.
-- `/legends-claude demo` mostra o palco em ação, com a sessão parada.
-- **`⚙` abre a aba de ajustes** na própria barra (ou `/legends-claude ajustes`). Cada mudança vale na hora e fica salva para as próximas sessões:
+- **Click the model** (`Fable 5.2`) to open a picker in the bar itself: `model  ● Fable  Opus  Sonnet  Haiku  ✕`. Clicking one runs `/model <name>`, as if you had typed it: the change is the session's and, like every `/model`, it is saved as the default for the next ones.
+- **Click the effort** (`high`) to open `effort  low  medium  ● high  xhigh  max  ✕`, which runs `/effort <level>`.
+- In the middle of a turn the change is queued and applies when the turn ends. `✕` (or clicking the model/effort again) closes the picker without changing anything.
+- `▾` at the corner of the bar hides it; `◂ status` brings it back. `/legends-claude` toggles between hidden and visible.
+- `/legends-claude demo` plays the stage, with the session idle.
+- **`⚙` opens the settings tab** in the bar itself (or `/legends-claude settings`; `ajustes` works too). Every change applies immediately and is saved for the next sessions:
 
 ```
-⚙ ajustes                                          ▶ demonstração   restaurar padrão   ✕
-cor          ● Claude  Azul  Verde  Roxo  Rosa  Ciano  Âmbar  Mono
-animação     ● completa  suave  parada
-velocidade   lenta  ● normal  rápida
-mostrar      ☑ régua  ☑ palco  ☑ limites  ☑ custo do turno
-agentes      3  ● 6  10
+⚙ settings                                                   ▶ demo   restore defaults   ✕
+language     Português  ● English
+color        ● Claude  Blue  Green  Purple  Pink  Cyan  Amber  Mono
+animation    ● full  subtle  still
+speed        slow  ● normal  fast
+show         ☑ rule  ☑ stage  ☑ limits  ☑ turn cost
+agents       3  ● 6  10
 ```
 
-| Ajuste | O que faz |
+| Setting | What it does |
 | --- | --- |
-| cor | A cor de destaque: o mascote, a faísca, o modelo, o cometa, o pulso da régua, o custo aceso. Cada opção já aparece na própria cor. `Claude` e `Mono` seguem o tema claro/escuro do Claude Code. |
-| animação | `completa` é tudo, palco incluído; `suave` deixa só a faísca pulsando e o cometa (sem palco, pulso na régua, nome surgindo, brilho nem estouro); `parada` não mexe nada e só atualiza o tempo uma vez por segundo. |
-| velocidade | A duração de um quadro: 200, 125 ou 80 ms. É também o ritmo do palco. Sem efeito com a animação parada. |
-| mostrar | Liga e desliga a régua de cima, o palco, os limites de 5h/7d e o custo do turno. O palco só aparece com a animação `completa`. |
-| agentes | Quantas linhas de agente aparecem antes do resumo `+N agentes`. |
+| language | English or Portuguese: switches every text in the bar, the notices and the command's description at once. With no saved choice, a fresh install follows the system language (`LC_ALL`, `LC_MESSAGES`, `LANG`): Portuguese if it says `pt`, English otherwise. "Restore defaults" leaves the language alone. |
+| color | The accent color: the mascot, the spark, the model, the comet, the rule's pulse, the lit-up cost. Each option is already shown in its own color. `Claude` and `Mono` follow Claude Code's light/dark theme. |
+| animation | `full` is everything, stage included; `subtle` keeps only the pulsing spark and the comet (no stage, rule pulse, emerging name, shimmer or burst); `still` moves nothing and only updates the time once a second. |
+| speed | The duration of a frame: 200, 125 or 80 ms. It is also the pace of the stage. No effect while the animation is still. |
+| show | Turns the top rule, the stage, the 5h/7d limits and the turn cost on and off. The stage only appears with the `full` animation. |
+| agents | How many agent lines appear before the `+N agents` summary. |
 
-## Requisitos e limites
+## Requirements and limits
 
-- Claude Code com suporte a mods (function hooks). Escrito e testado na versão 2.1.322. Essa API está em acesso antecipado e pode mudar entre versões.
-- A barra precisa de pelo menos 60 colunas de terminal; abaixo disso ela não desenha. Numa barra com mais de 120 colunas o palco não estica além disso.
-- A faixa acima do prompt pode ocupar até metade da altura do terminal. Se o palco não couber (menos de 7 linhas livres) ele não entra e a linha de trabalho volta; se couber justo, é a lista de agentes que encolhe para `+N agentes`.
-- O palco usa os blocos de quadrante e cor de fundo em 24 bits. Num terminal sem cor de 24 bits as cores dos tijolos são aproximadas; numa fonte sem esses blocos o desenho não fecha.
-- O custo por agente não aparece: o Claude Code só expõe o custo total da sessão. Por agente, a barra mostra os tokens do último turno.
-- O effort aparece a partir do primeiro pedido ao modelo depois que o plugin carrega; antes disso a barra mostra `effort`, já clicável.
-- O seletor de modelo usa os apelidos `fable`, `opus`, `sonnet` e `haiku`; um modelo que a sua conta não tem é recusado pelo próprio `/model`, e a barra avisa.
-- O plugin não acessa rede nem arquivos. Ele lê o uso da sessão e a lista de agentes, guarda o estado na sessão e os ajustes no store do próprio plugin (um JSON na pasta de configuração do Claude Code). A cena do palco vive só na memória e recomeça a cada sessão ou `/reload-plugins`.
-- O palco é enfeite: um erro nele vira uma cena vazia e uma linha de aviso, nunca atrapalha uma ferramenta nem derruba a barra.
-- O ícone `⚙` é desenhado como texto na maioria dos terminais; num terminal que o mostre como emoji largo, a primeira linha pode perder uma coluna à direita.
+- Claude Code with mod support (function hooks). Written and tested on version 2.1.322. This API is in early access and may change between versions.
+- The bar needs a terminal at least 60 columns wide; below that it does not draw. On a bar wider than 120 columns the stage does not stretch past that.
+- The band above the prompt may take up to half the terminal's height. If the stage does not fit (fewer than 7 free lines) it stays out and the work line comes back; if it only just fits, it is the agent list that shrinks to `+N agents`.
+- The stage uses the quadrant block characters and 24-bit background color. On a terminal without 24-bit color the brick colors are approximated; in a font without those blocks the drawing does not close up.
+- Per-agent cost is not shown: Claude Code only exposes the session's total cost. Per agent, the bar shows the tokens of its last turn.
+- The effort appears from the first model request after the plugin loads; until then the bar shows `effort`, already clickable.
+- The model picker uses the aliases `fable`, `opus`, `sonnet` and `haiku`; a model your account does not have is refused by `/model` itself, and the bar says so.
+- The plugin accesses neither the network nor files. It reads the session's usage and the agent list, keeps its state in the session and its settings in the plugin's own store (a JSON file in Claude Code's configuration folder), and reads three environment variables (`LC_ALL`, `LC_MESSAGES`, `LANG`) to pick the first language. The stage's scene lives in memory only and starts over with each session or `/reload-plugins`.
+- The stage is decoration: an error in it becomes an empty scene and one notice line; it never gets in the way of a tool or takes the bar down.
+- The `⚙` icon is drawn as text in most terminals; in a terminal that shows it as a wide emoji, the first line may lose a column at the right.
 
-## Desenvolvimento
+## Development
 
 ```
 claude plugin validate .
 claude plugin test .
-claude --plugin-dir .        # roda uma sessão com o plugin carregado desta pasta
+claude --plugin-dir .        # runs a session with the plugin loaded from this folder
 ```
 
-O módulo de hooks e o que ele importa, em `hooks/`:
+The hooks module and what it imports, in `hooks/`:
 
-- `register.tsx`: os eventos, o estado, o relógio da animação e o desenho da barra.
-- `lines.ts`: as linhas da barra (cabeçalho, custo, trabalho, limites, agentes), puras.
-- `effects.ts`: as animações de texto (faísca, cometa, pulso da régua, nome surgindo, estouro, brilho).
-- `format.ts`, `parts.ts`, `agents.ts`: formatos de texto, trechos de linha, e as linhas de agente conferidas com a lista do engine.
-- `sim.ts`: a simulação do palco, pura: o estado e as funções que dão o estado seguinte.
-- `scene.ts`: o desenho de um quadro da cena (posturas, balões, tijolos, esteira, estrelas).
-- `pixels.ts`, `sprites.ts`, `palette.ts`: o desenhador de subpixels, os desenhos dos bichos, as cores.
-- `demo.ts`: o roteiro da demonstração.
-- `settings.ts`, `settings-panel.tsx`: os ajustes e a aba deles.
-- `types/index.d.ts` (na raiz): o contrato do estado que o plugin guarda.
+- `register.tsx`: the events, the state, the animation clock and the drawing of the bar.
+- `lines.ts`: the lines of the bar (header, cost, work, limits, agents), pure.
+- `effects.ts`: the text animations (spark, comet, rule pulse, emerging name, burst, shimmer).
+- `format.ts`, `parts.ts`, `agents.ts`: text formats, line parts, and the agent lines reconciled with the engine's list.
+- `sim.ts`: the stage simulation, pure: the state and the functions that give the next state.
+- `scene.ts`: the drawing of one frame of the scene (poses, bubbles, bricks, belt, stars).
+- `pixels.ts`, `sprites.ts`, `palette.ts`: the subpixel renderer, the creatures' drawings, the colors.
+- `demo.ts`: the script of the demo.
+- `i18n.ts`: the bar's texts in Portuguese and in English. A new text goes into the `Strings` type and the compiler demands its translation in both.
+- `settings.ts`, `settings-panel.tsx`: the settings and their tab.
+- `types/index.d.ts` (at the root): the contract of the state the plugin keeps.
 
-Os testes (`*.test.ts`, 143 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena e a barra montada em cada superfície.
+The code comments and the test names are in Portuguese, the language the project was born in.
 
-O GIF deste README sai das mesmas funções que desenham a barra, fora do Claude Code (precisa de `bun` e de Pillow):
+The tests (`*.test.ts`, 167 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene and the bar mounted on each surface.
+
+The GIFs of the two READMEs come out of the same functions that draw the bar, outside Claude Code (needs `bun` and Pillow):
 
 ```
-bun run scripts/demo-frames.ts | python3 scripts/demo-gif.py docs/demo.gif
+bun run scripts/demo-frames.ts 100 en | python3 scripts/demo-gif.py docs/demo.gif
+bun run scripts/demo-frames.ts 100 pt | python3 scripts/demo-gif.py docs/demo.pt-BR.gif
 ```
 
-## Créditos e licença
+The documentation has two files that change together: `README.md` (English) and `README.pt-BR.md` (Portuguese).
 
-MIT. Algumas funções auxiliares foram adaptadas de [claude-statuspane](https://github.com/xuanji86/claude-statuspane) (MIT), de Anji Xu. As animações seguem técnicas da skill `ascii-animations` (grade de caracteres, máquina de estados, onda que se propaga, partículas), adaptadas para o terminal.
+## Credits and license
+
+MIT. Some helper functions were adapted from [claude-statuspane](https://github.com/xuanji86/claude-statuspane) (MIT), by Anji Xu. The animations follow techniques from the `ascii-animations` skill (character grid, state machines, wave propagation, particles), adapted to the terminal.
