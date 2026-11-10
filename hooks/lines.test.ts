@@ -1,9 +1,13 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { agentLine, burst, cardLines, clean, fit, fmtCost, fmtSpan, fmtTokens, lineWidth, merge, noise, prettyModel, reconcileRows, reveal, ruleParts, shimmer, shortTool, sortAgents, spin, trail, upsert } from './register'
-import { SPINNER } from './register'
+import { reconcileRows, upsert } from './agents'
+import { SPINNER, burst, noise, reveal, ruleParts, shimmer, spin, trail } from './effects'
+import { clean, fit, fmtCost, fmtSpan, fmtTokens, prettyModel, shortTool } from './format'
+import { agentLine, cardLines, sortAgents } from './lines'
+import { lineWidth, merge } from './parts'
+
 import { DEFAULT_SETTINGS, effectsOf, sanitize } from './settings'
-import type { Line } from './register'
+import type { Line } from './parts'
 import type { StatusAgent } from '../types'
 
 const NOW = Date.parse('2026-11-10T12:00:00Z')
