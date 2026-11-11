@@ -149,6 +149,9 @@ export const geometry = (columns: number): Geo | null => {
 /** Há cena para mostrar: o turno rodando, a comemoração dele, ou algum ajudante em cena. */
 export const hasScene = (sim: Sim) => sim.isOn || sim.finale > 0 || sim.workers.some(w => w.id !== MAIN)
 
+/** Quadros já passados da festa de um turno que trabalhou (pulos e confete); `null` fora dela e num turno curto. */
+export const partyAge = (sim: Sim): number | null => (sim.finale > 0 && sim.work >= PARTY_FROM ? FINALE - sim.finale : null)
+
 /** Algo se mexe em cena: sem isso, um quadro novo desenharia a mesma coisa. Fora de cena, nada conta. */
 export const isAnimating = (sim: Sim) =>
   hasScene(sim) &&

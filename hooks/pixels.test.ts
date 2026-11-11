@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { brick, cellOf, dotKey, dotsLayer, pixelAt, rasterRow, spriteLayer } from './pixels'
-import type { Layer } from './pixels'
+import { EYE, brick, cellOf, dotKey, dotsLayer, litQuad, pixelAt, rasterRow, spriteLayer } from './pixels'
+import type { Glow, Layer } from './pixels'
 
 const A = '#111111'
 const B = '#222222'
@@ -72,6 +72,16 @@ describe('camadas', () => {
     expect(sprite(10, 6)).toBeUndefined()
   })
 
+  test('um desenho pode ter uma tinta por subpixel, e um olho aceso é pintado como o corpo', () => {
+    const seen: string[] = []
+    const sprite = spriteLayer(['#o.'], 4, 2, (x, y, mark) => (seen.push(`${x},${y},${mark}`), mark === EYE ? B : A))
+    expect(sprite(4, 2)).toBe(A)
+    expect(sprite(5, 2)).toBe(B)
+    expect(sprite(6, 2)).toBeNull() // um vazio segue vazio: a tinta nem é consultada
+    expect(seen).toEqual(['4,2,#', '5,2,o'])
+    expect(spriteLayer(['#o'], 0, 0, A)(1, 0)).toBe(A) // com uma tinta só, o olho sai na cor do corpo
+  })
+
   test('um tijolo tem duas células de largura e meia linha de altura', () => {
     const dots = dotsLayer(brick(3, 6, A))
     expect([5, 6, 7, 8, 9, 10].map(x => dots(x, 6))).toEqual([none, A, A, A, A, none])
@@ -109,5 +119,58 @@ describe('uma linha de células', () => {
   test('trechos vizinhos de mesmo estilo viram um só, e o branco do fim é cortado', () => {
     const row = rasterRow({ layers: [dotsLayer([...brick(0, 0, A), ...brick(2, 0, A)])], row: 0, width: 12, over: none2, under: none2 })
     expect(row).toEqual([{ text: '▀▀▀▀', color: A }])
+  })
+})
+
+
+describe('o clarão atrás da cena', () => {
+  const G = '#333333'
+  const H = '#444444'
+  const none2 = () => undefined
+  const everywhere: Glow = () => G
+
+  test('numa célula sem desenho, o clarão aparece como ele é', () => {
+    expect(litQuad([none, none, none, none], [G, none, G, none])).toEqual([G, none, G, none])
+  })
+
+  test('com desenho de uma cor só, o clarão preenche todos os vazios: a célula fica inteira, com duas cores', () => {
+    expect(litQuad([A, none, none, none], [none, none, none, G])).toEqual([A, G, G, G])
+    expect(cellOf(litQuad([A, none, A, none], [G, G, G, G]))).toEqual({ text: '▌', color: A, bg: G })
+  })
+
+  test('o clarão só entra por um vazio: atrás de uma célula já toda pintada, ou sem tocar nela, não muda nada', () => {
+    expect(litQuad([A, A, A, A], [G, G, G, G])).toEqual([A, A, A, A])
+    expect(litQuad([A, none, none, none], [G, none, none, none])).toEqual([A, none, none, none])
+    expect(litQuad([A, none, none, none], [none, none, none, none])).toEqual([A, none, none, none])
+  })
+
+  test('com desenho de duas cores o clarão não entra: a célula não comporta uma terceira', () => {
+    expect(litQuad([A, B, none, none], [G, G, G, G])).toEqual([A, B, none, none])
+  })
+
+  test('quando o clarão tem dois tons na célula, o desenho fica com o primeiro que tocar um vazio', () => {
+    expect(litQuad([A, none, none, none], [H, G, H, H])).toEqual([A, G, G, G])
+  })
+
+  test('numa linha, o clarão fica atrás do desenho e some onde não há', () => {
+    const row = rasterRow({
+      layers: [spriteLayer(['#.', '#.'], 2, 0, A)], row: 0, width: 4, over: none2, under: none2,
+      glow: x => (x >= 2 && x < 6 ? G : undefined),
+    })
+    expect(row).toEqual([{ text: ' ' }, { text: '▌', color: A, bg: G }, { text: '█', color: G }])
+  })
+
+  test('um texto dentro do clarão fica sobre ele; fora, ou com fundo próprio, fica como veio', () => {
+    const label = (cell: number) => (cell === 1 ? { text: '!', bold: true } : cell === 3 ? { text: '?', bg: B } : undefined)
+    const row = rasterRow({ layers: [], row: 0, width: 4, over: label, under: none2, glow: everywhere })
+    expect(row.find(p => p.text === '!')).toEqual({ text: '!', bold: true, bg: G })
+    expect(row.find(p => p.text === '?')).toEqual({ text: '?', bg: B })
+    const plain = rasterRow({ layers: [], row: 0, width: 4, over: label, under: none2 })
+    expect(plain.find(p => p.text === '!')).toEqual({ text: '!', bold: true })
+  })
+
+  test('sem clarão a linha é a de sempre', () => {
+    const input = { layers: [spriteLayer(['####', '####'], 3, 0, A)], row: 0, width: 6, over: none2, under: none2 }
+    expect(rasterRow({ ...input, glow: none2 })).toEqual(rasterRow(input))
   })
 })

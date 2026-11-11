@@ -1,6 +1,6 @@
 import type { SessionUsage } from 'claude-code'
 
-import { IDLE_GLYPH, burst, reveal, seedOf, shimmer, spin, trail } from './effects'
+import { IDLE_GLYPH, burst, reveal, seedOf, shimmer, trail } from './effects'
 import { PENDING, fit, fmtCost, fmtEta, fmtSpan, fmtTokens, prettyModel } from './format'
 import { stringsOf } from './i18n'
 import type { Strings } from './i18n'
@@ -9,6 +9,7 @@ import type { Line, Part } from './parts'
 import { DEFAULT_SETTINGS, FULL_EFFECTS, effectsOf } from './settings'
 import type { Effects } from './settings'
 import { tintOf } from './palette'
+import { EFFORTS, idleSpark, sparkAt, tierOf } from './power'
 import type {
   StatusAgent as Agent,
   StatusAgentState as AgentState,
@@ -29,7 +30,7 @@ const LIMIT_GAUGE = 5
 const AGENT_TRAIL_WIDTH = 5 // o rastro de cada agente rodando
 const TYPE_MAX = 20
 const DESC_MIN = 6
-export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+export { EFFORTS }
 
 // Os textos de quem chama uma linha sem dizer o idioma: os do idioma padrão.
 const BASE = stringsOf(DEFAULT_SETTINGS.language)
@@ -45,19 +46,22 @@ export const fromUsage = (u: Pick<SessionUsage, 'rateLimits' | 'cost'>): Pick<Fi
   return { costUsd: u.cost?.usd, fiveHour: find('five_hour'), week: find('seven_day') }
 }
 
-// "✶ Fable 5.2 · high": a faísca pulsa enquanto o turno roda e fica apagada fora dele.
-// Modelo e effort são clicáveis: cada um abre o seu seletor.
-const headLine = (f: Figures, isWorking: boolean, fr: number, fx: Effects, t: Strings): Line => ({
-  parts: [
-    !isWorking ? { text: `${IDLE_GLYPH} `, dim: true }
-      : { text: `${fx.isStill ? IDLE_GLYPH : spin(fr)} `, color: 'claude', bold: true },
-    { text: f.model ? prettyModel(f.model) : PENDING, color: 'claude', bold: true, action: 'model' },
-    { text: ' · ', dim: true },
-    f.effort
-      ? { text: f.effort, ...(EFFORTS.includes(f.effort) && { color: 'claude' }), action: 'effort' }
-      : { text: t.noEffort, dim: true, action: 'effort' },
-  ],
-})
+// "❂ Fable 5.2 · high": a faísca é a da classe do modelo (do pontinho de Haiku ao selo de Fable); pulsa
+// enquanto o turno roda e fica apagada fora dele. Modelo e effort são clicáveis: cada um abre o seu seletor.
+const headLine = (f: Figures, isWorking: boolean, fr: number, fx: Effects, t: Strings): Line => {
+  const tier = tierOf(f.model)
+  return {
+    parts: [
+      !isWorking ? { text: `${idleSpark(tier)} `, dim: true }
+        : { text: `${fx.isStill ? idleSpark(tier) : sparkAt(tier, fr)} `, color: 'claude', bold: true },
+      { text: f.model ? prettyModel(f.model) : PENDING, color: 'claude', bold: true, action: 'model' },
+      { text: ' · ', dim: true },
+      f.effort
+        ? { text: f.effort, ...(EFFORTS.includes(f.effort) && { color: 'claude' }), action: 'effort' }
+        : { text: t.noEffort, dim: true, action: 'effort' },
+    ],
+  }
+}
 
 // "$1.23 sessão · turno +$0.04": o total aceso por um instante quando cresce.
 const costLine = (f: Figures, m: Main, now: number, showTurn: boolean, t: Strings): Line => {
@@ -138,11 +142,12 @@ export const agentLine = (a: Agent, now: number, fr: number, index: number, max:
   const age = (since: number) => Math.floor((now - since) / fx.frameMs)
   const type = fit(a.type || t.agent, TYPE_MAX) // um agente cujo tipo ainda não chegou é só "agente"
   const tail = agentTail(a, now, t)
+  const tier = tierOf(a.model)
   // cada agente pulsa e corre fora de fase do vizinho
   const head: Part[] = a.state === 'running'
     ? [
-        // com o palco ligado, a faísca do agente tem a cor do ajudante dele em cena
-        { text: fx.isStill ? IDLE_GLYPH : spin(fr, index * 3), color: fx.hasStage ? tintOf(a.id) : 'claude', bold: true },
+        // a faísca é a da classe do modelo do agente; com o palco ligado, na cor do ajudante dele em cena
+        { text: fx.isStill ? idleSpark(tier) : sparkAt(tier, fr, index * 3), color: fx.hasStage ? tintOf(a.id) : 'claude', bold: true },
         { text: ' ' },
         // o nome surge de faíscas quando o agente nasce; depois, o brilho passa por ele
         ...(fx.isFull ? (reveal(type, age(a.startedAt), seedOf(a.id)) ?? shimmer(type, fr + index * 5)) : [{ text: type, bold: true }]),

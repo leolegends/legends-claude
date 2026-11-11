@@ -14,8 +14,23 @@ export type Paint = string
  */
 export type Layer = (x: number, y: number) => Paint | null | undefined
 
-/** Um desenho em subpixels: `#` pintado, qualquer outra coisa vazio. */
+/** Um desenho em subpixels: `#` é o corpo, `o` um olho aceso, qualquer outra coisa vazio. */
 export type Bitmap = readonly string[]
+
+/** O símbolo de um olho aceso num desenho. */
+export const EYE = 'o'
+
+/**
+ * A tinta de um desenho: uma só, ou uma por subpixel (o brilho que percorre o corpo, o olho aceso).
+ * A função recebe o subpixel na tela e o símbolo do desenho ali.
+ */
+export type Shade = Paint | ((x: number, y: number, mark: string) => Paint)
+
+/**
+ * O clarão atrás da cena: a tinta que ele põe num subpixel, ou nada. Não é uma camada: onde um
+ * desenho de uma cor só divide a célula com ele, o clarão preenche o resto dela (veja `rasterRow`).
+ */
+export type Glow = (x: number, y: number) => Paint | undefined
 
 // O índice soma 1 (cima-esquerda), 2 (cima-direita), 4 (baixo-esquerda) e 8 (baixo-direita).
 const QUADRANTS = [' ', '▘', '▝', '▀', '▖', '▌', '▞', '▛', '▗', '▚', '▐', '▜', '▄', '▙', '▟', '█']
@@ -58,11 +73,13 @@ export const cellOf = (quad: readonly (Paint | undefined)[]): Part | null => {
  * Um desenho posto em (`left`, `top`), em subpixels. É opaco no retângulo que ocupa, com um subpixel
  * de margem de cada lado: o que passa atrás fica escondido, sem as cores se misturarem na borda.
  */
-export const spriteLayer = (bitmap: Bitmap, left: number, top: number, paint: Paint): Layer => (x, y) => {
+export const spriteLayer = (bitmap: Bitmap, left: number, top: number, shade: Shade): Layer => (x, y) => {
   const row = bitmap[y - top]
   const col = x - left
   if (row === undefined || col < -1 || col > row.length) return undefined
-  return row[col] === '#' ? paint : null
+  const mark = row[col]
+  if (mark !== '#' && mark !== EYE) return null
+  return typeof shade === 'string' ? shade : shade(x, y, mark)
 }
 
 /** A chave de um subpixel numa camada de pontos; `undefined` fora da área. */
@@ -91,18 +108,38 @@ export type RowInput = {
   over: (cell: number) => Part | undefined
   /** O que aparece numa célula sem nada pintado (o chão, uma estrela). */
   under: (cell: number) => Part | undefined
+  /** O clarão atrás de tudo (a aura de um bicho); sem ele, a linha é só as camadas. */
+  glow?: Glow
+}
+
+/**
+ * Os quatro subpixels de uma célula com o clarão por trás. Uma célula só comporta duas cores, então:
+ * sem desenho, é o clarão como ele é; com desenho de uma cor só e clarão em algum vazio, o clarão
+ * preenche todos os vazios (a célula fica inteira: o desenho na frente, o clarão de fundo); com
+ * desenho de duas cores, o clarão não entra.
+ */
+export const litQuad = (quad: readonly (Paint | undefined)[], halo: readonly (Paint | undefined)[]): readonly (Paint | undefined)[] => {
+  const front = new Set(quad.filter((p): p is Paint => p !== undefined))
+  if (front.size === 0) return halo
+  if (front.size > 1) return quad
+  const fill = halo.find((g, i) => g !== undefined && quad[i] === undefined)
+  return fill === undefined ? quad : quad.map(p => p ?? fill)
 }
 
 /** Puro: uma linha de células já resolvida em trechos, sem o branco do fim. */
-export const rasterRow = ({ layers, row, width, over, under }: RowInput): Part[] => {
+export const rasterRow = ({ layers, row, width, over, under, glow }: RowInput): Part[] => {
   const y = row * 2
   const cells = Array.from({ length: width }, (_, cell): Part => {
     const x = cell * 2
-    return (
-      over(cell) ??
-      cellOf([pixelAt(layers, x, y), pixelAt(layers, x + 1, y), pixelAt(layers, x, y + 1), pixelAt(layers, x + 1, y + 1)]) ??
-      under(cell) ?? { text: ' ' }
-    )
+    const halo = glow ? [glow(x, y), glow(x + 1, y), glow(x, y + 1), glow(x + 1, y + 1)] : undefined
+    const label = over(cell)
+    if (label) {
+      // Um texto dentro do clarão fica sobre ele, não num buraco.
+      const behind = label.bg === undefined ? halo?.find(g => g !== undefined) : undefined
+      return behind === undefined ? label : { ...label, bg: behind }
+    }
+    const quad = [pixelAt(layers, x, y), pixelAt(layers, x + 1, y), pixelAt(layers, x, y + 1), pixelAt(layers, x + 1, y + 1)]
+    return cellOf(halo ? litQuad(quad, halo) : quad) ?? under(cell) ?? { text: ' ' }
   })
   const runs = merge(cells)
   const last = runs[runs.length - 1]

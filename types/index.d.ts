@@ -56,6 +56,8 @@ export type StatusAgent = {
   type: string
   description: string
   model: string | null
+  /** O effort do último pedido do agente; ausente enquanto ele não fez nenhum, ou num modelo sem effort. */
+  effort?: string | null
   state: StatusAgentState
   startedAt: number
   /** Último sinal de vida (spawn, passo ou chamada de ferramenta). */

@@ -1,4 +1,6 @@
 import { kindOf } from './palette'
+import { power } from './power'
+import type { Power } from './power'
 import { DEMO_PREFIX, MAIN, begin, enqueue, finish, retire, settle, summon, think } from './sim'
 import type { Sim } from './sim'
 
@@ -7,6 +9,12 @@ import type { Sim } from './sim'
 
 const ANA = `${DEMO_PREFIX}1`
 const BIA = `${DEMO_PREFIX}2`
+
+/** O poder de cada ajudante da demonstração: um Sonnet em `high` e um Haiku em `max`, para as classes aparecerem. */
+export const DEMO_CAST: readonly (readonly [string, Power])[] = [
+  [ANA, power(1, 2)],
+  [BIA, power(0, 4)],
+]
 
 type Cue = readonly [at: number, run: (sim: Sim) => Sim]
 

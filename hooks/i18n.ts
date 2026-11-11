@@ -43,6 +43,10 @@ export type Strings = {
   argumentHint: string
   // A demonstração do palco.
   demo: string
+  /** A demonstração pedida com outro modelo ou effort: diz com qual aparência ela roda. */
+  demoAs: (model: string, effort: string) => string
+  /** O que veio depois de "demo" não é um modelo nem um effort: diz o que não entendeu e o que cabe ali. */
+  demoUnknown: (words: string) => string
   demoHud: string
   demoBusy: string
   demoOff: string
@@ -84,9 +88,11 @@ const PT: Strings = {
   shown: 'Barra de status visível.',
   tooNarrow: columns => `Barra de status visível; ela desenha quando o terminal tiver pelo menos ${columns} colunas.`,
   opened: 'Ajustes abertos na barra.',
-  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre os ajustes, "demo" mostra o palco em ação',
-  argumentHint: '[ajustes|demo]',
+  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre os ajustes, "demo" mostra o palco em ação (com outro modelo e effort: "demo opus max")',
+  argumentHint: '[ajustes|demo [modelo] [effort]]',
   demo: 'Demonstração do palco em cena.',
+  demoAs: (model, effort) => `Demonstração do palco em cena, como ${model} · ${effort}.`,
+  demoUnknown: words => `Não entendi "${words}". Depois de "demo" vai um modelo (haiku, sonnet, opus, fable), um effort (low, medium, high, xhigh, max), ou os dois.`,
   demoHud: '▶ demonstração',
   demoBusy: 'A demonstração roda com a sessão parada: espere o turno terminar.',
   demoOff: 'O palco está desligado: ligue "palco" e a animação "completa" nos ajustes (⚙).',
@@ -127,9 +133,11 @@ const EN: Strings = {
   shown: 'Status bar visible.',
   tooNarrow: columns => `Status bar visible; it draws once the terminal is at least ${columns} columns wide.`,
   opened: 'Settings opened in the bar.',
-  commandDescription: 'Shows or hides the status bar; "settings" opens the settings, "demo" plays the stage',
-  argumentHint: '[settings|demo]',
+  commandDescription: 'Shows or hides the status bar; "settings" opens the settings, "demo" plays the stage (as another model and effort: "demo opus max")',
+  argumentHint: '[settings|demo [model] [effort]]',
   demo: 'Stage demo playing.',
+  demoAs: (model, effort) => `Stage demo playing, as ${model} · ${effort}.`,
+  demoUnknown: words => `Could not make sense of "${words}". After "demo" goes a model (haiku, sonnet, opus, fable), an effort (low, medium, high, xhigh, max), or both.`,
   demoHud: '▶ demo',
   demoBusy: 'The demo runs while the session is idle: wait for the turn to finish.',
   demoOff: 'The stage is off: turn on "stage" and the "full" animation in the settings (⚙).',

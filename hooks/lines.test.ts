@@ -113,6 +113,17 @@ describe('animações da skill ascii-animations', () => {
     expect(plain(ruleParts(41, 6, true)).includes('━')).toBe(false) // já saiu pelas pontas: a pausa
   })
 
+  test('o pulso da régua cresce com o effort: mais largo e mais rápido', () => {
+    const lit = (energy: number) => ruleParts(81, 3, true, energy).filter(p => p.color === 'claude').reduce((n, p) => n + p.text.length, 0)
+    const widths = [0, 1, 2, 3, 4].map(lit)
+    for (const [energy, width] of widths.entries()) expect(energy === 0 || width > (widths[energy - 1] ?? 0)).toBe(true)
+    const front = (energy: number) => plain(ruleParts(81, 2, true, energy)).lastIndexOf('━')
+    expect(front(4) > front(0)).toBe(true) // no mesmo quadro, o de max já foi mais longe
+    for (const fr of [0, 2, 5, 11]) expect(ruleParts(41, fr, true, 2)).toEqual(ruleParts(41, fr, true)) // sem dizer, é o de high: o pulso de sempre
+    expect(ruleParts(20, 5, false, 4)).toEqual([{ text: '─'.repeat(20), color: 'subtle' }])
+    for (const energy of [-3, 0, 4, 9]) expect(plain(ruleParts(41, 7, true, energy)).length).toBe(41)
+  })
+
   test('o nome surge de faíscas, assenta da esquerda para a direita e nunca muda de largura', () => {
     const born = reveal('Explore', 0, 1)
     expect(born?.some(p => /[A-Za-z]/.test(p.text))).toBe(false) // no nascimento, só faíscas
@@ -148,9 +159,23 @@ describe('linhas do card', () => {
   test('na largura toda, modelo à esquerda e custo à direita na mesma linha, sem contexto', () => {
     const lines = card()
     expect(lines.length).toBe(1)
-    expect(left(lines[0])).toBe('✻ Fable 5.2 · high')
+    expect(left(lines[0])).toBe('❂ Fable 5.2 · high')
     expect(right(lines[0])).toBe('$1.50 sessão · turno +$0.25')
     expect(lines.map(text).some(l => /ctx|context/i.test(l))).toBe(false)
+  })
+
+  test('a faísca do cabeçalho é a da classe do modelo: do pontinho de Haiku ao selo de Fable', () => {
+    const spark = (model: string | null, over: Partial<Parameters<typeof cardLines>[0]> = {}) =>
+      left(card({ figures: { model, effort: 'high' }, ...over })[0]).split(' ')[0]
+    expect(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-2'].map(model => spark(model))).toEqual(['✢', '✻', '❋', '❂'])
+    expect(spark(null)).toBe('✻') // sem modelo lido, ou de família desconhecida: a de sempre
+    expect(spark('outro-modelo')).toBe('✻')
+    // no turno, cada classe pulsa com os seus glifos
+    expect(spark('claude-haiku-5-5', { isWorking: true, frame: 2 })).toBe('✣')
+    expect(spark('claude-sonnet-5-5', { isWorking: true, frame: 5 })).toBe('✽')
+    expect(spark('claude-opus-5-5', { isWorking: true, frame: 4 })).toBe('❋')
+    expect(spark('claude-fable-5-2', { isWorking: true, frame: 2 })).toBe('✪')
+    expect(card({ figures: { model: 'claude-opus-5-5', effort: 'high' } })[0]?.parts[0]).toMatchObject({ dim: true }) // ocioso, apagada
   })
 
   test('modelo e effort são os trechos clicáveis do cabeçalho; sem effort lido, fica o convite', () => {
@@ -161,7 +186,7 @@ describe('linhas do card', () => {
 
   test('estreita demais, modelo e custo empilham', () => {
     const lines = stacked().map(text)
-    expect(lines).toEqual(['✻ Fable 5.2 · high', '$1.50 sessão · turno +$0.25'])
+    expect(lines).toEqual(['❂ Fable 5.2 · high', '$1.50 sessão · turno +$0.25'])
   })
 
   test('sem turno ainda não há custo de turno; sem leitura, o custo fica pendente', () => {
@@ -178,7 +203,7 @@ describe('linhas do card', () => {
 
   test('enquanto o turno roda a faísca pulsa e o cometa corre na linha de trabalho', () => {
     const lines = card({ isWorking: true, frame: 1 })
-    expect(left(lines[0])).toBe('✢ Fable 5.2 · high')
+    expect(left(lines[0])).toBe('✦ Fable 5.2 · high')
     expect(lines.length).toBe(2)
     expect(text(lines[1] as Line)).toBe('✶✻······ 1m12s · 14 tools · Bash')
   })
@@ -194,6 +219,16 @@ describe('linhas do card', () => {
     const l = agentLine(agent(), NOW, 0, 0, 64)
     expect(text(l)).toBe('· Explore ✻····  buscar rotas HLS12s · 4 tools · Grep')
     expect(lineWidth(l) <= 64).toBe(true)
+  })
+
+  test('a faísca de um agente é a da classe do modelo dele', () => {
+    const spark = (model: string | null, frame: number) => text(agentLine(agent({ model }), NOW, frame, 0, 64)).split(' ')[0]
+    expect(spark('claude-haiku-5-5', 2)).toBe('✣')
+    expect(spark('claude-opus-5-5', 4)).toBe('❋')
+    expect(spark('claude-fable-5-2', 3)).toBe('❂')
+    expect(spark(null, 4)).toBe('✻') // sem modelo lido, a de sempre
+    const still = effectsOf({ ...DEFAULT_SETTINGS, motion: 'parada' })
+    expect(left(agentLine(agent({ model: 'claude-opus-5-5' }), NOW, 5, 0, 80, still)).startsWith('❋ ')).toBe(true) // parada: o glifo da classe, imóvel
   })
 
   test('um agente terminado mostra ✓, duração e tokens; um falho, ✗', () => {
@@ -325,7 +360,7 @@ describe('ajustes', () => {
     const still = { isWorking: true, settings: set({ motion: 'parada' }) }
     for (const frame of [0, 3, 7]) {
       const lines = card({ ...still, frame })
-      expect(left(lines[0])).toBe('✻ Fable 5.2 · high')
+      expect(left(lines[0])).toBe('❂ Fable 5.2 · high')
       expect(text(lines[1] as Line)).toBe('✻ 1m12s · 14 tools · Bash')
     }
     const fx = effectsOf(set({ motion: 'parada' }))

@@ -1,3 +1,4 @@
+import { EYE } from './pixels'
 import type { Bitmap } from './pixels'
 
 // Os desenhos do palco, em subpixels (meia célula de largura, meia linha de altura).
@@ -59,19 +60,26 @@ export const MINI: Art = {
 
 const light = (row: string, columns: readonly number[]) => [...row].map((ch, i) => (columns.includes(i) ? '#' : ch)).join('')
 
+// Os olhos acesos: os vazios dentro da cabeça viram pontos de luz.
+const glare = (art: Art, row: string) =>
+  [...row].map((ch, i) => (ch !== '#' && i >= art.headFrom && i < art.headFrom + art.headWidth ? EYE : ch)).join('')
+
 export type Stance = {
   eyes: Eyes
   /** Braços para cima: carregando, comemorando, chamando. */
   isArmsUp: boolean
   /** Qual dos dois passos das patas. */
   step: 0 | 1
-  /** Sentado: sem patas, o corpo no chão. */
+  /** Sentado: sem patas, o corpo no chão. Quem voa também vai sem patas. */
   isSitting: boolean
+  /** Olhos acesos: os dois vazios dos olhos viram pontos de luz (`EYE`), para pintar de outra cor. */
+  hasLitEyes?: boolean
 }
 
 /** Puro: o desenho de um bicho numa postura, de cima para baixo. Sentado tem uma linha a menos. */
-export const drawing = (art: Art, { eyes, isArmsUp, step, isSitting }: Stance): Bitmap => {
+export const drawing = (art: Art, { eyes, isArmsUp, step, isSitting, hasLitEyes = false }: Stance): Bitmap => {
   const hands = isArmsUp ? art.hands : []
-  const upper = [light(art.top, hands), light(art.eyes[eyes], hands), art.arms, ...(art.body ? [art.body] : [])]
+  const face = hasLitEyes ? glare(art, art.eyes[eyes]) : art.eyes[eyes]
+  const upper = [light(art.top, hands), light(face, hands), art.arms, ...(art.body ? [art.body] : [])]
   return isSitting ? upper : [...upper, art.legs[step]]
 }

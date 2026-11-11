@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
 import { LINGER_MS, isExpired, reconcileRows, upsert } from './agents'
-import { DEMO_FRAMES, applyDemo } from './demo'
+import { DEMO_CAST, DEMO_FRAMES, applyDemo } from './demo'
 import { BURST_FRAMES, ruleParts } from './effects'
 import { clean, prettyModel, shortTool } from './format'
 import { localeLanguage, stringsOf } from './i18n'
@@ -11,6 +11,8 @@ import { BUTTONS_WIDTH, EFFORTS, cardLines, fromUsage, hudParts } from './lines'
 import { kindOf } from './palette'
 import { TAIL_GAP, lineWidth } from './parts'
 import type { Line, Part, Switch } from './parts'
+import { TIER_NAMES, energyOf, lookOf, powerOf } from './power'
+import type { Power } from './power'
 import { SCENE_ROWS, sceneRows } from './scene'
 import { SettingsPanel } from './settings-panel'
 import { EMPTY_SIM, MAIN, begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, settle, step, syncHelpers, think } from './sim'
@@ -71,6 +73,8 @@ let fx: Effects = FULL_EFFECTS // os efeitos em vigor, lidos dos ajustes
 let strings: Strings = stringsOf(DEFAULT_SETTINGS.language) // os textos no idioma em vigor, para o que fala fora do desenho
 let sim: Sim = EMPTY_SIM // a cena do palco: anda a cada quadro, recomeça a cada sessão
 let demoFrame = -1 // o quadro da demonstração em curso; -1 quando não há
+let demoLook: Power | null = null // o poder que a demonstração em curso mostra no mascote, quando foi pedido outro
+let isLightTheme = false // o tema do Claude Code é claro: a aura do palco esmaece para branco
 let isTurnOn = false // um turno principal está em curso, pelos eventos de início e de fim dele
 let quietSince: number | null = null // desde quando a faixa diz "parada" com um turno em curso
 const reported = new Set<string>()
@@ -100,6 +104,27 @@ const onStage = <T,>($: EngineInterface, run: () => T, fallback: T): T => {
     return fallback
   }
 }
+
+// O tema é claro quando o nome dele diz ("light", "light-daltonized"); um tema de nome desconhecido vale como escuro.
+const isLightName = (value: unknown) => /light/i.test(String(value ?? ''))
+
+// O tema em vigor, lido da linha dele no /config.
+async function readTheme($: EngineInterface) {
+  try {
+    isLightTheme = isLightName((await $.config.list()).find(row => row.key === 'theme')?.value)
+  } catch (err) {
+    report($, 'theme', err)
+  }
+}
+
+// O poder de cada um em cena: o do loop principal pelo modelo e effort do cabeçalho (ou o que a
+// demonstração pediu), o de cada agente pelos dele, e o do elenco da demonstração.
+const powersOf = (f: Figures, list: readonly Agent[]): Map<string, Power> =>
+  new Map<string, Power>([
+    ...(demoFrame >= 0 ? DEMO_CAST : []),
+    ...list.map((a): [string, Power] => [a.id, powerOf(a.model, a.effort)]),
+    [MAIN, (demoFrame >= 0 && demoLook) || powerOf(f.model, f.effort)],
+  ])
 
 // Há o que animar: o turno, um agente rodando, o estouro de faíscas de quem acabou de terminar,
 // a demonstração, ou a cena do palco ainda se mexendo (um tijolo na esteira, o confete caindo).
@@ -257,18 +282,25 @@ async function applySettings($: EngineInterface, change: (s: Settings) => Settin
   }
 }
 
-// A demonstração: um turno de mentira no palco. Só com a sessão parada e o palco ligado.
-async function startDemo($: EngineInterface): Promise<string> {
+// A demonstração: um turno de mentira no palco. Só com a sessão parada e o palco ligado. `look` pede
+// outra aparência para o mascote ("opus max", "haiku"): sem ele, vale o modelo e o effort da sessão.
+async function startDemo($: EngineInterface, look = ''): Promise<string> {
+  const words = look.trim()
+  // A única espera antes de marcar a cena: as conferências vêm depois dela, para valerem no instante em que a cena entra.
+  const f = await read($, figures)
   if (isBandWorking || isTurnOn) return strings.demoBusy
   if (!fx.hasStage) return strings.demoOff
   if (lastBandColumns < MIN_COLUMNS) return strings.demoNarrow(MIN_COLUMNS)
-  // A cena é marcada antes de qualquer espera: um turno de verdade que comece no meio encontra a demonstração e a encerra.
+  const asked = words ? lookOf(words, powerOf(f.model, f.effort)) : null
+  if (words && !asked) return strings.demoUnknown(clean(words, 40))
+  // A cena é marcada antes de qualquer outra espera: um turno de verdade que comece no meio encontra a demonstração e a encerra.
   sim = EMPTY_SIM
   demoFrame = 0
+  demoLook = asked
   await update($, isHidden, () => false)
   await update($, picker, () => null)
   if (demoFrame >= 0) ensureTicker($)
-  return strings.demo
+  return asked ? strings.demoAs(TIER_NAMES[asked.tier], EFFORTS[asked.level] ?? '') : strings.demo
 }
 
 export const register: Register = on => {
@@ -284,6 +316,7 @@ export const register: Register = on => {
       const loaded = await update($, settings, () => initial)
       fx = effectsOf(loaded)
       await speak($, loaded.language) // registra o comando, já no idioma dos ajustes
+      await readTheme($)
       const model = await $.session.model()
       const usage = fromUsage(await $.session.usage())
       await update($, figures, f => ({ ...f, ...usage, model: model || f.model }))
@@ -304,7 +337,8 @@ export const register: Register = on => {
       await update($, picker, () => 'settings')
       return { text: strings.opened }
     }
-    if (/^\s*demo\w*\s*$/i.test(e.args)) return { text: await startDemo($) }
+    const demo = /^\s*demo\S*(\s.*)?$/i.exec(e.args) // "demo", "demonstração", "demonstration"; o resto é a aparência pedida
+    if (demo) return { text: await startDemo($, demo[1]) }
     const hidden = await update($, isHidden, h => !h)
     if (hidden) return { text: strings.hidden }
     return { text: lastBandColumns < MIN_COLUMNS ? strings.tooNarrow(MIN_COLUMNS) : strings.shown }
@@ -342,11 +376,12 @@ export const register: Register = on => {
   // O modelo e o effort de cada pedido: do loop principal para o cabeçalho, de um agente para a linha dele.
   on('turn.step', async function* ($, e, next) {
     try {
+      const effort = e.effort === undefined ? null : String(e.effort)
       if (e.agentId) {
         const row = (await read($, agents)).find(a => a.id === e.agentId)
-        if (row?.model !== e.model) await touchAgent($, e.agentId, (a, now) => ({ ...a, model: e.model, seenAt: now }))
+        if (row?.model !== e.model || (row.effort ?? null) !== effort)
+          await touchAgent($, e.agentId, (a, now) => ({ ...a, model: e.model, effort, seenAt: now }))
       } else {
-        const effort = e.effort === undefined ? null : String(e.effort)
         const f = await read($, figures)
         if (f.model !== e.model || f.effort !== effort) await update($, figures, g => ({ ...g, model: e.model, effort }))
       }
@@ -429,6 +464,13 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // O tema trocado no /config: a aura do palco passa a esmaecer para o fundo novo.
+  on('config.set', { key: 'theme' }, async (_, e, next) => {
+    const result = await next(e)
+    if (result.deny === undefined) isLightTheme = isLightName(result.value)
+    return result
+  })
+
   // A faixa acima do prompt vira uma barra na largura toda.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     lastBandColumns = e.props.bodyColumns
@@ -463,7 +505,13 @@ export const register: Register = on => {
     // O palco: a cena do quadro, com o placar do turno no canto. Numa faixa baixa demais ele não entra.
     const geo = shown.hasStage && e.props.maxRows >= STAGE_MIN_ROWS ? geometry(width) : null
     const hud: Part[] = demoFrame >= 0 ? [{ text: t.demoHud, dim: true }] : e.props.isWorking && m.startedAt > 0 ? hudParts(m, now, t) : []
-    const stage = onStage($, () => (geo && hasScene(sim) ? sceneRows({ sim, geo, hud }).map(parts => ({ parts })) : []), [])
+    // O poder de cada um: a aparência dos bichos no palco. A energia do pulso da régua é a do effort
+    // (ou a que a demonstração pediu); sem effort lido, o pulso é o de sempre.
+    const powers = powersOf(f, list)
+    const energy = demoFrame >= 0 && demoLook ? demoLook.level : energyOf(f.effort)
+    const stage = onStage(
+      $, () => (geo && hasScene(sim) ? sceneRows({ sim, geo, hud, powers, isLight: isLightTheme }).map(parts => ({ parts })) : []), [],
+    )
     // Com o palco em cena numa faixa baixa, é a lista de agentes que encolhe (o resto vira "+N agentes").
     const chrome = (s.showRule ? 1 : 0) + 1
     const agentRows = stage.length ? Math.max(1, e.props.maxRows - chrome - stage.length - 1) : undefined
@@ -512,7 +560,7 @@ export const register: Register = on => {
     return withBelow(
       <Box paddingRight={BAR_RIGHT_PAD}>
         <Box width={width} flexDirection="column">
-          {s.showRule ? <Text key="rule" wrap="truncate-end">{ruleParts(width, fr, isActive && shown.isFull).map(run)}</Text> : null}
+          {s.showRule ? <Text key="rule" wrap="truncate-end">{ruleParts(width, fr, isActive && shown.isFull, energy).map(run)}</Text> : null}
           <Box key="head">
             {headParts}
             <Text wrap="truncate-end">

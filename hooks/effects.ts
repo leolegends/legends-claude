@@ -5,8 +5,8 @@ import type { Part } from './parts'
 // Todas são função do quadro: o mesmo quadro desenha sempre a mesma coisa.
 
 const TRAIL_WIDTH = 8 // o rastro de faíscas da linha de trabalho
-const WAVE_SPEED = 4 // colunas que o pulso da régua anda por quadro
-const WAVE_WIDTH = 4 // colunas acesas de cada lado da frente do pulso
+const WAVE_BASE = 2 // o pulso da régua no effort mais leve: colunas por quadro, e colunas acesas de cada lado da frente
+const WAVE_ENERGY = 2 // a energia de quem não diz nenhuma: a de `high`, o pulso de sempre
 const WAVE_REST = 8 // colunas "fora da régua" que o pulso percorre antes de recomeçar: a pausa
 const REVEAL_LEAD = 1 // quadros de faíscas antes de a primeira letra assentar
 const REVEAL_JITTER = 0.35 // fração das letras que assenta um quadro depois da vizinha
@@ -45,15 +45,17 @@ export const seedOf = (id: string) => [...id].reduce((n, ch) => (n * 31 + (ch.co
 
 // A régua de cima. Parada, é uma linha fina; com trabalho em curso, um pulso nasce no centro e corre
 // para as duas pontas: grosso na frente, aceso logo atrás, e a régua volta a apagar depois que ele passa.
-export const ruleParts = (width: number, fr: number, isActive: boolean): Part[] => {
+// `energy` é o degrau do effort (0 `low` a 4 `max`): quanto mais alto, mais largo e mais rápido o pulso.
+export const ruleParts = (width: number, fr: number, isActive: boolean, energy = WAVE_ENERGY): Part[] => {
   if (!isActive || width <= 0) return [{ text: '─'.repeat(Math.max(0, width)), color: 'subtle' }]
   const mid = (width - 1) / 2
-  const front = (fr * WAVE_SPEED) % (mid + WAVE_WIDTH + WAVE_REST)
+  const reach = WAVE_BASE + Math.max(0, energy) // as colunas acesas de cada lado, e as que o pulso anda por quadro
+  const front = (fr * reach) % (mid + reach + WAVE_REST)
   return merge(
     Array.from({ length: width }, (_, i): Part => {
       const delta = Math.abs(Math.abs(i - mid) - front)
       if (delta < 1) return { text: '━', color: 'claude', bold: true }
-      return delta <= WAVE_WIDTH ? { text: '─', color: 'claude' } : { text: '─', color: 'subtle' }
+      return delta <= reach ? { text: '─', color: 'claude' } : { text: '─', color: 'subtle' }
     }),
   )
 }

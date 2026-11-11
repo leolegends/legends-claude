@@ -1,15 +1,18 @@
 // Gera os quadros do GIF do README: a barra inteira (régua, cabeçalho, palco, linhas de agente) ao longo
 // de um turno de mentira, com as mesmas funções que desenham a barra de verdade. Sai JSON no stdout.
 //
-//   bun run scripts/demo-frames.ts [colunas] [en|pt] | python3 scripts/demo-gif.py docs/demo.gif
+//   bun run scripts/demo-frames.ts [colunas] [en|pt] [modelo] [effort] | python3 scripts/demo-gif.py docs/demo.gif
 //
 // O idioma é o dos textos da barra no GIF: `en` (o padrão, para o README.md) ou `pt` (para o README.pt-BR.md).
+// O modelo (`fable`, `opus`, `sonnet`, `haiku`; o padrão é `fable`) e o effort (`low` a `max`; o padrão é
+// `high`) são os do turno de mentira: deles sai a aparência do mascote.
 //
 // Não faz parte do mod: roda fora do Claude Code, só para documentação.
 import { ruleParts } from '../hooks/effects'
 import { stringsOf } from '../hooks/i18n'
 import { cardLines, hudParts } from '../hooks/lines'
 import { kindOf } from '../hooks/palette'
+import { levelOf, powerOf } from '../hooks/power'
 import { TAIL_GAP, lineWidth } from '../hooks/parts'
 import type { Line, Part } from '../hooks/parts'
 import { sceneRows } from '../hooks/scene'
@@ -21,6 +24,9 @@ import type { StatusAgent } from '../types'
 const WIDTH = Number(process.argv[2] ?? 100)
 const LANGUAGE = process.argv[3] === 'pt' ? 'pt' : 'en'
 const SETTINGS = { ...DEFAULT_SETTINGS, language: LANGUAGE } as const
+const MODELS: Record<string, string> = { fable: 'claude-fable-5-2', opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5' }
+const MODEL = MODELS[process.argv[4] ?? 'fable'] ?? 'claude-fable-5-2'
+const EFFORT = process.argv[5] ?? 'high'
 const STRINGS = stringsOf(LANGUAGE)
 const FRAME_MS = 125
 const T0 = 1_000_000
@@ -52,8 +58,8 @@ const THINKING: [number, boolean][] = [[0, true], [18, false], [20, true], [52, 
 // Os agentes: quando nascem e quando terminam.
 const TASKS = LANGUAGE === 'pt' ? ['mapear as rotas de vídeo', 'revisar o diff do palco'] : ['map the video routes', 'review the stage diff']
 const AGENTS = [
-  { id: 'a1', type: 'Explore', description: TASKS[0] ?? '', from: 84, to: 146, tokens: 18_400 },
-  { id: 'b2', type: 'code-reviewer', description: TASKS[1] ?? '', from: 98, to: 156, tokens: 9_700 },
+  { id: 'a1', type: 'Explore', description: TASKS[0] ?? '', model: 'claude-haiku-5-5', effort: 'max', from: 84, to: 146, tokens: 18_400 },
+  { id: 'b2', type: 'code-reviewer', description: TASKS[1] ?? '', model: 'claude-sonnet-5-5', effort: 'high', from: 98, to: 156, tokens: 9_700 },
 ]
 const LINGER_FRAMES = 64 // quanto uma linha de agente terminado fica na barra
 
@@ -72,7 +78,7 @@ const lastOf = (who: string, frame: number) => BATCHES.filter(b => b.who === who
 
 const agentsAt = (frame: number): StatusAgent[] =>
   AGENTS.filter(a => frame >= a.from && frame <= a.to + LINGER_FRAMES).map(a => ({
-    id: a.id, type: a.type, description: a.description, model: null,
+    id: a.id, type: a.type, description: a.description, model: a.model, effort: a.effort,
     state: frame >= a.to ? 'done' : 'running',
     startedAt: T0 + a.from * FRAME_MS, seenAt: T0 + frame * FRAME_MS,
     endedAt: frame >= a.to ? T0 + a.to * FRAME_MS : undefined,
@@ -93,13 +99,15 @@ const barAt = (sim: Sim, frame: number): Part[][] => {
   const main = { startedAt: T0, tools: countOf(MAIN, frame), lastTool: lastOf(MAIN, frame), costAtStart: 1.5 }
   const costSteps = Math.floor(frame / 14) // o custo cresce de tempos em tempos, e acende quando cresce
   const figures = {
-    model: 'claude-fable-5-2', effort: 'high', costUsd: 1.5 + costSteps * 0.03, costMovedAt: T0 + costSteps * 14 * FRAME_MS,
+    model: MODEL, effort: EFFORT, costUsd: 1.5 + costSteps * 0.03, costMovedAt: T0 + costSteps * 14 * FRAME_MS,
     fiveHour: { pct: 42, resetsAt: new Date(now + 7_800_000).toISOString() }, week: { pct: 18 },
   }
-  const stage = hasScene(sim) ? sceneRows({ sim, geo, hud: isWorking ? hudParts(main, now, STRINGS) : [] }).map(parts => ({ parts })) : []
+  // o poder de cada um em cena, como a barra de verdade o tira do modelo e do effort
+  const powers = new Map([[MAIN, powerOf(MODEL, EFFORT)], ...agents.map(a => [a.id, powerOf(a.model, a.effort)] as const)])
+  const stage = hasScene(sim) ? sceneRows({ sim, geo, hud: isWorking ? hudParts(main, now, STRINGS) : [], powers }).map(parts => ({ parts })) : []
   const [head = { parts: [] }, ...rest] = cardLines({ figures, main, agents, now, frame, isWorking, max: WIDTH, settings: SETTINGS, stage })
   return [
-    ruleParts(WIDTH, frame, isWorking || agents.some(a => a.state === 'running') || isAnimating(sim)),
+    ruleParts(WIDTH, frame, isWorking || agents.some(a => a.state === 'running') || isAnimating(sim), levelOf(EFFORT)),
     [...laidOut(head, WIDTH - BUTTONS), { text: ' ⚙ ', dim: true }, { text: ' ▾ ', dim: true }],
     ...rest.map(line => laidOut(line, WIDTH)),
   ]

@@ -1,3 +1,5 @@
+import { bodyShade, canFly, eyesOf, fireworksOf, glowOf, jetsOf, sparksOf, streaksOf } from './aura'
+import type { Figure } from './aura'
 import { SPINNER, noise } from './effects'
 import { cols } from './format'
 import { KIND_PAINT, tintOf } from './palette'
@@ -5,8 +7,10 @@ import type { Kind } from './palette'
 import { partsWidth } from './parts'
 import type { Part } from './parts'
 import { BRICK_CELLS, brick, dotKey, dotsLayer, rasterRow, spriteLayer } from './pixels'
-import type { Layer, Paint } from './pixels'
-import { FLOOR_Y, LOAD_LAYERS, MAIN, PILE_COLS, PILE_ROWS, SPAWN, WALL_ROWS, wallFront } from './sim'
+import type { Glow, Layer, Paint } from './pixels'
+import { PLAIN, auraOf, sparkAt } from './power'
+import type { Power } from './power'
+import { FLOOR_Y, LOAD_LAYERS, MAIN, PILE_COLS, PILE_ROWS, SPAWN, WALL_ROWS, partyAge, wallFront } from './sim'
 import type { Geo, Sim, Worker } from './sim'
 import { CLAWD, MINI, drawing } from './sprites'
 import type { Eyes } from './sprites'
@@ -28,6 +32,7 @@ const STAR_DENSITY = 0.045 // a fração das células do ar que tem uma estrela
 const TWINKLE = 40 // o ciclo de uma estrela, em quadros
 const STAR_FLASH = 3 // quadros do ciclo em que ela brilha
 const STAR_DARK = 7 // quadros do ciclo em que ela some
+const HELPER_AURA = 0.6 // a aura de um ajudante é a fração da do mascote com o mesmo poder: ele é menor
 
 type Dot = readonly [number | undefined, Paint]
 /** Um texto posto numa linha, a partir de uma célula. */
@@ -40,14 +45,28 @@ const ROLLER: Part = { text: '╪', color: 'subtle' }
 const seedOf = (id: string) => [...id].reduce((n, ch) => (n * 31 + (ch.codePointAt(0) ?? 0)) >>> 0, 7) % 997
 const mod = (n: number, by: number) => ((n % by) + by) % by
 
-// Um bicho num quadro: a camada do desenho dele, os tijolos na cabeça e o balão.
-const actorOf = (w: Worker, sim: Sim): { layer: Layer | null; tiles: Dot[]; labels: Label[] } => {
+/** Um bicho num quadro: o desenho dele, o que leva na cabeça, o balão, e o que o poder dele acrescenta. */
+type Actor = {
+  layer: Layer | null
+  tiles: Dot[]
+  labels: Label[]
+  /** A aura: o clarão atrás dele. */
+  glow: Glow | null
+  /** O que a aura solta na frente da cena: fagulhas, raios, os riscos de quem corre, os jatos de quem voa. */
+  fore: Dot[]
+}
+
+const NO_ACTOR: Actor = { layer: null, tiles: [], labels: [], glow: null, fore: [] }
+
+// Um bicho num quadro: a camada do desenho dele, os tijolos na cabeça, o balão e o poder. Sem poder
+// (`undefined`: quem desenha não disse nenhum), é o bicho de sempre, com a faísca do próprio Claude Code.
+const actorOf = (w: Worker, sim: Sim, power: Power | undefined, isLight: boolean): Actor => {
   const isMain = w.id === MAIN
   const art = isMain ? CLAWD : MINI
   const tint = isMain ? 'claude' : tintOf(w.id)
   const x = Math.round(w.x)
   const isUnseen = w.act === 'poof' || (!isMain && w.act === 'enter' && w.t < SPAWN)
-  if (isUnseen) return { layer: null, tiles: [], labels: [] }
+  if (isUnseen) return NO_ACTOR
 
   const isWalking = w.shout === 0 && (w.act === 'fetch' || w.act === 'haul' || w.act === 'home' || (isMain && w.act === 'enter'))
   const isCarrying = w.load.length > 0
@@ -59,15 +78,32 @@ const actorOf = (w: Worker, sim: Sim): { layer: Layer | null; tiles: Dot[]; labe
     w.act === 'sleep' || w.act === 'fail' || phase % BLINK_EVERY === 0 ? 'closed'
     : isResting && w.thinking > 0 ? (LOOK[Math.floor(phase / LOOK_HOLD) % LOOK.length] ?? 'open')
     : 'open'
+  // Quem falhou apaga e quem dorme descansa: nos dois casos, sem poder nenhum.
+  const p = !power || w.act === 'fail' || w.act === 'sleep' ? PLAIN : power
+  const isFlying = isWalking && canFly(p) // em vez de andar, voa: sem patas, um jato por baixo
   const lift =
     w.act === 'cheer' ? (JUMP[w.t % JUMP.length] ?? 0)
     : w.act === 'enter' && !isMain ? (FALL[w.t - SPAWN] ?? 0)
+    : isFlying ? -1 // o corpo fica uma sublinha acima do chão
     : isWalking && !isCarrying ? -(sim.tick % 2) // de mãos vazias vai aos pulinhos
     : 0
-  const bitmap = drawing(art, { eyes, isArmsUp, step: isWalking && sim.tick % 2 === 1 ? 1 : 0, isSitting: w.act === 'sleep' })
+  const bitmap = drawing(art, {
+    eyes, isArmsUp, step: isWalking && sim.tick % 2 === 1 ? 1 : 0, isSitting: w.act === 'sleep' || isFlying, hasLitEyes: eyesOf(p) !== null,
+  })
   // A última linha do desenho (as patas, ou o corpo de quem está sentado) fica no chão.
   const top = FLOOR_Y + 1 - bitmap.length + lift
-  const layer = spriteLayer(bitmap, x, top, w.act === 'fail' ? `~${tint}` : tint)
+  const strength = isMain ? auraOf(p) : Math.ceil(auraOf(p) * HELPER_AURA)
+  const figure: Figure = { bitmap, left: x, top, floor: FLOOR_Y, tint, strength }
+  const mood = { tick: sim.tick, isLight }
+  const layer = spriteLayer(bitmap, x, top, w.act === 'fail' ? `~${tint}` : bodyShade(p, figure, mood))
+  // Quem corre com poder risca o ar atrás de si: indo buscar, à direita; levando, à esquerda.
+  const wake = w.shout > 0 ? 0 : w.act === 'haul' ? -1 : w.act === 'fetch' ? 1 : 0
+  const glow = glowOf(p, figure, mood)
+  const fore = [
+    ...sparksOf(p, figure, mood),
+    ...(wake === 0 ? [] : streaksOf(p, figure, mood, wake)),
+    ...(isFlying ? jetsOf(p, figure, mood) : []),
+  ]
 
   // Os tijolos na cabeça: lado a lado na camada de baixo, e os seguintes empilhados em cima.
   const headCell = Math.round((x + art.headFrom) / 2)
@@ -86,11 +122,11 @@ const actorOf = (w: Worker, sim: Sim): { layer: Layer | null; tiles: Dot[]; labe
     // quem dorme solta um z, e depois outro mais alto
     : w.act === 'sleep' ? [...label(1, above, { text: 'z', dim: true }), ...(Math.floor(sim.tick / SNORE) % 2 ? label(0, above + 1, { text: 'Z', dim: true }) : [])]
     : !isResting || isCarrying ? []
-    // esperando uma ferramenta: o nome dela; pensando: a faísca do Claude pulsando
+    // esperando uma ferramenta: o nome dela; pensando: a faísca da classe dele pulsando
     : w.busy > 0 && w.tool ? label(0, Math.max(0, above - Math.floor((cols(w.tool) + 1) / 2)), { text: w.tool, dim: true }, { text: dots, color: 'claude' })
-    : w.thinking > 0 ? label(0, above, { text: SPINNER[sim.tick % SPINNER.length] ?? '✻', color: 'claude', bold: true })
+    : w.thinking > 0 ? label(0, above, { text: power ? sparkAt(power.tier, sim.tick) : (SPINNER[sim.tick % SPINNER.length] ?? '✻'), color: 'claude', bold: true })
     : []
-  return { layer, tiles, labels }
+  return { layer, tiles, labels, glow, fore }
 }
 
 // O mosaico que cabe em cena: quando passa do tamanho, as colunas mais antigas ficam de fora.
@@ -137,15 +173,41 @@ export type SceneInput = {
   geo: Geo
   /** O placar do canto de cima à direita: tempo do turno, ferramentas, a última delas. */
   hud: readonly Part[]
+  /** O poder de cada bicho em cena, pelo id dele; quem não está aqui é desenhado como sempre foi. */
+  powers?: ReadonlyMap<string, Power>
+  /** O tema é claro: a aura esmaece para branco, não para preto. */
+  isLight?: boolean
 }
 
 /** Puro: as quatro linhas do palco para um estado da simulação. */
-export const sceneRows = ({ sim, geo, hud }: SceneInput): Part[][] => {
-  const actors = sim.workers.map(w => actorOf(w, sim))
+export const sceneRows = ({ sim, geo, hud, powers, isLight = false }: SceneInput): Part[][] => {
+  // Fora de um turno (só os ajudantes ainda trabalham) o mascote descansa: segue quem é, sem a energia do effort.
+  const isResting = !sim.isOn && sim.finale === 0
+  const powerOf = (id: string): Power | undefined => {
+    const power = powers?.get(id)
+    return power && id === MAIN && isResting ? { ...power, level: 0 } : power
+  }
+  const actors = sim.workers.map(w => actorOf(w, sim, powerOf(w.id), isLight))
   const wall = visibleWall(sim.wall, geo)
   const waiting = sim.workers.reduce((n, w) => n + w.queue.length, 0) - PILE_COLS * PILE_ROWS
+  // Os fogos da festa do fim, em volta do mascote.
+  const party = partyAge(sim)
+  const host = sim.workers.find(w => w.id === MAIN)
+  const fireworks = party !== null && host ? fireworksOf(powerOf(MAIN) ?? PLAIN, party, Math.round(host.x) + CLAWD.width / 2) : []
+  // As auras: a de quem está na frente vale primeiro.
+  const glows = actors.flatMap(a => (a.glow ? [a.glow] : [])).reverse()
+  const glow: Glow | undefined = glows.length
+    ? (x, y) => {
+        for (const lit of glows) {
+          const paint = lit(x, y)
+          if (paint !== undefined) return paint
+        }
+        return undefined
+      }
+    : undefined
   const layers: Layer[] = [
     dotsLayer(sim.sparks.map(s => [dotKey(Math.round(s.x), Math.round(s.y)), s.paint] as const)),
+    dotsLayer([...fireworks, ...actors.flatMap(a => a.fore)]),
     dotsLayer(actors.flatMap(a => a.tiles)),
     ...actors.flatMap(a => (a.layer ? [a.layer] : [])).reverse(), // os ajudantes, menores, passam na frente do mascote
     dotsLayer(bricksOf(sim, geo, wall)),
@@ -164,7 +226,7 @@ export const sceneRows = ({ sim, geo, hud }: SceneInput): Part[][] => {
   }
   return Array.from({ length: SCENE_ROWS }, (_, row) =>
     rasterRow({
-      layers, row, width: geo.width,
+      layers, row, width: geo.width, glow,
       over: cell => (cell < geo.width ? texts.get(row * TEXT_STRIDE + cell) : undefined),
       under: cell => (row === SCENE_ROWS - 1 ? ground(cell) : starAt(cell, row, sim.tick)),
     }),

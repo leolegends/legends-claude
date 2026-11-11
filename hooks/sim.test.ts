@@ -4,7 +4,7 @@ import { DEMO_FRAMES, applyDemo } from './demo'
 import { kindOf, tintOf } from './palette'
 import {
   DEMO_PREFIX, EMPTY_SIM, FLOOR_Y, MAIN, WALL_ROWS,
-  begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, retire, settle, step, summon, syncHelpers, think, wallFront,
+  begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, partyAge, retire, settle, step, summon, syncHelpers, think, wallFront,
 } from './sim'
 import type { Geo, Sim } from './sim'
 
@@ -275,6 +275,17 @@ describe('o fim do turno', () => {
     expect(quick.wall).toBe('r') // o que ele tinha ainda assim é entregue
     expect(finish(AT_HOME).sparks).toEqual([]) // um turno sem ferramenta nenhuma
     expect(begin(ended).work).toBe(0) // a conta recomeça a cada turno
+  })
+
+  test('a festa conta os seus quadros: só num turno que trabalhou, e só enquanto dura', () => {
+    expect(partyAge(busy)).toBeNull() // o turno ainda roda
+    expect(partyAge(ended)).toBe(0)
+    expect(partyAge(step(ended, GEO))).toBe(1)
+    expect(partyAge(run(ended, 5))).toBe(5)
+    expect(partyAge(finish(tools(AT_HOME, MAIN, 'Read')))).toBeNull() // um turno curto só dá um pulinho
+    expect(partyAge(until(ended, s => s.finale === 0).sim)).toBeNull()
+    expect(partyAge(begin(ended))).toBeNull() // um turno novo encerra a festa
+    expect(partyAge(halt(busy))).toBeNull()
   })
 
   test('um turno interrompido não tem festa: entrega o que havia e a cena se recolhe', () => {

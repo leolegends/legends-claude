@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { tintOf } from './palette'
+import { KIND_PAINT, tintOf } from './palette'
 
 const SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
 const band = (surface: (typeof SURFACES)[number], isWorking = false, bodyColumns = 120, maxRows = 20) =>
@@ -17,6 +17,7 @@ const startSession = async (
   $: { session: { start: (e: never) => Promise<unknown> } }, on: On, listed: () => Listed[] = () => [],
   model: () => string = () => 'claude-fable-5-2', store: Record<string, unknown> = {},
   env: Record<string, string> = { LANG: 'pt_BR.UTF-8' }, // os testes de sempre rodam num sistema em português
+  theme = 'dark',
 ) => {
   mock.env(on, env)
   // o store do plugin, em memória: o que o mod salva fica em `saved`, para o teste conferir
@@ -29,6 +30,7 @@ const startSession = async (
   on('session.model', () => ({ value: model() }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000 }, rateLimits: [], cost: { usd: 1.5 } } }) as never)
   on('agent.list', () => ({ value: listed() }) as never)
+  on('config.list', () => ({ value: [{ key: 'verbose', value: false }, { key: 'theme', value: theme }] }) as never)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.measure', ($, e) => ({ changed: e.changed }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
@@ -128,10 +130,10 @@ test('a animação anda enquanto o turno roda e para quando ele acaba', async ($
   await startSession($, on)
   const ui = await $.ui.mount(band('terminal', true))
   await $.turn.start({ text: 'oi', turnId: 't1' })
-  expect(await ui.find({ type: 'Text', text: /^· $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^✧ $/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^0s$/ })).toBeDefined() // o placar do palco faz as vezes da linha de trabalho
   await clock.advance(125)
-  expect(await ui.find({ type: 'Text', text: /^✢ $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^✦ $/ })).toBeDefined()
   await clock.advance(1_000)
   expect(await ui.find({ type: 'Text', text: /^1s$/ })).toBeDefined()
   await ui.unmount()
@@ -142,7 +144,7 @@ test('a animação anda enquanto o turno roda e para quando ele acaba', async ($
   await clock.advance(5_000)
   const drawn = async () => (await idle.findAll({ type: 'Text' })).map(t => t.text).join('|')
   const before = await drawn()
-  expect(before).toContain('✻ ') // a faísca apagada do cabeçalho
+  expect(before).toContain('❂ ') // a faísca apagada do cabeçalho: a de Fable
   await clock.advance(5_000)
   expect(await drawn()).toBe(before)
   await idle.unmount()
@@ -335,10 +337,10 @@ test('animação parada: nada pulsa, mas o tempo do turno continua contando', as
   await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { motion: 'parada' } })
   const ui = await $.ui.mount(band('terminal', true))
   await $.turn.start({ text: 'oi', turnId: 't1' })
-  expect(await ui.find({ type: 'Text', text: /^✻ $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^❂ $/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^✻$/ })).toBeDefined() // a linha de trabalho sem cometa
   await clock.advance(450)
-  expect(await ui.find({ type: 'Text', text: /^✻ $/ })).toBeDefined() // mesmo glifo, não girou
+  expect(await ui.find({ type: 'Text', text: /^❂ $/ })).toBeDefined() // mesmo glifo, não girou
   await clock.advance(2_000)
   expect(await ui.find({ type: 'Text', text: /^ 2s$/ })).toBeDefined()
   await ui.unmount()
@@ -352,9 +354,9 @@ test('a velocidade troca a cadência da animação em curso', async ($, on) => {
   await ui.press({ key: 'settings' })
   await ui.press({ key: 'set-speed-rapida' })
   await ui.press({ key: 'set-close' })
-  expect(await ui.find({ type: 'Text', text: /^· $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^✧ $/ })).toBeDefined()
   await clock.advance(90) // um quadro rápido; no normal seriam 150
-  expect(await ui.find({ type: 'Text', text: /^✢ $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^✦ $/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -385,7 +387,7 @@ test('durante o turno o mascote entra em cena, e cada ferramenta vira um tijolo 
 
     await $.turn.start({ text: 'oi', turnId: 't1' })
     await clock.advance(2_500) // o mascote entra e chega ao meio da pista
-    expect(await paintOf(ui, /█████/)).toContain('claude') // o corpo dele, na cor de destaque
+    expect(await paintOf(ui, /█/)).toContain('claude') // o corpo dele, na cor de destaque (a faixa de brilho pode estar passando por um pedaço)
 
     await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
     await clock.settle()
@@ -409,15 +411,14 @@ test('um agente vira um ajudante em cena, na cor da faísca dele na lista', asyn
   const ui = await $.ui.mount(band('terminal', true))
   await $.turn.start({ text: 'oi', turnId: 't1' })
   await clock.advance(2_500)
-  const before = (await ui.findAll({ type: 'Text', text: BLOCKS })).length
+  const tint = tintOf('a1') // o agente que o engine de teste devolve
+  expect(await paintOf(ui, BLOCKS)).not.toContain(tint) // ainda não há bicho dessa cor em cena
   await $.agent.spawn(SPAWN)
   await clock.advance(250)
   expect(await ui.find({ type: 'Text', text: /^!$/ })).toBeDefined() // o mascote grita por ele
   await clock.advance(2_000)
-  const tint = tintOf('a1') // o agente que o engine de teste devolve
-  expect(await paintOf(ui, /^[·✢✳✶✻✽]$/)).toContain(tint) // a faísca do agente na lista tem a cor dele
-  expect(await paintOf(ui, BLOCKS)).toContain(tint) // e há um bicho dessa cor no palco
-  expect((await ui.findAll({ type: 'Text', text: BLOCKS })).length > before).toBe(true)
+  expect(await paintOf(ui, /^[·✢✣✤]$/)).toContain(tint) // a faísca do agente na lista (a de Haiku, o modelo dele) tem a cor dele
+  expect(await paintOf(ui, BLOCKS)).toContain(tint) // e agora há um bicho dessa cor no palco
   await ui.unmount()
 })
 
@@ -570,7 +571,7 @@ test('religar o palco no meio de um turno põe a cena no ar na hora', async ($, 
   await ui.press({ key: 'set-showStage' })
   await ui.press({ key: 'set-close' })
   await clock.advance(2_500)
-  expect(await paintOf(ui, /█████/)).toContain('claude')
+  expect(await paintOf(ui, /█/)).toContain('claude')
   await ui.unmount()
 })
 
@@ -617,7 +618,7 @@ const find = (ui: { find: (q: { type: string; text: RegExp }) => Promise<unknown
 test('o idioma é a primeira linha da aba de ajustes; trocar muda a barra inteira na hora e fica salvo', async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   const { saved, registered } = await startSession($, on)
-  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|demo]' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|demo [modelo] [effort]]' })
   const ui = await $.ui.mount(band('terminal'))
   await ui.press({ key: 'settings' })
   for (const text of [/^ajustes$/, /^● Português$/, /^English$/, /^Azul$/, /^● completa$/, /^☑ palco$/, / sessão$/]) expect(await find(ui, text)).toBeDefined()
@@ -628,13 +629,13 @@ test('o idioma é a primeira linha da aba de ajustes; trocar muda a barra inteir
   for (const text of [/^ajustes$/, /^Azul$/, /^☑ palco$/, / sessão$/]) expect(await find(ui, text)).toBeUndefined()
   expect(saved.at(-1)).toMatchObject({ language: 'en' })
   // o comando foi registrado de novo, com a descrição e a dica em inglês
-  expect(registered.at(-1)).toMatchObject({ argumentHint: '[settings|demo]' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[settings|demo [model] [effort]]' })
   expect(registered.at(-1)?.description).toMatch(/^Shows or hides the status bar/)
 
   await ui.press({ key: 'set-language-pt' })
   expect(await find(ui, /^ajustes$/)).toBeDefined()
   expect(saved.at(-1)).toMatchObject({ language: 'pt' })
-  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|demo]' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|demo [modelo] [effort]]' })
   await ui.unmount()
 })
 
@@ -696,3 +697,102 @@ for (const { name, store, env, title } of FIRST_LANGUAGE) {
     await ui.unmount()
   })
 }
+
+// As tintas que só o poder põe no palco: os hex que não são de tijolo (a aura, o brilho do corpo, os olhos, as fagulhas).
+const BRICK_PAINTS = new Set<unknown>(Object.values(KIND_PAINT))
+const powerPaints = async (ui: { findAll: (q: { type: string; text: RegExp }) => Promise<{ props: Record<string, unknown> }[]> }) =>
+  (await ui.findAll({ type: 'Text', text: BLOCKS }))
+    .flatMap(t => [t.props.color, t.props.backgroundColor])
+    .filter((paint): paint is string => typeof paint === 'string' && paint.startsWith('#') && !BRICK_PAINTS.has(paint))
+const brightness = (hex: string) => [1, 3, 5].reduce((n, i) => n + parseInt(hex.slice(i, i + 2), 16), 0)
+// O passo do modelo que o engine responderia: registrado antes da primeira chamada em $.
+const answerSteps = (on: On) =>
+  on('turn.step', async function* ($, e) { return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null } as never })
+
+test('o modelo e o effort do pedido dão o poder do mascote: sem effort, nada; em max, a aura da classe', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  answerSteps(on)
+  await startSession($, on, () => [], () => 'claude-sonnet-5-5')
+  const ui = await $.ui.mount(band('terminal', true))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await clock.advance(7_000) // o mascote chega em casa, e a faixa de brilho de Sonnet já passou
+  expect(await powerPaints(ui)).toEqual([]) // nenhum effort lido ainda: o mascote de sempre
+  for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'claude-sonnet-5-5', effort: 'max', messageCount: 1 })) void _
+  await clock.advance(125)
+  const paints = await powerPaints(ui)
+  expect(paints.length > 4).toBe(true)
+  expect(await ui.find({ type: 'Text', text: /^max$/ })).toBeDefined()
+  // um modelo mais fraco no pedido seguinte, e a aura some
+  for await (const _ of $.turn.step({ turnId: 't1', index: 1, model: 'claude-haiku-5-5', effort: 'low', messageCount: 2 })) void _
+  await clock.advance(125)
+  expect(await powerPaints(ui)).toEqual([])
+  await ui.unmount()
+})
+
+test('o modelo e o effort de um agente dão o poder do ajudante dele', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  answerSteps(on)
+  await startSession($, on, () => [], () => 'claude-haiku-5-5') // um mascote sem brilho: o que aparecer é do ajudante
+  const ui = await $.ui.mount(band('terminal', true))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  await $.agent.spawn(SPAWN)
+  await clock.advance(2_500) // o ajudante brota e pousa
+  expect(await paintOf(ui, BLOCKS)).toContain(tintOf('a1'))
+  expect(await powerPaints(ui)).toEqual([]) // um Haiku sem effort lido: sem aura
+  for await (const _ of $.turn.step({ turnId: 'at1', index: 0, model: 'claude-opus-5-5', effort: 'max', messageCount: 1, agentId: 'a1' })) void _
+  await clock.advance(125)
+  expect((await powerPaints(ui)).length > 4).toBe(true)
+  expect(await paintOf(ui, /^[✶✸✹✺❋]$/)).toContain(tintOf('a1')) // e a faísca dele na lista passa a ser a de Opus
+  await ui.unmount()
+})
+
+test('/legends-claude demo aceita um modelo e um effort, e o mascote aparece com esse poder', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  await startSession($, on, () => [], () => 'claude-haiku-5-5')
+  const run = async (args: string) => ((await $.command.run({ command: 'legends-claude', args } as never)) as { text: string }).text
+  const ui = await $.ui.mount(band('terminal'))
+  expect(await run('demo')).toBe('Demonstração do palco em cena.')
+  await clock.advance(1_500)
+  expect(await ui.find({ type: 'Text', text: BLOCKS })).toBeDefined()
+  expect(await powerPaints(ui)).toEqual([]) // sem pedir nada, vale o da sessão: um Haiku sem effort
+  expect(await run('demo opus max')).toBe('Demonstração do palco em cena, como Opus · max.')
+  await clock.advance(1_500)
+  expect((await powerPaints(ui)).length > 4).toBe(true)
+  expect(await run('demo   XHIGH')).toBe('Demonstração do palco em cena, como Haiku · xhigh.') // só o effort: o modelo segue o da sessão
+  expect(await run('demonstração fable')).toBe('Demonstração do palco em cena, como Fable · low.')
+  // uma palavra que não é modelo nem effort: avisa, e a demonstração em curso segue como estava
+  expect(await run('demo opuss')).toBe('Não entendi "opuss". Depois de "demo" vai um modelo (haiku, sonnet, opus, fable), um effort (low, medium, high, xhigh, max), ou os dois.')
+  await clock.advance(1_500)
+  expect((await powerPaints(ui)).length > 0).toBe(true) // segue a de Fable, que tem aura até em low
+  // a demonstração seguinte, sem pedido, volta ao da sessão
+  expect(await run('demo')).toBe('Demonstração do palco em cena.')
+  await clock.advance(1_500)
+  expect(await powerPaints(ui)).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /Haiku 5\.5/ })).toBeDefined() // o cabeçalho segue o da sessão: a demonstração não troca o modelo
+  await ui.unmount()
+})
+
+test('num tema claro a aura clareia em vez de escurecer, e trocar o tema no /config vale na hora', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000_000 })
+  answerSteps(on)
+  on('config.set', ($, e) => ({ value: e.value }) as never)
+  await startSession($, on, () => [], () => 'claude-sonnet-5-5', {}, { LANG: 'pt_BR.UTF-8' }, 'light')
+  const ui = await $.ui.mount(band('terminal', true))
+  await $.turn.start({ text: 'oi', turnId: 't1' })
+  for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'claude-sonnet-5-5', effort: 'high', messageCount: 1 })) void _
+  await clock.advance(7_000)
+  const darkest = async () => Math.min(...(await powerPaints(ui)).map(brightness))
+  const light = await darkest()
+  await $.config.set({ key: 'theme', value: 'dark' } as never)
+  await clock.advance(125)
+  const dark = await darkest()
+  expect(dark < light).toBe(true)
+  await $.config.set({ key: 'theme', value: 'light-daltonized' } as never)
+  await clock.advance(125)
+  expect(await darkest()).toBe(light)
+  await $.config.set({ key: 'theme', value: 'um-tema-qualquer' } as never) // um nome que não diz se é claro vale como escuro
+  await clock.advance(125)
+  expect(await darkest()).toBe(dark)
+  await ui.unmount()
+})
+
