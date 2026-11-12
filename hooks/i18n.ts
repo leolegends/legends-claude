@@ -1,7 +1,10 @@
+import type { Backend } from './stage'
 import type {
   StatusAccent as Accent,
   StatusLanguage as Language,
   StatusMotion as Motion,
+  StatusResolution as Resolution,
+  StatusSize as Size,
   StatusSpeed as Speed,
 } from '../types'
 
@@ -51,6 +54,8 @@ export type Strings = {
   demoBusy: string
   demoOff: string
   demoNarrow: (columns: number) => string
+  /** O que o palco mostra, para quem não vê a imagem dele (um leitor de tela, um terminal sem imagens). */
+  stageAlt: string
   // A aba de ajustes: o cabeçalho, os rótulos das linhas e os das opções.
   panel: {
     title: string
@@ -60,6 +65,12 @@ export type Strings = {
     accent: string
     motion: string
     speed: string
+    resolution: string
+    /** Ao lado das opções de resolução: em que o palco está sendo desenhado nesta tela. */
+    inUse: (backend: string) => string
+    size: string
+    /** Ao lado das opções de tamanho, quando o grande foi pedido e a barra não tem largura ou altura para ele. */
+    noRoom: string
     show: string
     agents: string
     stillSpeed: string
@@ -67,6 +78,10 @@ export type Strings = {
   accents: Record<Accent, string>
   motions: Record<Motion, string>
   speeds: Record<Speed, string>
+  resolutions: Record<Resolution, string>
+  sizes: Record<Size, string>
+  /** Em que o palco sai: o nome de cada saída, para o "em uso" dos ajustes. */
+  backends: Record<Backend, string>
   toggles: Record<ToggleKey, string>
 }
 
@@ -97,6 +112,7 @@ const PT: Strings = {
   demoBusy: 'A demonstração roda com a sessão parada: espere o turno terminar.',
   demoOff: 'O palco está desligado: ligue "palco" e a animação "completa" nos ajustes (⚙).',
   demoNarrow: columns => `A demonstração precisa de um terminal com pelo menos ${columns} colunas.`,
+  stageAlt: 'O palco: o mascote leva os tijolos das ferramentas até a parede.',
   panel: {
     title: 'ajustes',
     demo: ' ▶ demonstração ',
@@ -105,6 +121,10 @@ const PT: Strings = {
     accent: 'cor',
     motion: 'animação',
     speed: 'velocidade',
+    resolution: 'resolução',
+    inUse: backend => `em uso: ${backend}`,
+    size: 'tamanho',
+    noRoom: '(sem efeito agora: a barra não tem espaço, ou a resolução é a clássica)',
     show: 'mostrar',
     agents: 'agentes',
     stillSpeed: '(sem efeito com animação parada)',
@@ -112,6 +132,9 @@ const PT: Strings = {
   accents: { claude: 'Claude', azul: 'Azul', verde: 'Verde', roxo: 'Roxo', rosa: 'Rosa', ciano: 'Ciano', ambar: 'Âmbar', mono: 'Mono' },
   motions: { completa: 'completa', suave: 'suave', parada: 'parada' },
   speeds: { lenta: 'lenta', normal: 'normal', rapida: 'rápida' },
+  resolutions: { auto: 'automática', blocos: 'blocos', classica: 'clássica' },
+  sizes: { normal: 'normal', grande: 'grande' },
+  backends: { image: 'pixels', raster: 'blocos', svg: 'vetor', text: 'texto' },
   toggles: { showRule: 'régua', showStage: 'palco', showLimits: 'limites', showTurnCost: 'custo do turno' },
 }
 
@@ -142,6 +165,7 @@ const EN: Strings = {
   demoBusy: 'The demo runs while the session is idle: wait for the turn to finish.',
   demoOff: 'The stage is off: turn on "stage" and the "full" animation in the settings (⚙).',
   demoNarrow: columns => `The demo needs a terminal at least ${columns} columns wide.`,
+  stageAlt: 'The stage: the mascot carries the tool bricks to the wall.',
   panel: {
     title: 'settings',
     demo: ' ▶ demo ',
@@ -150,6 +174,10 @@ const EN: Strings = {
     accent: 'color',
     motion: 'animation',
     speed: 'speed',
+    resolution: 'resolution',
+    inUse: backend => `in use: ${backend}`,
+    size: 'size',
+    noRoom: '(no effect right now: the bar has no room, or the resolution is classic)',
     show: 'show',
     agents: 'agents',
     stillSpeed: '(no effect while the animation is still)',
@@ -157,6 +185,9 @@ const EN: Strings = {
   accents: { claude: 'Claude', azul: 'Blue', verde: 'Green', roxo: 'Purple', rosa: 'Pink', ciano: 'Cyan', ambar: 'Amber', mono: 'Mono' },
   motions: { completa: 'full', suave: 'subtle', parada: 'still' },
   speeds: { lenta: 'slow', normal: 'normal', rapida: 'fast' },
+  resolutions: { auto: 'auto', blocos: 'blocks', classica: 'classic' },
+  sizes: { normal: 'normal', grande: 'large' },
+  backends: { image: 'pixels', raster: 'blocks', svg: 'vector', text: 'text' },
   toggles: { showRule: 'rule', showStage: 'stage', showLimits: 'limits', showTurnCost: 'turn cost' },
 }
 

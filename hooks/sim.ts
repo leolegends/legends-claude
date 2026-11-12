@@ -100,7 +100,8 @@ const BELT_MIN = 6 // células de esteira que sobram mesmo com o mosaico cheio
 const WALL_MAX_COLS = 20 // colunas de tijolo
 const MAX_HELPERS = 6 // ajudantes em cena; os demais agentes seguem só na lista
 const QUEUE_MAX = 48 // além disso a pilha não cresce: o tijolo vai direto para o mosaico
-const BELT_SPEED = 3 // células por quadro
+/** Quantas células um tijolo anda na esteira a cada quadro. */
+export const BELT_SPEED = 3
 const MAIN_PACE = [3, 4] // subpixels por quadro: carregando, de mãos vazias
 const HELPER_PACE = [4, 5]
 const HURRY_AT = 6 // com tantos tijolos esperando, aperta o passo

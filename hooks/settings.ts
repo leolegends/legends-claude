@@ -4,7 +4,9 @@ import type {
   StatusAccent as Accent,
   StatusLanguage as Language,
   StatusMotion as Motion,
+  StatusResolution as Resolution,
   StatusSettings as Settings,
+  StatusSize as Size,
   StatusSpeed as Speed,
 } from '../types'
 
@@ -37,13 +39,19 @@ export const SPEEDS: readonly { id: Speed; frameMs: number }[] = [
 ]
 const STILL_FRAME_MS = 1_000
 
+// Em que o palco é desenhado: o melhor que a tela der, blocos de terminal, ou o texto de sempre.
+export const RESOLUTIONS: readonly { id: Resolution }[] = [{ id: 'auto' }, { id: 'blocos' }, { id: 'classica' }]
+
+// O tamanho do palco: o de sempre, ou o dobro (o mundo fica com a metade da largura da barra).
+export const SIZES: readonly { id: Size }[] = [{ id: 'normal' }, { id: 'grande' }]
+
 export const AGENT_LIMITS = [3, 6, 10] as const
 
 // O idioma do padrão é o português, em que a barra nasceu. Numa instalação nova quem decide é o idioma
 // do sistema (veja `sanitize` e quem a chama); "restaurar padrão" não mexe no idioma.
 export const DEFAULT_SETTINGS: Settings = {
   language: 'pt', accent: 'claude', motion: 'completa', speed: 'normal',
-  showRule: true, showStage: true, showLimits: true, showTurnCost: true, maxAgents: 6,
+  showRule: true, showStage: true, resolution: 'auto', size: 'normal', showLimits: true, showTurnCost: true, maxAgents: 6,
 }
 
 /** Os interruptores da linha "mostrar", na ordem em que aparecem. */
@@ -67,6 +75,8 @@ export const sanitize = (raw: unknown, language: Language = DEFAULT_SETTINGS.lan
     speed: oneOf(idsOf(SPEEDS), r.speed, d.speed),
     showRule: flag(r.showRule, d.showRule),
     showStage: flag(r.showStage, d.showStage),
+    resolution: oneOf(idsOf(RESOLUTIONS), r.resolution, d.resolution),
+    size: oneOf(idsOf(SIZES), r.size, d.size),
     showLimits: flag(r.showLimits, d.showLimits),
     showTurnCost: flag(r.showTurnCost, d.showTurnCost),
     maxAgents: oneOf(AGENT_LIMITS, r.maxAgents, d.maxAgents),
@@ -76,13 +86,21 @@ export const sanitize = (raw: unknown, language: Language = DEFAULT_SETTINGS.lan
 export const accentColor = (s: Settings) => ACCENTS.find(a => a.id === s.accent)?.color ?? 'claude'
 
 /** O que as animações leem dos ajustes: a duração do quadro e quanto se mexe. */
-export type Effects = { frameMs: number; isFull: boolean; isStill: boolean; hasStage: boolean }
+export type Effects = {
+  frameMs: number
+  isFull: boolean
+  isStill: boolean
+  hasStage: boolean
+  /** O palco no tamanho dobrado: só fora do palco de texto, que tem um tamanho só. */
+  isLarge: boolean
+}
 
 export const effectsOf = (s: Settings): Effects => ({
   frameMs: s.motion === 'parada' ? STILL_FRAME_MS : (SPEEDS.find(x => x.id === s.speed)?.frameMs ?? 125),
   isFull: s.motion === 'completa',
   isStill: s.motion === 'parada',
   hasStage: s.showStage && s.motion === 'completa', // o palco é a animação mais viva: só na completa
+  isLarge: s.size === 'grande' && s.resolution !== 'classica',
 })
 
 export const FULL_EFFECTS: Effects = effectsOf(DEFAULT_SETTINGS)

@@ -45,10 +45,13 @@ export const rainbow = (degrees: number): string => {
 }
 
 // As cores do tema que o palco usa como tinta, aproximadas em hex para o tema escuro e para o claro.
-// Servem só para derivar o clarão e o brilho de um bicho: o corpo dele segue pintado com a cor do tema.
+// No palco de texto servem só para derivar o clarão e o brilho de um bicho (o corpo dele segue pintado
+// com a cor do tema); no palco em pixels, que não tem como pedir uma cor do tema, são a própria tinta.
 const THEME: Record<string, readonly [dark: string, light: string]> = {
   claude: ['#D97757', '#D97757'],
   text: ['#E6E6E6', '#333333'],
+  subtle: ['#505050', '#AFAFAF'],
+  error: ['#FF6B80', '#AB2B3F'],
   suggestion: ['#B1B9F9', '#5769F7'],
   warning: ['#FFC107', '#966C1E'],
   planMode: ['#48968C', '#006666'],
@@ -60,3 +63,22 @@ const THEME: Record<string, readonly [dark: string, light: string]> = {
 /** O hex de uma tinta: o próprio, se já é hex; o aproximado, se é uma cor do tema; cinza para o resto. */
 export const hexOf = (paint: string, isLight = false): string =>
   HEX.test(paint) ? paint.toUpperCase() : (THEME[paint]?.[isLight ? 1 : 0] ?? toHex(GRAY))
+
+const DIM_MARK = '~' // uma tinta apagada começa assim: aqui só importa a cor dela
+
+/** Uma tinta como número (0xRRGGBB), para o palco em pixels: hex, cor do tema, ou cinza para o resto. */
+export const rgbOf = (paint: string, isLight = false): number => {
+  const [r, g, b] = toRgb(hexOf(paint.startsWith(DIM_MARK) ? paint.slice(DIM_MARK.length) : paint, isLight))
+  return (r << 16) | (g << 8) | b
+}
+
+const channel = (from: number, to: number, shift: number, t: number) => {
+  const a = (from >> shift) & 0xff
+  return Math.round(a + (((to >> shift) & 0xff) - a) * t) << shift
+}
+
+/** Uma cor entre `from` e `to`, as duas como número: `amount` 0 é a primeira, 1 a segunda. */
+export const blend = (from: number, to: number, amount: number): number => {
+  const t = Number.isFinite(amount) ? Math.max(0, Math.min(1, amount)) : 0
+  return channel(from, to, 16, t) | channel(from, to, 8, t) | channel(from, to, 0, t)
+}

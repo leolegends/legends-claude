@@ -2,7 +2,7 @@ import type { EngineInterface, RenderElement } from 'claude-code'
 
 import { LANGUAGES } from './i18n'
 import type { Strings } from './i18n'
-import { ACCENTS, AGENT_LIMITS, MOTIONS, SPEEDS, TOGGLES } from './settings'
+import { ACCENTS, AGENT_LIMITS, MOTIONS, RESOLUTIONS, SIZES, SPEEDS, TOGGLES } from './settings'
 import type { StatusSettings as Settings } from '../types'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
@@ -19,6 +19,10 @@ export type PanelProps = {
   strings: Strings
   /** A cor de destaque já resolvida, para pintar o que está selecionado. */
   accent: string
+  /** Em que o palco sai nesta tela, já no idioma em vigor: aparece ao lado das opções de resolução. */
+  inUse: string
+  /** O tamanho grande foi pedido e a barra não tem como mostrá-lo agora: um aviso ao lado das opções. */
+  isCramped: boolean
   onChange: (patch: Partial<Settings>) => void
   onReset: () => void
   /** Roda a demonstração do palco. */
@@ -27,7 +31,7 @@ export type PanelProps = {
 }
 
 /** A aba de ajustes: uma linha por grupo, cada opção um botão; a escolhida vem marcada com ●. */
-export const SettingsPanel = ({ el, settings: s, strings: t, accent, onChange, onReset, onDemo, onClose }: PanelProps): RenderElement[] => {
+export const SettingsPanel = ({ el, settings: s, strings: t, accent, inUse, isCramped, onChange, onReset, onDemo, onClose }: PanelProps): RenderElement[] => {
   const { Box, Button, Text } = el
   const label = (text: string) => <Text dimColor>{text.padEnd(LABEL_WIDTH)}</Text>
 
@@ -67,6 +71,16 @@ export const SettingsPanel = ({ el, settings: s, strings: t, accent, onChange, o
       {label(t.panel.speed)}
       {SPEEDS.flatMap(v => option(`set-speed-${v.id}`, t.speeds[v.id], s.speed === v.id, () => onChange({ speed: v.id })))}
       {s.motion === 'parada' ? <Text dimColor>{`  ${t.panel.stillSpeed}`}</Text> : null}
+    </Box>,
+    <Box key="set-resolution">
+      {label(t.panel.resolution)}
+      {RESOLUTIONS.flatMap(r => option(`set-resolution-${r.id}`, t.resolutions[r.id], s.resolution === r.id, () => onChange({ resolution: r.id })))}
+      <Text dimColor>{`  ${t.panel.inUse(inUse)}`}</Text>
+    </Box>,
+    <Box key="set-size">
+      {label(t.panel.size)}
+      {SIZES.flatMap(z => option(`set-size-${z.id}`, t.sizes[z.id], s.size === z.id, () => onChange({ size: z.id })))}
+      {isCramped ? <Text dimColor>{`  ${t.panel.noRoom}`}</Text> : null}
     </Box>,
     <Box key="set-show">
       {label(t.panel.show)}

@@ -36,47 +36,47 @@ const PRISM_PER_COLUMN = 0.22 // quanto o matiz anda por subpixel de largura
 const PRISM_PER_TICK = 0.21 // e por quadro
 const WHITE = '#FFFFFF'
 const BLACK = '#000000'
-const INK = 'text' // a cor do texto do tema: branca no escuro, preta no claro. É a do raio
+export const INK = 'text' // a cor do texto do tema: branca no escuro, preta no claro. É a do raio
 const NIGHT = '#0B0B10' // o fundo de um terminal escuro, aproximado: para onde o clarão esmaece
-const CORE_FADE = 0.42 // quanto o miolo do clarão esmaece em direção ao fundo
-const EDGE_FADE = 0.7 // e quanto as pontas e as beiradas esmaecem
+export const CORE_FADE = 0.42 // quanto o miolo do clarão esmaece em direção ao fundo
+export const EDGE_FADE = 0.7 // e quanto as pontas e as beiradas esmaecem
 const SPARK_LIFT = 0.5 // quanto uma fagulha clareia a cor da classe, num tema escuro
 const SPARK_SINK = 0.2 // e quanto escurece, num tema claro: clara, sumiria no fundo
 /** Por força da aura: subpixels de clarão além do corpo, de cada lado. */
-const REACH = [0, 1, 2, 3, 4, 5]
+export const REACH = [0, 1, 2, 3, 4, 5]
 /** Por força da aura: sublinhas de labareda acima do corpo. */
-const RISE = [0, 0, 1, 2, 3, 4]
+export const RISE = [0, 0, 1, 2, 3, 4]
 const SHEEN_EVERY = [0, 44, 24, 8] // por classe: quadros de uma passada do brilho pelo corpo até a seguinte (a de Fable mal termina e já recomeça)
 const SHEEN_WIDTH = [0, 1, 2, 2] // e a largura da faixa, em células
 const SHEEN_SPEED = 2 // células por quadro
 const SHEEN_LIFT = 0.62 // quanto a faixa clareia a cor do corpo
 const GOLD_SHEEN = '#FFE9A8' // o brilho de Opus
-const MOTES_FROM = 3 // a força da aura a partir da qual sobem fagulhas
-const MOTE_LIFE = 8 // quadros que uma fagulha leva subindo
-const MOTE_STAGGER = 5 // quadros entre uma fagulha e a seguinte
-const BOLT_TIER = 2 // só de Opus para cima caem raios
-const BOLT_FROM = 4 // e só com a aura nessa força
-const BOLT_EVERY = 21 // quadros entre um raio e o seguinte
-const BOLT_FRAMES = 2 // quadros que um raio dura
+export const MOTES_FROM = 3 // a força da aura a partir da qual sobem fagulhas
+export const MOTE_LIFE = 8 // quadros que uma fagulha leva subindo
+export const MOTE_STAGGER = 5 // quadros entre uma fagulha e a seguinte
+export const BOLT_TIER = 2 // só de Opus para cima caem raios
+export const BOLT_FROM = 4 // e só com a aura nessa força
+export const BOLT_EVERY = 21 // quadros entre um raio e o seguinte
+export const BOLT_FRAMES = 2 // quadros que um raio dura
 const LIT_EYES_TIER = 2 // de Opus para cima os olhos acendem
 const FLY_TIER = 3 // Fable voa
-const STREAK_TIER = 1 // de Sonnet para cima, quem corre risca o ar
-const STREAK_FROM = 2 // com a aura a partir dessa força
-const STREAK_ROWS = [1, 3] // as linhas do desenho de onde saem os riscos (olhos e corpo)
-const JET_SHARE = 0.45 // a fração das colunas sob o corpo que solta jato num quadro
+export const STREAK_TIER = 1 // de Sonnet para cima, quem corre risca o ar
+export const STREAK_FROM = 2 // com a aura a partir dessa força
+export const STREAK_ROWS = [1, 3] // as linhas do desenho de onde saem os riscos (olhos e corpo)
+export const JET_SHARE = 0.45 // a fração das colunas sob o corpo que solta jato num quadro
 
-const isPainted = (mark: string | undefined) => mark === '#' || mark === EYE
-const backdropOf = (isLight: boolean) => (isLight ? WHITE : NIGHT)
+export const isPainted = (mark: string | undefined) => mark === '#' || mark === EYE
+export const backdropOf = (isLight: boolean) => (isLight ? WHITE : NIGHT)
 // Uma fagulha: a cor da classe puxada para longe do fundo, para saltar dele.
-const sparkOf = (paint: string, isLight: boolean) => (isLight ? mix(paint, BLACK, SPARK_SINK) : mix(paint, WHITE, SPARK_LIFT))
-const widthOf = (bitmap: Bitmap) => bitmap.reduce((n, row) => Math.max(n, row.length), 0)
+export const sparkOf = (paint: string, isLight: boolean) => (isLight ? mix(paint, BLACK, SPARK_SINK) : mix(paint, WHITE, SPARK_LIFT))
+export const widthOf = (bitmap: Bitmap) => bitmap.reduce((n, row) => Math.max(n, row.length), 0)
 
 // O furta-cor: o matiz vai e volta entre o ciano e o rosa, ao longo da largura e do tempo.
 const prism = (x: number, tick: number) =>
   rainbow((PRISM_FROM + PRISM_TO) / 2 + ((PRISM_TO - PRISM_FROM) / 2) * Math.sin(x * PRISM_PER_COLUMN + tick * PRISM_PER_TICK))
 
 // A cor da classe numa coluna: fixa, ou o furta-cor de Fable correndo.
-const classPaint = ({ tier }: Power, tick: number) =>
+export const classPaint = ({ tier }: Power, tick: number) =>
   tier === 3 ? (x: number) => prism(x, tick) : () => CLASS_PAINT[tier] ?? CLASS_PAINT[0]
 
 /** A tinta dos olhos acesos de uma classe, ou `null` para os olhos vazados de sempre. */
@@ -86,25 +86,39 @@ export const eyesOf = ({ tier }: Power): Paint | null => (tier < LIT_EYES_TIER ?
 export const canFly = ({ tier }: Power) => tier >= FLY_TIER
 
 /**
+ * A faixa de brilho que atravessa o corpo num quadro: onde ela começa e quanto mede, em células ao
+ * longo da diagonal, e a tinta dela numa coluna (em subpixels).
+ */
+export type Sheen = { front: number; width: number; paintAt: (x: number) => Paint }
+
+/** A faixa de brilho de um bicho num quadro; `null` na classe que não tem brilho. */
+export const sheenOf = ({ tier }: Power, tint: Paint, mood: Mood): Sheen | null => {
+  const every = SHEEN_EVERY[tier] ?? 0
+  if (every <= 0) return null
+  const width = SHEEN_WIDTH[tier] ?? 1
+  const own = hexOf(tint, mood.isLight)
+  return {
+    front: (mood.tick % every) * SHEEN_SPEED - width, // a faixa entra pela esquerda e some à direita
+    width,
+    paintAt: x => (tier === 3 ? mix(prism(x, mood.tick), WHITE, 0.45) : tier === 2 ? GOLD_SHEEN : mix(own, WHITE, SHEEN_LIFT)),
+  }
+}
+
+/**
  * A tinta do corpo: a cor do bicho, com o brilho da classe. De Sonnet para cima uma faixa de luz
  * inclinada atravessa o corpo de tempos em tempos: fina e rara em Sonnet, larga e dourada em Opus,
  * furta-cor e quase sem pausa em Fable. A cor é uma por célula, para a célula nunca ter mais de duas.
  */
 export const bodyShade = (p: Power, figure: Figure, mood: Mood): Shade => {
   const eyes = eyesOf(p)
-  const { tier } = p
   const { tint, left } = figure
-  const every = SHEEN_EVERY[tier] ?? 0
-  if (every <= 0) return tint
-  const width = SHEEN_WIDTH[tier] ?? 1
-  const front = (mood.tick % every) * SHEEN_SPEED - width // a faixa entra pela esquerda e some à direita
-  const own = hexOf(tint, mood.isLight)
-  const sheen = (x: number) => (tier === 3 ? mix(prism(x, mood.tick), WHITE, 0.45) : tier === 2 ? GOLD_SHEEN : mix(own, WHITE, SHEEN_LIFT))
+  const sheen = sheenOf(p, tint, mood)
+  if (!sheen) return tint
   return (x, y, mark) => {
     if (mark === EYE && eyes) return eyes
     const cell = x >> 1
     const across = cell - (left >> 1) + (y >> 1) // a faixa é inclinada
-    return across >= front && across < front + width ? sheen(cell * 2) : tint // a cor é a da célula, não a do subpixel
+    return across >= sheen.front && across < sheen.front + sheen.width ? sheen.paintAt(cell * 2) : tint // a cor é a da célula, não a do subpixel
   }
 }
 
@@ -113,13 +127,13 @@ const TONGUE_MIN = 0.3 // a língua de fogo mais baixa, como fração da mais al
 const WAVE = { fine: 1.9, fineSpeed: 1.3, broad: 0.7, broadSpeed: 0.8 } as const
 
 // A língua de fogo de uma coluna num quadro, de `TONGUE_MIN` a 1: duas ondas que se cruzam.
-const tongue = (x: number, tick: number) => {
+export const tongue = (x: number, tick: number) => {
   const ripple = Math.sin(x * WAVE.fine + tick * WAVE.fineSpeed) * Math.cos(x * WAVE.broad - tick * WAVE.broadSpeed)
   return TONGUE_MIN + (1 - TONGUE_MIN) * (0.5 + 0.5 * ripple)
 }
 
 // A primeira linha pintada de cada coluna do desenho, de cima para baixo.
-const columnTops = (bitmap: Bitmap): (number | undefined)[] =>
+export const columnTops = (bitmap: Bitmap): (number | undefined)[] =>
   Array.from({ length: widthOf(bitmap) }, (_, col) => {
     const at = bitmap.findIndex(row => isPainted(row[col]))
     return at < 0 ? undefined : at
@@ -233,13 +247,13 @@ export const jetsOf = (p: Power, figure: Figure, mood: Mood): Dot[] => {
   )
 }
 
-const FIREWORKS_TIER = 2 // de Opus para cima, a festa do fim tem fogos
-const BURST_LIFE = 6 // quadros que um fogo leva abrindo
-const BURST_RAYS = 10
-const BURST_THIN_AT = 4 // a partir dessa idade, metade dos pontos já apagou
-const BURST_PAINTS = [INK, '#F5B841', '#E0A526'] // os fogos de Opus: a cor do texto e dois ouros
+export const FIREWORKS_TIER = 2 // de Opus para cima, a festa do fim tem fogos
+export const BURST_LIFE = 6 // quadros que um fogo leva abrindo
+export const BURST_RAYS = 10
+export const BURST_THIN_AT = 4 // a partir dessa idade, metade dos pontos já apagou
+export const BURST_PAINTS = [INK, '#F5B841', '#E0A526'] // os fogos de Opus: a cor do texto e dois ouros
 // Os fogos da festa: quando cada um estoura, e onde (em subpixels, a partir do meio do mascote).
-const BURSTS = [
+export const BURSTS = [
   { at: 1, dx: -22, y: 2 },
   { at: 4, dx: 24, y: 1 },
   { at: 7, dx: -8, y: 1 },

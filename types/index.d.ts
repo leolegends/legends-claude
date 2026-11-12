@@ -9,6 +9,14 @@ export type StatusAccent = 'claude' | 'azul' | 'verde' | 'roxo' | 'rosa' | 'cian
 export type StatusMotion = 'completa' | 'suave' | 'parada'
 /** A duração de um quadro da animação. */
 export type StatusSpeed = 'lenta' | 'normal' | 'rapida'
+/**
+ * Em que o palco é desenhado: `auto` é o melhor que a tela der (pixels de verdade num terminal que
+ * desenha imagens, blocos de terminal nos outros, vetor no app desktop); `blocos` são blocos mesmo
+ * onde há pixels; `classica` é o palco de texto de sempre.
+ */
+export type StatusResolution = 'auto' | 'blocos' | 'classica'
+/** O tamanho do palco: o de sempre (quatro linhas) ou o dobro, onde os blocos de terminal mostram mais detalhe. */
+export type StatusSize = 'normal' | 'grande'
 
 /** Os ajustes da aba ⚙: guardados no store do plugin, valem para todas as sessões. */
 export type StatusSettings = {
@@ -19,6 +27,10 @@ export type StatusSettings = {
   showRule: boolean
   /** O palco: o mascote levando os tijolos das ferramentas até a parede, com um ajudante por agente. */
   showStage: boolean
+  /** Em que o palco é desenhado. */
+  resolution: StatusResolution
+  /** O tamanho do palco; `grande` só vale fora do palco de texto, e onde a barra tem largura e altura para ele. */
+  size: StatusSize
   showLimits: boolean
   showTurnCost: boolean
   maxAgents: 3 | 6 | 10
@@ -82,6 +94,8 @@ declare module 'claude-code' {
       picker: StatusPicker
       /** Os ajustes em vigor nesta sessão (espelho do store). */
       settings: StatusSettings
+      /** O que o terminal respondeu sobre desenhar imagens: ainda não se sabe, sim, ou não. */
+      pixels: 'unknown' | 'yes' | 'no'
     }
   }
 }

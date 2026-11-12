@@ -5,9 +5,13 @@ import { LINGER_MS, isExpired, reconcileRows, upsert } from './agents'
 import { DEMO_CAST, DEMO_FRAMES, applyDemo } from './demo'
 import { BURST_FRAMES, ruleParts } from './effects'
 import { clean, prettyModel, shortTool } from './format'
+import { hdScene } from './hd'
+import type { Zoom } from './hd'
 import { localeLanguage, stringsOf } from './i18n'
 import type { Strings } from './i18n'
-import { BUTTONS_WIDTH, EFFORTS, cardLines, fromUsage, hudParts } from './lines'
+import { BUTTONS_WIDTH, EFFORTS, STAGE_SLOT, cardLines, fromUsage, hudParts } from './lines'
+import { askAgain, askPixels, canRepaint, dropStage, resetPainter, watchStage } from './painter'
+import type { Host } from './painter'
 import { kindOf } from './palette'
 import { TAIL_GAP, lineWidth } from './parts'
 import type { Line, Part, Switch } from './parts'
@@ -16,9 +20,12 @@ import type { Power } from './power'
 import { SCENE_ROWS, sceneRows } from './scene'
 import { SettingsPanel } from './settings-panel'
 import { EMPTY_SIM, MAIN, begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, settle, step, syncHelpers, think } from './sim'
-import type { Sim } from './sim'
+import type { Geo, Sim } from './sim'
 import { DEFAULT_SETTINGS, FULL_EFFECTS, accentColor, effectsOf, sanitize } from './settings'
 import type { Effects } from './settings'
+import { alphaOf, backendOf, zoomOf } from './stage'
+import type { Abilities, Backend, Pixels } from './stage'
+import { offeredBy, probeNode, stageNode } from './stage-node'
 import type {
   StatusAgent as Agent,
   StatusAgentState as AgentState,
@@ -39,6 +46,8 @@ const frame = atom({ plugin: 'legends-claude', key: 'frame' } as const, 0)
 const isHidden = atom({ plugin: 'legends-claude', key: 'isHidden' } as const, false)
 const picker = atom({ plugin: 'legends-claude', key: 'picker' } as const, null as Picker)
 const settings = atom({ plugin: 'legends-claude', key: 'settings' } as const, DEFAULT_SETTINGS)
+// O que o terminal respondeu sobre desenhar imagens; quem pergunta e grava a resposta é o pintor (painter.ts).
+const pixels = atom({ plugin: 'legends-claude', key: 'pixels' } as const, 'unknown' as Pixels)
 const SETTINGS_KEY = 'settings' // a chave no $.store: os ajustes valem para todas as sessões
 
 const COMMAND = 'legends-claude'
@@ -67,11 +76,14 @@ let ticker: Timer | null = null
 let isTickBusy = false
 let isBandWorking = false
 let lastBandColumns = Infinity
+let lastZoom: Zoom = 1 // o tamanho do palco no último desenho: a cena anda com as medidas do mundo que ele mostrou
 let tickerMs = 0 // a cadência do ticker em curso: muda com a velocidade dos ajustes
 let lastReconcileAt = -Infinity
 let fx: Effects = FULL_EFFECTS // os efeitos em vigor, lidos dos ajustes
 let strings: Strings = stringsOf(DEFAULT_SETTINGS.language) // os textos no idioma em vigor, para o que fala fora do desenho
 let sim: Sim = EMPTY_SIM // a cena do palco: anda a cada quadro, recomeça a cada sessão
+let shownSim: Sim = EMPTY_SIM // a cena de antes do último passo: o palco em pixels desliza dela para `sim`
+let steppedAt = 0 // quando foi o último passo da cena
 let demoFrame = -1 // o quadro da demonstração em curso; -1 quando não há
 let demoLook: Power | null = null // o poder que a demonstração em curso mostra no mascote, quando foi pedido outro
 let isLightTheme = false // o tema do Claude Code é claro: a aura do palco esmaece para branco
@@ -92,6 +104,13 @@ const stopTicker = () => {
   tickerMs = 0
 }
 
+// A cena troca inteira (recomeça, esvazia, sai de vista): o que havia em cena não fica para ser
+// desenhado a caminho da nova.
+const setScene = (next: Sim) => {
+  sim = next
+  shownSim = next
+}
+
 // O palco é enfeite: um erro nele nunca pode derrubar uma ferramenta, um turno ou a barra.
 // Vira uma cena vazia e uma linha de aviso, uma vez.
 const onStage = <T,>($: EngineInterface, run: () => T, fallback: T): T => {
@@ -99,11 +118,18 @@ const onStage = <T,>($: EngineInterface, run: () => T, fallback: T): T => {
     return run()
   } catch (err) {
     report($, 'stage', err)
-    sim = isTurnOn ? { ...EMPTY_SIM, isOn: true } : EMPTY_SIM
+    setScene(isTurnOn ? { ...EMPTY_SIM, isOn: true } : EMPTY_SIM)
     demoFrame = -1
     return fallback
   }
 }
+
+// O que a barra empresta a quem repinta o palco entre os quadros: a cena de agora, o aviso e a guarda.
+const hostOf = ($: EngineInterface): Host => ({
+  tween: () => ({ prev: shownSim, cur: sim, steppedAt, frameMs: fx.frameMs, isRunning: ticker !== null }),
+  report: (where, err) => report($, where, err),
+  guard: (run, fallback) => onStage($, run, fallback),
+})
 
 // O tema é claro quando o nome dele diz ("light", "light-daltonized"); um tema de nome desconhecido vale como escuro.
 const isLightName = (value: unknown) => /light/i.test(String(value ?? ''))
@@ -133,12 +159,14 @@ const hasWork = (list: readonly Agent[], now: number) =>
   list.some(a => a.state === 'running' || (fx.isFull && a.endedAt !== undefined && now - a.endedAt < BURST_FRAMES * fx.frameMs))
 
 // Um quadro da cena: a demonstração marca os seus eventos, os ajudantes acompanham os agentes, tudo anda.
-const stepScene = ($: EngineInterface, list: readonly Agent[]) =>
+// A cena de antes do passo fica guardada: é dela que o palco em pixels desliza até a nova.
+const stepScene = ($: EngineInterface, list: readonly Agent[], now: number) =>
   onStage($, () => {
-    const geo = fx.hasStage ? geometry(lastBandColumns - BAR_RIGHT_PAD) : null
+    // As medidas do mundo são as do último desenho: no tamanho dobrado, as de uma barra com a metade das colunas.
+    const geo = fx.hasStage ? geometry(Math.floor((lastBandColumns - BAR_RIGHT_PAD) / lastZoom)) : null
     if (!geo) {
       // Sem lugar para o palco a cena não anda: se guardasse a comemoração ou a demonstração, o relógio nunca pararia.
-      sim = blank(sim)
+      setScene(blank(sim))
       demoFrame = -1
       return
     }
@@ -146,12 +174,14 @@ const stepScene = ($: EngineInterface, list: readonly Agent[]) =>
       sim = applyDemo(sim, demoFrame)
       demoFrame += 1
     }
-    sim = step(syncHelpers(sim, list), geo)
+    shownSim = syncHelpers(sim, list)
+    sim = step(shownSim, geo)
+    steppedAt = now
     if (demoFrame > DEMO_FRAMES) {
       demoFrame = -1
-      sim = EMPTY_SIM // o que a demonstração construiu não fica para a sessão
+      setScene(EMPTY_SIM) // o que a demonstração construiu não fica para a sessão
     } else if (!hasScene(sim)) {
-      sim = fold(sim)
+      setScene(fold(sim))
     }
   }, undefined)
 
@@ -197,7 +227,7 @@ async function tick($: EngineInterface) {
     } else {
       quietSince = null
     }
-    stepScene($, list)
+    stepScene($, list, now)
     await update($, frame, f => (f + 1) % FRAME_WRAP) // por último: o redesenho já vê a cena deste quadro
     if (hasWork(list, now)) return
     stopTicker()
@@ -270,7 +300,7 @@ async function applySettings($: EngineInterface, change: (s: Settings) => Settin
     fx = effectsOf(next)
     if (stringsOf(next.language) !== strings) await speak($, next.language)
     if (!fx.hasStage) {
-      sim = EMPTY_SIM
+      setScene(EMPTY_SIM)
       demoFrame = -1
     } else if (isTurnOn && !sim.isOn) {
       sim = begin(sim) // o palco voltou no meio de um turno: a cena entra agora
@@ -294,7 +324,7 @@ async function startDemo($: EngineInterface, look = ''): Promise<string> {
   const asked = words ? lookOf(words, powerOf(f.model, f.effort)) : null
   if (words && !asked) return strings.demoUnknown(clean(words, 40))
   // A cena é marcada antes de qualquer outra espera: um turno de verdade que comece no meio encontra a demonstração e a encerra.
-  sim = EMPTY_SIM
+  setScene(EMPTY_SIM)
   demoFrame = 0
   demoLook = asked
   await update($, isHidden, () => false)
@@ -303,13 +333,75 @@ async function startDemo($: EngineInterface, look = ''): Promise<string> {
   return asked ? strings.demoAs(TIER_NAMES[asked.tier], EFFORTS[asked.level] ?? '') : strings.demo
 }
 
+// A pessoa escolheu a resolução automática de novo: se o terminal tinha dito que não desenha imagens
+// (um tmux sem passthrough, já corrigido, por exemplo), pergunta-se outra vez.
+async function recheckPixels($: EngineInterface) {
+  try {
+    askAgain()
+    await update($, pixels, known => (known === 'no' ? 'unknown' : known))
+  } catch (err) {
+    report($, 'pixels', err)
+  }
+}
+
+/** O que um desenho da barra sabe do palco: em que ele sai, as medidas, o placar, o poder de cada um, os ajustes e a hora. */
+type StageInput = {
+  backend: Backend
+  /** O que o terminal respondeu sobre desenhar imagens. */
+  known: Pixels
+  /** O palco está à vista: não com a barra recolhida, nem com a aba de ajustes no lugar das linhas. */
+  isShown: boolean
+  geo: Geo | null
+  zoom: Zoom
+  hud: Part[]
+  powers: ReadonlyMap<string, Power>
+  settings: Settings
+  strings: Strings
+  now: number
+}
+/**
+ * O palco de um desenho: em que ele sai nesta tela, o elemento dele (uma imagem, uma grade de blocos,
+ * um SVG) ou, sem elemento, as linhas de texto de sempre; e a imagem de sondagem, quando é hora dela.
+ */
+type StageDraw = { backend: Backend; node: RenderElement | null; lines: Line[]; probe: RenderElement | null }
+type BandInput = { surface: string; requestId: string }
+
+// O palco deste desenho. No terminal a cena em pixels ou em blocos segue a caminho entre dois quadros,
+// e quem repinta completa o caminho; fora dele (ou sem como repintar) mostra o quadro inteiro. Se a
+// tela não tem como desenhar o elemento, ficam as linhas de texto. Só um palco à vista é repintado: o
+// que não está na tela recusaria cada pintura.
+function drawStage($: EngineInterface, e: BandInput, table: object, { backend, known, isShown, geo, zoom, hud, powers, settings: s, strings: t, now }: StageInput): StageDraw {
+  const isTerminal = e.surface === 'terminal'
+  if (!isShown) {
+    if (isTerminal) dropStage()
+    return { backend, node: null, lines: [], probe: null }
+  }
+  const look = { isLight: isLightTheme, accent: accentColor(s) }
+  const alpha = isTerminal && canRepaint() ? alphaOf(now, steppedAt, fx.frameMs) : 1
+  const scene = geo && hasScene(sim) && backend !== 'text'
+    ? onStage($, () => hdScene({ prev: shownSim, cur: sim, alpha, geo, hud, powers, ...look, trace: backend === 'raster' ? 'blocks' : 'pixels', zoom }), null)
+    : null
+  const node = scene ? onStage($, () => stageNode(table, backend, scene, look, t.stageAlt), null) : null
+  if (isTerminal) {
+    if (node && scene && geo && (backend === 'image' || backend === 'raster'))
+      watchStage($, { requestId: e.requestId, backend, columns: scene.columns, rows: scene.rows }, { geo, zoom, hud, powers, look }, hostOf($), now)
+    else dropStage()
+  }
+  // Enquanto não se sabe se o terminal desenha imagens, uma imagem de sondagem vai no canto da barra.
+  const probe = isTerminal && s.resolution === 'auto' && known === 'unknown' && canRepaint() ? probeNode(table) : null
+  if (probe) askPixels($, e.requestId, now, (where, err) => report($, where, err))
+  const lines = node || !geo || !hasScene(sim) ? [] : onStage($, () => sceneRows({ sim, geo, hud, powers, isLight: isLightTheme }).map(parts => ({ parts })), [])
+  return { backend, node, lines, probe }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     try {
       isBandWorking = false
       isTurnOn = false
       quietSince = null
-      sim = EMPTY_SIM
+      setScene(EMPTY_SIM)
+      resetPainter()
       demoFrame = -1
       // Os ajustes salvos valem antes do primeiro desenho; um valor estragado volta ao padrão campo a campo.
       const initial = await loadSettings($).catch(err => (report($, 'settings', err), DEFAULT_SETTINGS))
@@ -358,7 +450,7 @@ export const register: Register = on => {
         quietSince = null
         // Um turno de verdade encerra a demonstração e abre a cena dele.
         onStage($, () => {
-          if (demoFrame >= 0) sim = EMPTY_SIM
+          if (demoFrame >= 0) setScene(EMPTY_SIM)
           demoFrame = -1
           if (fx.hasStage) sim = begin(sim)
         }, undefined)
@@ -475,19 +567,26 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     lastBandColumns = e.props.bodyColumns
     isBandWorking = e.props.isWorking
-    if (e.props.hasSurvey || e.props.bodyColumns < MIN_COLUMNS) return next(e)
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const isTerminal = e.surface === 'terminal'
+    if (e.props.hasSurvey || e.props.bodyColumns < MIN_COLUMNS) {
+      if (isTerminal) dropStage() // sem barra não há palco no terminal para repintar
+      return next(e)
+    }
+    const table = $.ui.resolve(e)
+    const { Box, Button, Text } = table
     // O que os plugins abaixo desenharam aqui fica, acima do card.
     const below = await next(e).catch(() => null)
     const withBelow = (ours: RenderElement): RenderElement => (below ? <Box flexDirection="column">{below}{ours}</Box> : ours)
     const setHidden = (hidden: boolean) => update($, isHidden, () => hidden)
 
-    if (await read($, isHidden))
+    if (await read($, isHidden)) {
+      if (isTerminal) dropStage()
       return withBelow(
         <Box justifyContent="flex-end" paddingRight={HIDDEN_RIGHT_PAD}>
           <Button key="show" label={MARKS.show} dimColor onPress={() => setHidden(false)} />
         </Box>,
       )
+    }
 
     const list = await read($, agents)
     const now = await $.clock.now()
@@ -502,21 +601,34 @@ export const register: Register = on => {
     // O idioma e os efeitos saem dos ajustes lidos neste desenho: uma troca na aba vale já no quadro que ela provoca.
     const t = stringsOf(s.language)
     const shown = effectsOf(s)
-    // O palco: a cena do quadro, com o placar do turno no canto. Numa faixa baixa demais ele não entra.
-    const geo = shown.hasStage && e.props.maxRows >= STAGE_MIN_ROWS ? geometry(width) : null
+    // Em que o palco sai nesta tela: pixels, blocos, vetor ou texto, pelo ajuste e pelo que ela oferece.
+    const known = await read($, pixels)
+    const offered: Abilities = { ...offeredBy(table), pixels: known }
+    const backend = backendOf(s.resolution, e.surface, offered)
+    // O palco: a cena do quadro, com o placar do turno no canto. Numa faixa baixa demais ele não entra;
+    // o tamanho dobrado só vale fora do texto, quando foi pedido e a barra tem largura e altura para ele.
+    const zoom = backend === 'text' ? 1 : zoomOf(shown.isLarge, width, e.props.maxRows)
+    lastZoom = zoom
+    const geo = shown.hasStage && e.props.maxRows >= STAGE_MIN_ROWS ? geometry(Math.floor(width / zoom)) : null
     const hud: Part[] = demoFrame >= 0 ? [{ text: t.demoHud, dim: true }] : e.props.isWorking && m.startedAt > 0 ? hudParts(m, now, t) : []
     // O poder de cada um: a aparência dos bichos no palco. A energia do pulso da régua é a do effort
     // (ou a que a demonstração pediu); sem effort lido, o pulso é o de sempre.
     const powers = powersOf(f, list)
     const energy = demoFrame >= 0 && demoLook ? demoLook.level : energyOf(f.effort)
-    const stage = onStage(
-      $, () => (geo && hasScene(sim) ? sceneRows({ sim, geo, hud, powers, isLight: isLightTheme }).map(parts => ({ parts })) : []), [],
-    )
+    const open = await read($, picker)
+    const isShown = !e.props.isCollapsed && open !== 'settings' // a aba de ajustes toma o lugar das linhas, palco incluído
+    const draw = drawStage($, e, table, { backend, known, isShown, geo, zoom, hud, powers, settings: s, strings: t, now })
+    // Um palco de imagem ou de vetor não leva texto: o placar volta para a linha de trabalho, abaixo dele.
+    const hasStageHud = !draw.node || draw.backend === 'raster'
+    const hasWorkRow = !hasStageHud && e.props.isWorking && m.startedAt > 0
+    const stageRows = draw.node ? SCENE_ROWS * zoom + (hasWorkRow ? 1 : 0) : draw.lines.length
     // Com o palco em cena numa faixa baixa, é a lista de agentes que encolhe (o resto vira "+N agentes").
     const chrome = (s.showRule ? 1 : 0) + 1
-    const agentRows = stage.length ? Math.max(1, e.props.maxRows - chrome - stage.length - 1) : undefined
-    const lines = cardLines({ figures: f, main: m, agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s, stage, agentRows })
-    const open = await read($, picker)
+    const agentRows = stageRows ? Math.max(1, e.props.maxRows - chrome - stageRows - 1) : undefined
+    const lines = cardLines({
+      figures: f, main: m, agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s,
+      stage: draw.node ? [STAGE_SLOT] : draw.lines, hasStageHud, agentRows,
+    })
     const toggle = (kind: Exclude<Picker, null>) => update($, picker, p => (p === kind ? null : kind))
     // A cor de destaque dos ajustes entra aqui, no desenho: as linhas falam 'claude', a barra pinta com a escolhida.
     const accent = accentColor(s)
@@ -564,21 +676,26 @@ export const register: Register = on => {
           <Box key="head">
             {headParts}
             <Text wrap="truncate-end">
-              {gap(first, width - BUTTONS_WIDTH)}
+              {gap(first, width - BUTTONS_WIDTH - (draw.probe ? 1 : 0))}
               {(first.tail ?? []).map(run)}
             </Text>
             <Button key="settings" label={MARKS.settings} plain dimColor={open !== 'settings'} hover={{ color: accent }} onPress={() => void toggle('settings')} />
             <Button key="hide" label={MARKS.hide} plain dimColor hover={{ color: accent }} onPress={() => setHidden(true)} />
+            {draw.probe}
           </Box>
           {open === 'settings'
             ? SettingsPanel({
-                el: { Box, Button, Text } as never, settings: s, strings: t, accent,
-                onChange: patch => void applySettings($, cur => ({ ...cur, ...patch })),
+                el: { Box, Button, Text } as never, settings: s, strings: t, accent, inUse: t.backends[draw.backend], isCramped: s.size === 'grande' && zoom === 1,
+                onChange: patch => {
+                  // escolher "automática" de novo é pedir para conferir outra vez se o terminal desenha imagens
+                  if (patch.resolution === 'auto') void recheckPixels($)
+                  void applySettings($, cur => ({ ...cur, ...patch }))
+                },
                 onReset: () => void applySettings($, cur => ({ ...DEFAULT_SETTINGS, language: cur.language })), // o idioma não é aparência: fica
                 onDemo: () => void startDemo($).then(text => text === strings.demo || $.ui.toast(text)),
                 onClose: () => void update($, picker, () => null),
               })
-            : [...(pickerRow ? [pickerRow] : []), ...rest.map(l => row(l, width))]}
+            : [...(pickerRow ? [pickerRow] : []), ...rest.map(l => (l === STAGE_SLOT && draw.node ? draw.node : row(l, width)))]}
         </Box>
       </Box>,
     )

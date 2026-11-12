@@ -16,7 +16,7 @@ A barra ocupa a largura toda do terminal. Num terminal estreito, modelo, custo e
 | Cabeçalho | Modelo e effort do último pedido, **clicáveis** (veja Uso). A faísca é a da classe do modelo (`✢` Haiku, `✻` Sonnet, `❋` Opus, `❂` Fable; veja O poder): pulsa enquanto o turno roda e fica apagada quando está ocioso. Custo e limites encostam à direita na mesma linha quando cabem. |
 | Custo | Total da sessão (o mesmo que `/cost` soma, subagentes incluídos) e quanto foi gasto desde o último prompt. Duas casas decimais (`$1.75`). O total acende com `▲` por um instante sempre que cresce. |
 | Limites | Janelas de 5 horas e 7 dias, com quanto falta para zerar. Só aparece em contas que reportam limite. |
-| Palco | Quatro linhas de cena, enquanto há um turno ou um agente rodando. Veja abaixo. |
+| Palco | Quatro linhas de cena (oito no tamanho grande), enquanto há um turno ou um agente rodando: em pixels de verdade, em blocos de terminal, em vetor ou em texto, o que a tela conseguir mostrar. Veja abaixo. |
 | Trabalho | Com o palco desligado: um cometa de faíscas `✳✶✻·····`, tempo decorrido, quantas ferramentas foram chamadas e a última delas. Com o palco ligado, essas informações ficam no placar do canto dele. |
 | Agentes | Uma linha por subagente, teammate ou agente de workflow: o nome surge de um punhado de faíscas que assentam letra a letra; depois, a faísca da classe do modelo dele pulsando (na cor do ajudante dele no palco), brilho no nome e um cometa próprio, cada um fora de fase do vizinho; tempo, ferramentas e a última chamada. Ao terminar vira `✓` com um estouro de faíscas que rareia, duração e tokens (ou `✗` se falhou) e some depois de 8 segundos. Por padrão no máximo 6 linhas (3, 6 ou 10 na aba de ajustes); o resto vira `+N agentes`. |
 
@@ -29,7 +29,7 @@ O palco não é um desenho em loop: ele reage ao que está acontecendo de verdad
 - **Cada ferramenta é um tijolo.** Uma chamada de ferramenta vira um tijolo na pilha da esquerda, na cor da família dela. O mascote vai buscar, leva na cabeça (até seis por viagem; com a pilha grande ele aperta o passo), põe na esteira, e a esteira leva até a **parede** que cresce à direita, em fiadas alternadas. O tijolo recém-chegado acende. A parede fica de um turno para o outro: é o retrato do que a sessão fez.
 - **Ajudantes.** Quando o Claude dispara um subagente, o mascote para, grita `!`, e um ajudante menor brota atrás dele numa nuvem de faíscas, na cor do agente (a mesma da faísca dele na lista). O ajudante carrega os tijolos das ferramentas do próprio agente. Agente à espera: o ajudante senta e dorme (`z`). Agente terminado: ele pula, ganha `✓` e some em faíscas; se falhou, apaga e leva `✗`. Até seis ajudantes em cena.
 - **O fim.** Quando o turno termina com uma resposta, o mascote comemora: com três ferramentas ou mais, pulos e confete nas cores dos tijolos; num turno curto, só um pulinho. Um turno interrompido ou que acabou em erro não tem festa: a cena se recolhe.
-- **O placar** no canto de cima à direita mostra o tempo do turno, quantas ferramentas ele chamou e a última delas.
+- **O placar** no canto de cima à direita mostra o tempo do turno, quantas ferramentas ele chamou e a última delas. Onde o palco é uma imagem não há lugar para texto: o placar é a linha de trabalho, logo abaixo dele.
 
 As cores dos tijolos:
 
@@ -69,9 +69,28 @@ O mascote não é sempre o mesmo. A **classe do modelo** decide quem ele é; o *
 
 Para ver uma combinação sem trocar de modelo: `/legends-claude demo opus max` roda a demonstração com essa aparência (um modelo, um effort, ou os dois; uma palavra que não é nem um nem outro é recusada com um aviso). Na demonstração, um ajudante é um Sonnet em `high` e o outro um Haiku em `max`.
 
-Como é desenhado: cada célula do terminal vale 2×2 "subpixels", desenhados com os blocos de quadrante (`▘▝▖▗▀▄▌▐…`), e a cor de fundo permite duas cores na mesma célula. Por isso o mascote anda de meia em meia célula e pula de meia em meia linha. A cena é uma simulação pura, quadro a quadro, sem sorteio: o mesmo estado desenha sempre o mesmo quadro.
+Como o palco de texto é desenhado: cada célula do terminal vale 2×2 "subpixels", desenhados com os blocos de quadrante (`▘▝▖▗▀▄▌▐…`), e a cor de fundo permite duas cores na mesma célula. Por isso o mascote anda de meia em meia célula e pula de meia em meia linha. Os outros jeitos de desenhá-lo estão em [Resolução](#resolução-pixels-blocos-vetor-ou-texto). A cena é uma simulação pura, quadro a quadro, sem sorteio: o mesmo estado desenha sempre o mesmo quadro.
 
 A animação só roda enquanto há o que mostrar (um turno, um agente, a demonstração, ou a cena terminando: um tijolo na esteira, o confete caindo). Parada, a barra não redesenha e não gasta nada.
+
+## Resolução: pixels, blocos, vetor ou texto
+
+O palco é uma cena só, desenhada de quatro jeitos. A barra escolhe o melhor que a tela consegue mostrar (o ajuste **resolução**, `automática` por padrão) e a aba de ajustes diz qual está em uso.
+
+![A mesma cena desenhada em pixels de verdade e em blocos de terminal, no tamanho grande](docs/stage.gif)
+
+| Sai em | Onde | O que se vê |
+| --- | --- | --- |
+| **pixels** | um terminal que desenha imagens: kitty, Ghostty, iTerm2 3.5 ou mais novo com a renderização em tela cheia do Claude Code (dentro do tmux também, com `allow-passthrough` e `focus-events` ligados) | A cena como uma imagem de verdade, 8×16 pixels para cada célula: tijolos com relevo, uma faixa de luz inclinada cruzando o corpo, chamas que deixam ver o fundo, partículas de poucos pixels, e ícones em pixels sobre as cabeças (a faísca de quem pensa, um ícone para a família da ferramenta em curso, `!`, `✓`, `✗`, `z`). |
+| **blocos** | qualquer outro terminal | Uma grade de células do terminal. Cada célula fica com o bloco que mais se aproxima dos pixels dela (`▁▂▃▄▅▆▇`, `▏▎▍▌▋▊▉`, as metades, os quadrantes) e duas cores: as chamas terminam em qualquer oitavo de célula. Os sinais, o placar, o chão e as estrelas seguem como texto. |
+| **vetor** | o app desktop | O mesmo desenho, em SVG. |
+| **texto** | a resolução `clássica`, ou uma versão do Claude Code sem os elementos novos | O palco de sempre: caracteres de quadrante, 2×2 "subpixels" para cada célula. |
+
+- **Movimento mais suave.** Em pixels e em blocos o palco é repintado no lugar entre dois quadros da simulação, perto de 25 vezes por segundo, enquanto a barra segue sendo redesenhada 8 vezes por segundo: os bichos deslizam de onde estavam para onde vão, os tijolos correm na esteira e as faíscas voam, em vez de pular. Em blocos um bicho anda de meia em meia célula, o menor passo que um bloco desenha sobre o fundo do próprio terminal.
+- **Como a barra descobre.** Num terminal, o primeiro desenho leva uma imagem transparente de um pixel num canto e pede ao Claude Code que a repinte: a resposta diz se o terminal desenha imagens. Até ela chegar (uma fração de segundo) o palco fica em blocos. Se as imagens param de funcionar no meio do caminho (um tmux sem passthrough, por exemplo), o palco volta sozinho aos blocos.
+- **Tamanho.** `grande` dobra o palco (oito linhas) e dá ao mundo dele a metade da largura da barra, então cada bloco mostra mais: em blocos aparecem o relevo dos tijolos, o volume do corpo, a faixa de luz inclinada e a linha do chão, como em pixels. Precisa de um terminal com pelo menos 118 colunas e de 11 linhas livres na faixa; sem isso o palco fica no tamanho de sempre e a aba de ajustes avisa. Não tem efeito no palco de texto.
+- Uma imagem não leva texto: em pixels e em vetor o placar volta para a linha de trabalho, logo abaixo do palco.
+- Para manter o palco exatamente como era antes da versão 0.9, escolha `clássica`. Para perguntar de novo ao terminal se ele desenha imagens (depois de ligar o passthrough do tmux, por exemplo), escolha `automática` outra vez.
 
 ## Instalação
 
@@ -109,6 +128,8 @@ idioma       ● Português  English
 cor          ● Claude  Azul  Verde  Roxo  Rosa  Ciano  Âmbar  Mono
 animação     ● completa  suave  parada
 velocidade   lenta  ● normal  rápida
+resolução    ● automática  blocos  clássica    em uso: blocos
+tamanho      ● normal  grande
 mostrar      ☑ régua  ☑ palco  ☑ limites  ☑ custo do turno
 agentes      3  ● 6  10
 ```
@@ -119,6 +140,8 @@ agentes      3  ● 6  10
 | cor | A cor de destaque: o mascote, a faísca, o modelo, o cometa, o pulso da régua, o custo aceso. Cada opção já aparece na própria cor. `Claude` e `Mono` seguem o tema claro/escuro do Claude Code. |
 | animação | `completa` é tudo, palco incluído; `suave` deixa só a faísca pulsando e o cometa (sem palco, pulso na régua, nome surgindo, brilho nem estouro); `parada` não mexe nada e só atualiza o tempo uma vez por segundo. |
 | velocidade | A duração de um quadro: 200, 125 ou 80 ms. É também o ritmo do palco. Sem efeito com a animação parada. |
+| resolução | Em que o palco é desenhado. `automática` é o melhor que a tela oferece: pixels de verdade num terminal que desenha imagens, blocos de terminal nos outros, vetor no app desktop. `blocos` mantém os blocos mesmo onde há pixels. `clássica` é o palco de texto. Ao lado das opções, a aba diz o que está em uso nesta tela. |
+| tamanho | `normal` é o palco de quatro linhas; `grande` dobra o palco (veja [Resolução](#resolução-pixels-blocos-vetor-ou-texto)). Só vale fora do palco de texto, e onde a barra tem espaço. |
 | mostrar | Liga e desliga a régua de cima, o palco, os limites de 5h/7d e o custo do turno. O palco só aparece com a animação `completa`. |
 | agentes | Quantas linhas de agente aparecem antes do resumo `+N agentes`. |
 
@@ -127,7 +150,10 @@ agentes      3  ● 6  10
 - Claude Code com suporte a mods (function hooks). Escrito e testado na versão 2.1.322. Essa API está em acesso antecipado e pode mudar entre versões.
 - A barra precisa de pelo menos 60 colunas de terminal; abaixo disso ela não desenha. Numa barra com mais de 120 colunas o palco não estica além disso.
 - A faixa acima do prompt pode ocupar até metade da altura do terminal. Se o palco não couber (menos de 7 linhas livres) ele não entra e a linha de trabalho volta; se couber justo, é a lista de agentes que encolhe para `+N agentes`.
-- O palco usa os blocos de quadrante e cor de fundo em 24 bits. Num terminal sem cor de 24 bits as cores dos tijolos e da aura são aproximadas; numa fonte sem esses blocos o desenho não fecha.
+- O palco em pixels precisa de um terminal que desenhe imagens (o protocolo gráfico do kitty com placeholders, ou as imagens embutidas do iTerm2) e de uma versão do Claude Code com as peças `Image`, `Raster` e `$.ui.blit` da API de mods. Onde falta alguma delas a barra recua sozinha: para blocos, e de blocos para texto.
+- O palco em blocos e em texto usa os caracteres de Block Elements (`▀▄█▌▐`, os oitavos, os quadrantes) e cor de 24 bits. Num terminal sem cor de 24 bits as cores dos tijolos e da aura são aproximadas; numa fonte sem esses blocos o desenho não fecha.
+- Em pixels, em blocos e em vetor as cores são pintadas como RGB, não como cores do tema: as que vêm do tema do Claude Code (a cor `Claude` do mascote, as dos ajudantes, o chão) são aproximações próximas para o tema claro e para o escuro.
+- Repintar o palco entre os quadros custa de um a três milissegundos por vez (medido fora do Claude Code), e só enquanto a cena se mexe e o palco está à vista.
 - A faísca de cada classe usa glifos do bloco Dingbats (`✢ ✣ ✤`, `✸ ✹ ✺ ❋`, `✧ ✦ ✪ ❂ ❉`), como a do próprio Claude Code; numa fonte sem algum deles o terminal mostra o substituto dele.
 - A aura esmaece para o fundo do terminal, e o mod só sabe se o tema é claro ou escuro pelo nome dele (a linha `theme` do `/config`): um tema cujo nome não diz `light` vale como escuro.
 - O custo por agente não aparece: o Claude Code só expõe o custo total da sessão. Por agente, a barra mostra os tokens do último turno.
@@ -152,7 +178,10 @@ O módulo de hooks e o que ele importa, em `hooks/`:
 - `effects.ts`: as animações de texto (faísca, cometa, pulso da régua, nome surgindo, estouro, brilho).
 - `format.ts`, `parts.ts`, `agents.ts`: formatos de texto, trechos de linha, e as linhas de agente conferidas com a lista do engine.
 - `sim.ts`: a simulação do palco, pura: o estado e as funções que dão o estado seguinte.
-- `scene.ts`: o desenho de um quadro da cena (posturas, balões, tijolos, esteira, estrelas).
+- `scene.ts`: o desenho de um quadro da cena em texto (balões, tijolos, esteira, estrelas). `pose.ts`: o que cada bicho está fazendo num quadro, usado pelo palco de texto e pelo de pixels.
+- `hd.ts`, `hd-aura.ts`, `hd-art.ts`: a mesma cena em pixels, entre dois quadros da simulação: uma lista de retângulos de tinta, com a aura, as partículas e os desenhos miúdos (tijolos com relevo, ícones, chão).
+- `canvas.ts`, `png.ts`, `blocks.ts`, `vector.ts`: dos retângulos a um quadro de pixels, a um PNG (o mod não tem zlib: o codificador é próprio), a células de terminal (o bloco e as duas cores que mais se aproximam de cada célula) e a SVG.
+- `stage.ts`, `stage-node.tsx`, `painter.ts`: em que o palco sai em cada tela, o elemento dele (`Image`, `Raster` ou `Svg`), e o relógio que o repinta entre os quadros e pergunta ao terminal se ele desenha imagens.
 - `power.ts`: o poder de quem trabalha: a classe do modelo, o degrau do effort, a força da aura e a faísca de cada classe.
 - `aura.ts`: a aparência de um bicho com poder, pura: a aura, o brilho do corpo, os olhos, as fagulhas, os raios, os jatos e os fogos.
 - `pixels.ts`, `sprites.ts`, `palette.ts`, `color.ts`: o desenhador de subpixels (com o clarão de fundo), os desenhos dos bichos, as cores e as contas de cor.
@@ -163,7 +192,7 @@ O módulo de hooks e o que ele importa, em `hooks/`:
 
 Os comentários do código e os nomes dos testes estão em português, a língua em que o projeto nasceu.
 
-Os testes (`*.test.ts`, 259 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena, o poder de cada classe e a barra montada em cada superfície.
+Os testes (`*.test.ts`, 383 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena, o poder de cada classe, o codificador de PNG e o ajuste em blocos, e a barra montada em cada superfície, em texto, em blocos, em pixels e em vetor.
 
 Os GIFs dos dois READMEs saem das mesmas funções que desenham a barra, fora do Claude Code (precisa de `bun` e de Pillow). O turno de mentira roda com o modelo e o effort pedidos (o padrão é `fable high`); a tabela de poderes é a mesma nos dois idiomas:
 
@@ -173,8 +202,16 @@ bun run scripts/demo-frames.ts 100 pt fable max | python3 scripts/demo-gif.py do
 bun run scripts/power-frames.ts | python3 scripts/demo-gif.py docs/power.gif
 ```
 
+O GIF do palco em pixels é feito só do palco, em duas faixas que andam juntas (os arquivos de quadros são grandes: deixe-os fora do repositório):
+
+```
+bun run scripts/stage-frames.ts /tmp/pixels.bin 100 pixels normal fable max
+bun run scripts/stage-frames.ts /tmp/grande.bin 112 blocos grande fable max
+python3 scripts/stage-gif.py docs/stage.gif "pixels=/tmp/pixels.bin" "blocos, grande  ·  blocks, large=/tmp/grande.bin"
+```
+
 A documentação tem dois arquivos, que mudam juntos: `README.md` (inglês) e `README.pt-BR.md` (português).
 
 ## Créditos e licença
 
-MIT. Algumas funções auxiliares foram adaptadas de [claude-statuspane](https://github.com/xuanji86/claude-statuspane) (MIT), de Anji Xu. As animações seguem técnicas da skill `ascii-animations` (grade de caracteres, máquina de estados, onda que se propaga, partículas), adaptadas para o terminal.
+MIT. Algumas funções auxiliares foram adaptadas de [claude-statuspane](https://github.com/xuanji86/claude-statuspane) (MIT), de Anji Xu. A ideia de desenhar o mascote com os elementos de imagem da própria tela, e não só com caracteres, veio do [claud-in](https://github.com/two2dope/claud-in), de two2Dope, cujo mascote é um SVG no app desktop. As animações seguem técnicas da skill `ascii-animations` (grade de caracteres, máquina de estados, onda que se propaga, partículas), adaptadas para o terminal.

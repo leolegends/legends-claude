@@ -12,10 +12,14 @@ const band = (surface: (typeof SURFACES)[number], isWorking = false, bodyColumns
 
 type Listed = { id: string; status: string; type: string; description: string }
 
+// Os testes desta parte conferem o palco de texto: pedem a resolução `classica`. Numa instalação nova
+// o padrão é `auto` (blocos, pixels ou vetor, pelo que a tela oferece): esses têm os seus testes no fim.
+const classic = (extra: Record<string, unknown> = {}) => ({ settings: { resolution: 'classica', ...extra } })
+
 // O mundo abaixo de uma sessão iniciada: modelo, custo, lista de agentes e os eventos que o engine responderia.
 const startSession = async (
   $: { session: { start: (e: never) => Promise<unknown> } }, on: On, listed: () => Listed[] = () => [],
-  model: () => string = () => 'claude-fable-5-2', store: Record<string, unknown> = {},
+  model: () => string = () => 'claude-fable-5-2', store: Record<string, unknown> = classic(),
   env: Record<string, string> = { LANG: 'pt_BR.UTF-8' }, // os testes de sempre rodam num sistema em português
   theme = 'dark',
 ) => {
@@ -562,7 +566,7 @@ test('um turno cujo fim não é avisado se encerra sozinho, e o relógio para', 
 
 test('religar o palco no meio de um turno põe a cena no ar na hora', async ($, on) => {
   const clock = mock.clock(on, { now: 1_000_000 })
-  await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { showStage: false } })
+  await startSession($, on, () => [], () => 'claude-fable-5-2', classic({ showStage: false }))
   const ui = await $.ui.mount(band('terminal', true))
   await $.turn.start({ text: 'oi', turnId: 't1' })
   await clock.advance(1_000)
@@ -654,7 +658,7 @@ test('em inglês, o comando responde em inglês e aceita "settings"', async ($, 
 
 test('em inglês, a demonstração e o placar dela falam inglês', async ($, on) => {
   const clock = mock.clock(on, { now: 1_000_000 })
-  await startSession($, on, () => [], () => 'claude-fable-5-2', { settings: { language: 'en' } })
+  await startSession($, on, () => [], () => 'claude-fable-5-2', classic({ language: 'en' }))
   const ui = await $.ui.mount(band('terminal'))
   await $.command.run({ command: 'legends-claude', args: 'demo' } as never)
   await clock.advance(3_000)
@@ -776,7 +780,7 @@ test('num tema claro a aura clareia em vez de escurecer, e trocar o tema no /con
   const clock = mock.clock(on, { now: 1_000_000 })
   answerSteps(on)
   on('config.set', ($, e) => ({ value: e.value }) as never)
-  await startSession($, on, () => [], () => 'claude-sonnet-5-5', {}, { LANG: 'pt_BR.UTF-8' }, 'light')
+  await startSession($, on, () => [], () => 'claude-sonnet-5-5', classic(), { LANG: 'pt_BR.UTF-8' }, 'light')
   const ui = await $.ui.mount(band('terminal', true))
   await $.turn.start({ text: 'oi', turnId: 't1' })
   for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'claude-sonnet-5-5', effort: 'high', messageCount: 1 })) void _

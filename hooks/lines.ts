@@ -32,6 +32,12 @@ const TYPE_MAX = 20
 const DESC_MIN = 6
 export { EFFORTS }
 
+/**
+ * O lugar do palco entre as linhas da barra, quando ele não é texto (uma imagem, uma grade de blocos,
+ * um SVG): quem desenha a barra reconhece esta linha e põe ali o elemento dele.
+ */
+export const STAGE_SLOT: Line = { parts: [] }
+
 // Os textos de quem chama uma linha sem dizer o idioma: os do idioma padrão.
 const BASE = stringsOf(DEFAULT_SETTINGS.language)
 
@@ -187,6 +193,11 @@ export type CardInput = {
   settings?: Settings
   /** As linhas do palco, já desenhadas; com elas, o placar do palco faz as vezes da linha de trabalho. */
   stage?: readonly Line[]
+  /**
+   * O palco mostra o placar do turno. Uma imagem não leva texto: sem o placar nele, a linha de
+   * trabalho volta, logo abaixo do palco.
+   */
+  hasStageHud?: boolean
   /** Quantas linhas de agente cabem na faixa; os ajustes mandam quando o número deles é menor. */
   agentRows?: number
 }
@@ -194,7 +205,7 @@ export type CardInput = {
 // Puro: as linhas da barra, na largura `max`. Não há linha de contexto: é sobre custo, modelo e quem trabalha.
 // Quando cabe, modelo fica à esquerda e custo e limites encostam à direita da mesma linha; senão, empilham.
 export const cardLines = (input: CardInput): Line[] => {
-  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], agentRows = Infinity } = input
+  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], hasStageHud = true, agentRows = Infinity } = input
   const fx = effectsOf(s)
   const t = stringsOf(s.language)
   const head = headLine(f, isWorking, fr, fx, t)
@@ -202,7 +213,7 @@ export const cardLines = (input: CardInput): Line[] => {
   const limits = s.showLimits ? limitsLine(f, now) : null
   const top: Line = { parts: head.parts, tail: [...cost.parts, ...(limits ? [{ text: '  ·  ', dim: true }, ...limits.parts] : [])] }
   const isOneRow = lineWidth(top) + BUTTONS_WIDTH <= max
-  const work = isWorking && m.startedAt > 0 && !stage.length ? [workLine(m, now, fr, fx, t)] : []
+  const work = isWorking && m.startedAt > 0 && (!stage.length || !hasStageHud) ? [workLine(m, now, fr, fx, t)] : []
   const sorted = sortAgents(list)
   const shown = sorted.slice(0, Math.max(0, Math.min(s.maxAgents, agentRows)))
   const hiddenCount = sorted.length - shown.length

@@ -303,12 +303,24 @@ describe('ajustes', () => {
   })
 
   test('animação parada redesenha uma vez por segundo; a velocidade só vale fora dela', () => {
-    expect(effectsOf(DEFAULT_SETTINGS)).toEqual({ frameMs: 125, isFull: true, isStill: false, hasStage: true })
+    expect(effectsOf(DEFAULT_SETTINGS)).toEqual({ frameMs: 125, isFull: true, isStill: false, hasStage: true, isLarge: false })
     expect(effectsOf({ ...DEFAULT_SETTINGS, speed: 'rapida' }).frameMs).toBe(80)
     expect(effectsOf({ ...DEFAULT_SETTINGS, speed: 'lenta' }).frameMs).toBe(200)
-    expect(effectsOf({ ...DEFAULT_SETTINGS, motion: 'suave' })).toEqual({ frameMs: 125, isFull: false, isStill: false, hasStage: false })
-    expect(effectsOf({ ...DEFAULT_SETTINGS, motion: 'parada', speed: 'rapida' })).toEqual({ frameMs: 1000, isFull: false, isStill: true, hasStage: false })
+    expect(effectsOf({ ...DEFAULT_SETTINGS, motion: 'suave' })).toEqual({ frameMs: 125, isFull: false, isStill: false, hasStage: false, isLarge: false })
+    expect(effectsOf({ ...DEFAULT_SETTINGS, motion: 'parada', speed: 'rapida' })).toEqual({ frameMs: 1000, isFull: false, isStill: true, hasStage: false, isLarge: false })
     expect(effectsOf({ ...DEFAULT_SETTINGS, showStage: false }).hasStage).toBe(false)
+  })
+
+  test('o palco grande só vale fora do palco de texto, que tem um tamanho só', () => {
+    expect(effectsOf({ ...DEFAULT_SETTINGS, size: 'grande' }).isLarge).toBe(true)
+    expect(effectsOf({ ...DEFAULT_SETTINGS, size: 'grande', resolution: 'blocos' }).isLarge).toBe(true)
+    expect(effectsOf({ ...DEFAULT_SETTINGS, size: 'grande', resolution: 'classica' }).isLarge).toBe(false)
+  })
+
+  test('a resolução e o tamanho salvos são conferidos como os outros campos', () => {
+    expect(sanitize({ resolution: 'blocos', size: 'grande' })).toEqual({ ...DEFAULT_SETTINGS, resolution: 'blocos', size: 'grande' })
+    expect(sanitize({ resolution: '8k', size: 'enorme' })).toEqual(DEFAULT_SETTINGS)
+    expect([DEFAULT_SETTINGS.resolution, DEFAULT_SETTINGS.size]).toEqual(['auto', 'normal'])
   })
 
   const set = (over: Partial<typeof DEFAULT_SETTINGS>) => ({ ...DEFAULT_SETTINGS, ...over })
