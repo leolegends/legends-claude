@@ -3,6 +3,7 @@ import type { EngineInterface, RenderElement } from 'claude-code'
 import { LANGUAGES } from './i18n'
 import type { Strings } from './i18n'
 import { ACCENTS, AGENT_LIMITS, MOTIONS, RESOLUTIONS, SIZES, SPEEDS, TOGGLES } from './settings'
+import { VERSION } from './version'
 import type { StatusSettings as Settings } from '../types'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
@@ -49,6 +50,7 @@ export const SettingsPanel = ({ el, settings: s, strings: t, accent, inUse, isCr
     <Box key="set-head">
       <Text color={accent} bold>⚙ </Text>
       <Text bold>{t.panel.title}</Text>
+      <Text dimColor>{`  v${VERSION}`}</Text>
       <Box flexGrow={1} />
       <Button key="set-demo" label={t.panel.demo} plain dimColor onPress={onDemo} />
       <Button key="set-reset" label={t.panel.reset} plain dimColor onPress={onReset} />

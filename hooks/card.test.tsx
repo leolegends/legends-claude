@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { KIND_PAINT, tintOf } from './palette'
+import { VERSION } from './version'
 
 const SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
 const band = (surface: (typeof SURFACES)[number], isWorking = false, bodyColumns = 120, maxRows = 20) =>
@@ -701,6 +702,15 @@ for (const { name, store, env, title } of FIRST_LANGUAGE) {
     await ui.unmount()
   })
 }
+
+test('a aba de ajustes mostra a versão do mod no cabeçalho', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  await startSession($, on, () => [], () => 'claude-fable-5-2', {}, { LANG: 'pt_BR.UTF-8' })
+  const ui = await $.ui.mount(band('terminal'))
+  await ui.press({ key: 'settings' })
+  expect(await find(ui, new RegExp(`v${VERSION.replace(/\./g, '\\.')}$`))).toBeDefined()
+  await ui.unmount()
+})
 
 // As tintas que só o poder põe no palco: os hex que não são de tijolo (a aura, o brilho do corpo, os olhos, as fagulhas).
 const BRICK_PAINTS = new Set<unknown>(Object.values(KIND_PAINT))
