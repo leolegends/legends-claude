@@ -28,6 +28,12 @@ THEME = {
 # Cada bloco de quadrante e os subpixels que ele acende: 1 cima-esquerda, 2 cima-direita, 4 baixo-esquerda, 8 baixo-direita.
 QUADRANTS = {'▘': 1, '▝': 2, '▀': 3, '▖': 4, '▌': 5, '▞': 6, '▛': 7, '▗': 8, '▚': 9, '▐': 10, '▜': 11, '▄': 12, '▙': 13, '▟': 14, '█': 15}
 LINES = '─━═╪'
+# Os blocos de oitavos e o pedaço da célula que cada um pinta, em oitavos: (x, y, largura, altura).
+EIGHTHS = {
+    **{chr(0x2580 + k): (0, 8 - k, 8, k) for k in range(1, 8)},  # ▁▂▃▄▅▆▇
+    **{chr(0x2590 - k): (0, 0, k, 8) for k in range(1, 8)},  # ▏▎▍▌▋▊▉
+    '▔': (0, 0, 8, 1), '▕': (7, 0, 1, 8),
+}
 
 
 def rgb(name):
@@ -80,6 +86,11 @@ def draw_frame(draw, rows, width, fonts):
                     ):
                         if QUADRANTS[ch] & bit:
                             draw.rectangle([x + x0, y + y0, x + x1 - 1, y + y1 - 1], fill=color)
+                elif ch in EIGHTHS:
+                    ex, ey, ew, eh = EIGHTHS[ch]
+                    x0, y0 = x + round(ex * CELL_W / 8), y + round(ey * CELL_H / 8)
+                    x1, y1 = x + round((ex + ew) * CELL_W / 8), y + round((ey + eh) * CELL_H / 8)
+                    draw.rectangle([x0, y0, x1 - 1, y1 - 1], fill=color)
                 elif ch in LINES:
                     draw_line(draw, ch, x, y, color)
                 elif ch != ' ':

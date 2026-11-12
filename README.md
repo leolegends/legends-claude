@@ -194,7 +194,7 @@ The code comments and the test names are in Portuguese, the language the project
 
 The tests (`*.test.ts`, 383 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene, the power of each class, the PNG encoder and the fit to blocks, and the bar mounted on each surface, in text, in blocks, in pixels and in vector.
 
-The GIFs of the two READMEs come out of the same functions that draw the bar, outside Claude Code (needs `bun` and Pillow). The make-believe turn runs with the model and the effort asked for (the default is `fable high`); the power table is the same in both languages:
+The GIFs of the two READMEs come out of the same functions that draw the bar, outside Claude Code (needs `bun` and Pillow). The make-believe turn runs with the model and the effort asked for (the default is `fable high`), with the stage in blocks, as most terminals show it (add `texto` at the end for the text stage); the power table is the same in both languages:
 
 ```
 bun run scripts/demo-frames.ts 100 en fable max | python3 scripts/demo-gif.py docs/demo.gif

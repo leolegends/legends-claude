@@ -194,7 +194,7 @@ Os comentários do código e os nomes dos testes estão em português, a língua
 
 Os testes (`*.test.ts`, 383 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena, o poder de cada classe, o codificador de PNG e o ajuste em blocos, e a barra montada em cada superfície, em texto, em blocos, em pixels e em vetor.
 
-Os GIFs dos dois READMEs saem das mesmas funções que desenham a barra, fora do Claude Code (precisa de `bun` e de Pillow). O turno de mentira roda com o modelo e o effort pedidos (o padrão é `fable high`); a tabela de poderes é a mesma nos dois idiomas:
+Os GIFs dos dois READMEs saem das mesmas funções que desenham a barra, fora do Claude Code (precisa de `bun` e de Pillow). O turno de mentira roda com o modelo e o effort pedidos (o padrão é `fable high`), com o palco em blocos, como a maioria dos terminais o mostra (`texto` no fim dá o palco de texto); a tabela de poderes é a mesma nos dois idiomas:
 
 ```
 bun run scripts/demo-frames.ts 100 en fable max | python3 scripts/demo-gif.py docs/demo.gif

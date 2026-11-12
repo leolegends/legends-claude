@@ -1,14 +1,19 @@
 // Gera os quadros do GIF do README: a barra inteira (régua, cabeçalho, palco, linhas de agente) ao longo
 // de um turno de mentira, com as mesmas funções que desenham a barra de verdade. Sai JSON no stdout.
 //
-//   bun run scripts/demo-frames.ts [colunas] [en|pt] [modelo] [effort] | python3 scripts/demo-gif.py docs/demo.gif
+//   bun run scripts/demo-frames.ts [colunas] [en|pt] [modelo] [effort] [blocos|texto] | python3 scripts/demo-gif.py docs/demo.gif
 //
 // O idioma é o dos textos da barra no GIF: `en` (o padrão, para o README.md) ou `pt` (para o README.pt-BR.md).
 // O modelo (`fable`, `opus`, `sonnet`, `haiku`; o padrão é `fable`) e o effort (`low` a `max`; o padrão é
-// `high`) são os do turno de mentira: deles sai a aparência do mascote.
+// `high`) são os do turno de mentira: deles sai a aparência do mascote. O palco sai em `blocos` (o padrão:
+// o que a maioria dos terminais mostra, repintado entre dois quadros da simulação) ou em `texto` (o palco
+// clássico, de quadrantes).
 //
 // Não faz parte do mod: roda fora do Claude Code, só para documentação.
+import { DEFAULT_COLOR } from '../hooks/blocks'
+import type { Cell } from '../hooks/blocks'
 import { ruleParts } from '../hooks/effects'
+import { hdScene } from '../hooks/hd'
 import { stringsOf } from '../hooks/i18n'
 import { cardLines, hudParts } from '../hooks/lines'
 import { kindOf } from '../hooks/palette'
@@ -17,6 +22,7 @@ import { TAIL_GAP, lineWidth } from '../hooks/parts'
 import type { Line, Part } from '../hooks/parts'
 import { sceneRows } from '../hooks/scene'
 import { DEFAULT_SETTINGS } from '../hooks/settings'
+import { rasterCells } from '../hooks/stage'
 import { EMPTY_SIM, MAIN, begin, enqueue, finish, geometry, hasScene, isAnimating, settle, step, syncHelpers, think } from '../hooks/sim'
 import type { Sim } from '../hooks/sim'
 import type { StatusAgent } from '../types'
@@ -27,8 +33,13 @@ const SETTINGS = { ...DEFAULT_SETTINGS, language: LANGUAGE } as const
 const MODELS: Record<string, string> = { fable: 'claude-fable-5-2', opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5' }
 const MODEL = MODELS[process.argv[4] ?? 'fable'] ?? 'claude-fable-5-2'
 const EFFORT = process.argv[5] ?? 'high'
+const IS_BLOCKS = process.argv[6] !== 'texto'
 const STRINGS = stringsOf(LANGUAGE)
 const FRAME_MS = 125
+// Em blocos, o palco é repintado entre dois quadros da simulação, como na barra de verdade (lá, perto de
+// 25 vezes por segundo; no GIF, 16): o resto da barra segue a 8 quadros por segundo.
+const PAINTS = IS_BLOCKS ? 2 : 1
+const LOOK = { isLight: false, accent: 'claude' }
 const T0 = 1_000_000
 const LAST_FRAME = 232
 const TURN_ENDS = 190
@@ -92,7 +103,26 @@ const laidOut = (line: Line, room: number): Part[] => {
   return [...line.parts, { text: ' '.repeat(gap) }, ...(line.tail ?? [])]
 }
 
-const barAt = (sim: Sim, frame: number): Part[][] => {
+const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
+
+// Uma célula do palco em blocos como um pedaço de linha: o caractere, a cor dele e a do fundo.
+const cellPart = ({ code, fg, bg }: Cell): Part => ({
+  text: String.fromCodePoint(code),
+  ...(fg === DEFAULT_COLOR ? {} : { color: hex(fg) }),
+  ...(bg === DEFAULT_COLOR ? {} : { bg: hex(bg) }),
+})
+
+// O palco num instante: em texto, as linhas de quadrantes; em blocos, a cena entre o estado mostrado e o
+// seguinte, ajustada em células como o `Raster` as recebe.
+const stageAt = (prev: Sim, sim: Sim, alpha: number, hud: Part[], powers: Map<string, ReturnType<typeof powerOf>>): Line[] => {
+  if (!hasScene(sim)) return []
+  if (!IS_BLOCKS) return sceneRows({ sim, geo, hud, powers }).map(parts => ({ parts }))
+  const scene = hdScene({ prev, cur: sim, alpha, geo, hud, powers, ...LOOK, trace: 'blocks', zoom: 1 })
+  const cells = rasterCells(scene, LOOK)
+  return Array.from({ length: scene.rows }, (_, row) => ({ parts: cells.slice(row * scene.columns, (row + 1) * scene.columns).map(cellPart) }))
+}
+
+const barAt = (prev: Sim, sim: Sim, frame: number, alpha: number): Part[][] => {
   const now = T0 + frame * FRAME_MS
   const isWorking = frame < TURN_ENDS
   const agents = agentsAt(frame)
@@ -104,7 +134,7 @@ const barAt = (sim: Sim, frame: number): Part[][] => {
   }
   // o poder de cada um em cena, como a barra de verdade o tira do modelo e do effort
   const powers = new Map([[MAIN, powerOf(MODEL, EFFORT)], ...agents.map(a => [a.id, powerOf(a.model, a.effort)] as const)])
-  const stage = hasScene(sim) ? sceneRows({ sim, geo, hud: isWorking ? hudParts(main, now, STRINGS) : [], powers }).map(parts => ({ parts })) : []
+  const stage = stageAt(prev, sim, alpha, isWorking ? hudParts(main, now, STRINGS) : [], powers)
   const [head = { parts: [] }, ...rest] = cardLines({ figures, main, agents, now, frame, isWorking, max: WIDTH, settings: SETTINGS, stage })
   return [
     ruleParts(WIDTH, frame, isWorking || agents.some(a => a.state === 'running') || isAnimating(sim), levelOf(EFFORT)),
@@ -117,9 +147,10 @@ const frames = Array.from({ length: LAST_FRAME + 1 }).reduce<{ sim: Sim; rows: P
   (acc, _, frame) => {
     const cued = cuesAt(frame).reduce((s, cue) => cue(s), acc.sim)
     const sim = step(syncHelpers(cued, agentsAt(frame)), geo)
-    return { sim, rows: [...acc.rows, barAt(sim, frame)] }
+    const paints = Array.from({ length: PAINTS }, (_, paint) => barAt(acc.sim, sim, frame, PAINTS > 1 ? paint / PAINTS : 1))
+    return { sim, rows: [...acc.rows, ...paints] }
   },
   { sim: EMPTY_SIM, rows: [] },
 ).rows
 
-console.log(JSON.stringify({ width: WIDTH, frameMs: FRAME_MS, frames }))
+console.log(JSON.stringify({ width: WIDTH, frameMs: Math.round(FRAME_MS / PAINTS), frames }))
