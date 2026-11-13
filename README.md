@@ -73,6 +73,28 @@ How the text stage is drawn: every terminal cell counts as 2×2 "subpixels", dra
 
 The animation only runs while there is something to show (a turn, an agent, the demo, or the scene winding down: a brick on the belt, confetti falling). When idle, the bar does not redraw and costs nothing.
 
+## Mascots: Clawd, Pikachu, Mario and Kratos
+
+![The three colored avatars on the stage in pixels, large size: Pikachu, Mario and Kratos carry bricks, with the Opus aura](docs/avatars.gif)
+
+Who the mascot is on the stage is picked in the settings tab (`⚙`), on the `mascot` row. The change applies right away and is saved.
+
+| Mascot | What it looks like |
+| --- | --- |
+| Clawd | The usual one, from the Claude Code logo, in a single color: the accent color from the settings. |
+| Pikachu | Yellow, with dark-tipped ears, red cheeks and the lightning-bolt tail. |
+| Mario | Red cap and shirt, mustache, blue overalls with yellow buttons, white gloves. |
+| Kratos | Ash-white skin, the red stripe over the eye, beard, golden pauldron and leather skirt. |
+
+- **Two drawings per colored avatar.** The fine one (36×20 dots) shows wherever there is detail: in pixels, in vector and in `large` blocks. In `normal`-size blocks and on the text stage a low-resolution version (18×5) is used, much simpler: it is what fits in quadrant blocks with two colors per cell.
+- **Everything Clawd does, they do.** They blink, look around while thinking, raise their arms to carry and to celebrate, walk, sit down to sleep, and fade when they fail.
+- **The power applies to all of them.** The aura, the streaks, the sparks, the bolts, Fable's flight and the fireworks come from the model and the effort, as with Clawd. From Opus up it is the pupils that light up. The sheen is lighter over a colored avatar, so it keeps showing underneath.
+- **Their colors are their own.** The accent color does not paint a colored avatar; it still applies to the rest of the bar (the spark, the model, the comet, the rule).
+- **The helpers do not change**: they are still the small Clawds, each in its agent's color.
+- The choice is drawing only: all of them have Clawd's width and head, so the stage tells the same story with any of them (where it stops, how many bricks it carries).
+
+Pikachu, Mario and Kratos are characters and trademarks of their owners (Nintendo / The Pokémon Company and Sony Interactive Entertainment). The drawings here are fan-made pixel art, with no affiliation with or endorsement by those companies.
+
 ## Resolution: pixels, blocks, vector or text
 
 The stage is one scene drawn four ways. The bar picks the best one the screen can show (the **resolution** setting, `auto` by default) and the settings tab says which one is in use.
@@ -187,6 +209,7 @@ The hooks module and what it imports, in `hooks/`:
 - `power.ts`: the power of whoever is working: the model's class, the effort's step, the aura's strength and the spark of each class.
 - `aura.ts`: the look of a creature with power, pure: the aura, the body's sheen, the eyes, the sparks, the lightning, the jets and the fireworks.
 - `pixels.ts`, `sprites.ts`, `palette.ts`, `color.ts`: the subpixel renderer (with the glow behind the scene), the creatures' drawings, the colors and the color math.
+- `avatars.ts`: the mascot's colored avatars, as text: each one's palette, the common and the fine drawing, with the stances as patches over it. A new avatar is a new drawing here, an option in `settings.ts` and a name in the `StatusAvatar` type.
 - `demo.ts`: the script of the demo.
 - `i18n.ts`: the bar's texts in Portuguese and in English. A new text goes into the `Strings` type and the compiler demands its translation in both.
 - `settings.ts`, `settings-panel.tsx`: the settings and their tab.
@@ -194,7 +217,7 @@ The hooks module and what it imports, in `hooks/`:
 
 The code comments and the test names are in Portuguese, the language the project was born in.
 
-The tests (`*.test.ts`, 383 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene, the power of each class, the PNG encoder and the fit to blocks, and the bar mounted on each surface, in text, in blocks, in pixels and in vector.
+The tests (`*.test.ts`, 399 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene, the power of each class, the PNG encoder and the fit to blocks, and the bar mounted on each surface, in text, in blocks, in pixels and in vector.
 
 The GIFs of the two READMEs come out of the same functions that draw the bar, outside Claude Code (needs `bun` and Pillow). The make-believe turn runs with the model and the effort asked for (the default is `fable high`), with the stage in blocks, as most terminals show it (add `texto` at the end for the text stage); the power table is the same in both languages:
 
@@ -210,6 +233,9 @@ The GIF of the pixel stage is made of the stage alone, in two strips that run to
 bun run scripts/stage-frames.ts /tmp/pixels.bin 100 pixels normal fable max
 bun run scripts/stage-frames.ts /tmp/large.bin 112 blocos grande fable max
 python3 scripts/stage-gif.py docs/stage.gif "pixels=/tmp/pixels.bin" "blocos, grande  ·  blocks, large=/tmp/large.bin"
+# the mascots GIF: the last argument of stage-frames.ts is the avatar
+for a in pikachu mario kratos; do bun run scripts/stage-frames.ts /tmp/$a.bin 120 pixels grande opus high escuro $a; done
+python3 scripts/stage-gif.py docs/avatars.gif "Pikachu=/tmp/pikachu.bin" "Mario=/tmp/mario.bin" "Kratos=/tmp/kratos.bin"
 ```
 
 The documentation has two files that change together: `README.md` (English) and `README.pt-BR.md` (Portuguese).

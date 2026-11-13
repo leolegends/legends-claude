@@ -73,6 +73,28 @@ Como o palco de texto é desenhado: cada célula do terminal vale 2×2 "subpixel
 
 A animação só roda enquanto há o que mostrar (um turno, um agente, a demonstração, ou a cena terminando: um tijolo na esteira, o confete caindo). Parada, a barra não redesenha e não gasta nada.
 
+## Mascotes: Clawd, Pikachu, Mario e Kratos
+
+![Os três avatares coloridos no palco em pixels, no tamanho grande: Pikachu, Mario e Kratos carregam tijolos, com a aura de Opus](docs/avatars.gif)
+
+Quem é o mascote no palco se escolhe na aba de ajustes (`⚙`), na linha `mascote`. A troca vale na hora e fica salva.
+
+| Mascote | Como é |
+| --- | --- |
+| Clawd | O de sempre, o do logo do Claude Code, de uma cor só: a cor de destaque dos ajustes. |
+| Pikachu | Amarelo, de orelhas de ponta escura, bochechas vermelhas e o rabo em raio. |
+| Mario | Boné e camisa vermelhos, bigode, macacão azul de botões amarelos, luvas brancas. |
+| Kratos | Pele de cinza, a faixa vermelha sobre o olho, barba, ombreira dourada e saiote de couro. |
+
+- **Dois desenhos por avatar colorido.** O fino (36×20 pontos) aparece onde há detalhe: em pixels, em vetor e em blocos no tamanho `grande`. Em blocos no tamanho `normal` e no palco de texto vai uma versão de baixa resolução (18×5), bem mais simples: é o que cabe em blocos de quadrante com duas cores por célula.
+- **Tudo o que o Clawd faz, eles fazem.** Piscam, olham para os lados quando pensam, levantam os braços para carregar e comemorar, andam, sentam para dormir, apagam quando falham.
+- **O poder vale para todos.** A aura, os riscos, as fagulhas, os raios, o voo de Fable e os fogos saem do modelo e do effort, como no Clawd. De Opus para cima são as pupilas que acendem. A faixa de brilho é mais leve sobre um avatar colorido, para ele seguir aparecendo por baixo dela.
+- **As cores são deles.** A cor de destaque dos ajustes não pinta um avatar colorido; segue valendo no resto da barra (a faísca, o modelo, o cometa, a régua).
+- **Os ajudantes não mudam**: seguem sendo os pequenos Clawds, cada um na cor do seu agente.
+- A escolha é só desenho: todos têm a largura e a cabeça do Clawd, então o palco conta a mesma história com qualquer um (onde ele para, quantos tijolos carrega).
+
+Pikachu, Mario e Kratos são personagens e marcas dos seus donos (Nintendo / The Pokémon Company e Sony Interactive Entertainment). Os desenhos daqui são pixel art feita por fãs, sem vínculo com essas empresas nem endosso delas.
+
 ## Resolução: pixels, blocos, vetor ou texto
 
 O palco é uma cena só, desenhada de quatro jeitos. A barra escolhe o melhor que a tela consegue mostrar (o ajuste **resolução**, `automática` por padrão) e a aba de ajustes diz qual está em uso.
@@ -187,6 +209,7 @@ O módulo de hooks e o que ele importa, em `hooks/`:
 - `power.ts`: o poder de quem trabalha: a classe do modelo, o degrau do effort, a força da aura e a faísca de cada classe.
 - `aura.ts`: a aparência de um bicho com poder, pura: a aura, o brilho do corpo, os olhos, as fagulhas, os raios, os jatos e os fogos.
 - `pixels.ts`, `sprites.ts`, `palette.ts`, `color.ts`: o desenhador de subpixels (com o clarão de fundo), os desenhos dos bichos, as cores e as contas de cor.
+- `avatars.ts`: os avatares coloridos do mascote, como texto: a paleta de cada um, o desenho comum e o fino, com as posturas como remendos sobre ele. Um avatar novo é um desenho novo aqui, uma opção em `settings.ts` e um nome no tipo `StatusAvatar`.
 - `demo.ts`: o roteiro da demonstração.
 - `i18n.ts`: os textos da barra em português e em inglês. Um texto novo entra no tipo `Strings` e o compilador cobra a tradução nos dois.
 - `settings.ts`, `settings-panel.tsx`: os ajustes e a aba deles.
@@ -194,7 +217,7 @@ O módulo de hooks e o que ele importa, em `hooks/`:
 
 Os comentários do código e os nomes dos testes estão em português, a língua em que o projeto nasceu.
 
-Os testes (`*.test.ts`, 383 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena, o poder de cada classe, o codificador de PNG e o ajuste em blocos, e a barra montada em cada superfície, em texto, em blocos, em pixels e em vetor.
+Os testes (`*.test.ts`, 399 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena, o poder de cada classe, o codificador de PNG e o ajuste em blocos, e a barra montada em cada superfície, em texto, em blocos, em pixels e em vetor.
 
 Os GIFs dos dois READMEs saem das mesmas funções que desenham a barra, fora do Claude Code (precisa de `bun` e de Pillow). O turno de mentira roda com o modelo e o effort pedidos (o padrão é `fable high`), com o palco em blocos, como a maioria dos terminais o mostra (`texto` no fim dá o palco de texto); a tabela de poderes é a mesma nos dois idiomas:
 
@@ -210,6 +233,9 @@ O GIF do palco em pixels é feito só do palco, em duas faixas que andam juntas 
 bun run scripts/stage-frames.ts /tmp/pixels.bin 100 pixels normal fable max
 bun run scripts/stage-frames.ts /tmp/grande.bin 112 blocos grande fable max
 python3 scripts/stage-gif.py docs/stage.gif "pixels=/tmp/pixels.bin" "blocos, grande  ·  blocks, large=/tmp/grande.bin"
+# o GIF dos mascotes: o último argumento de stage-frames.ts é o avatar
+for a in pikachu mario kratos; do bun run scripts/stage-frames.ts /tmp/$a.bin 120 pixels grande opus high escuro $a; done
+python3 scripts/stage-gif.py docs/avatars.gif "Pikachu=/tmp/pikachu.bin" "Mario=/tmp/mario.bin" "Kratos=/tmp/kratos.bin"
 ```
 
 A documentação tem dois arquivos, que mudam juntos: `README.md` (inglês) e `README.pt-BR.md` (português).
