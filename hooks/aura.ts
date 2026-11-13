@@ -11,6 +11,12 @@ import type { Power } from './power'
 /** Um ponto solto: a chave do subpixel e a tinta dele. */
 export type Dot = readonly [number | undefined, Paint]
 
+/**
+ * O elemento da aura de um avatar: fogo, raio ou estrela. Com ele, as tintas da aura são as do
+ * elemento, em qualquer classe de modelo; sem ele, a aura tem a cor da classe.
+ */
+export type Element = 'fire' | 'volt' | 'star'
+
 /** Um bicho num quadro, como a aura o enxerga. */
 export type Figure = {
   bitmap: Bitmap
@@ -25,6 +31,8 @@ export type Figure = {
   paints?: Readonly<Record<string, Paint>>
   /** A força da aura dele, de 0 (nenhuma) a `AURA_MAX`: sai do poder, e é menor num ajudante. */
   strength: number
+  /** O elemento da aura de um avatar; sem ele, a aura é a da classe. */
+  element?: Element
 }
 
 /** O quadro e o tema: de onde a animação e os tons saem. */
@@ -140,6 +148,144 @@ export const tongue = (x: number, tick: number) => {
   return TONGUE_MIN + (1 - TONGUE_MIN) * (0.5 + 0.5 * ripple)
 }
 
+/** Uma camada de uma aura: a tinta dela numa coluna (em subpixels) e quanto ela esmaece em direção ao fundo. */
+export type Band = { paint: (x: number) => Paint; fade: number }
+
+/**
+ * A aura de um bicho num quadro. As camadas vão de dentro para fora: o coração (rente ao corpo, só no
+ * palco em pixels: no de texto a célula não comporta três tintas), o miolo, e as pontas e beiradas.
+ */
+export type Flare = {
+  heart: Band
+  core: Band
+  rim: Band
+  /** A tinta do que a aura solta: as fagulhas e os jatos. */
+  mote: (x: number) => Paint
+  /** A altura da língua de uma coluna, de `TONGUE_MIN` a 1. */
+  lick: (x: number) => number
+  /** A quantos subpixels do corpo a coluna inteira já é beirada, numa aura que chega a `reach`. */
+  rimFrom: (reach: number) => number
+}
+
+const RIM_FROM = 2 // a tantos subpixels do corpo, a coluna inteira do clarão de uma classe é beirada
+/** A tantas sublinhas abaixo da ponta de uma língua começa o coração dela. */
+export const HEART_DEPTH = 2
+
+// As tintas de cada elemento, de dentro para fora. O fogo vai do amarelo ao vermelho. O raio é um campo
+// elétrico azul, quase branco por dentro, e o que ele solta (as faíscas, o raio que cai) é amarelo: num
+// clarão amarelo o rato amarelo sumiria. A estrela dá a volta no arco-íris, mais clara por dentro, e
+// solta estrelinhas de ouro.
+const FIRE = { heart: '#FFD75E', core: '#FF8A1F', rim: '#E2371C' } as const
+const VOLT = { heart: '#DDF4FF', core: '#58BFFF', rim: '#2F6FE0', spark: '#FFE45C' } as const
+// Quanto cada camada esmaece, de dentro para fora. As de um elemento esmaecem bem menos que o clarão de
+// uma classe, que é só um brilho atrás do bicho: a aura de um avatar é para ser vista. O campo do raio
+// é o mais apagado dos três: quem brilha nele são os estalos.
+type Fades = readonly [heart: number, core: number, rim: number]
+const VIVID: Fades = [0.06, 0.14, 0.4]
+const FIELD: Fades = [0.1, 0.3, 0.5]
+const SHELL = 2 // quantos subpixels de fora da aura de um elemento são só beirada
+const STAR_PER_COLUMN = 10 // quanto o matiz da estrela anda por subpixel de largura, em graus
+const STAR_PER_TICK = 30 // e por quadro: uma volta inteira a cada doze
+const STAR_GLOW = 0.35 // quanto o coração da estrela clareia
+const STAR_MOTE = '#FFE14D'
+const EMBER_SHARE = 0.5 // a fração das fagulhas do fogo que sobe amarela; as outras, laranja
+
+// As pontas do clarão de raio: sem onda nenhuma. Cada subpixel de largura salta para uma altura nova a
+// cada quadro, quase sempre baixa e de vez em quando alta: um contorno espetado, que estala. A ponta é
+// do subpixel inteiro: no traço fino, as duas meias colunas dele saltam juntas.
+const zap = (x: number, tick: number) => TONGUE_MIN + (1 - TONGUE_MIN) * noise(x, Math.floor(tick)) ** 2
+
+const solid = (paint: Paint) => () => paint
+
+/**
+ * A aura de um bicho num quadro: a do elemento dele ou, sem elemento, a da classe (uma tinta só, que
+ * esmaece mais nas pontas e beiradas).
+ */
+export const flareOf = (p: Power, tick: number, element?: Element): Flare => {
+  const wave = (x: number) => tongue(x, tick)
+  if (!element) {
+    const paint = classPaint(p, tick)
+    const core = { paint, fade: CORE_FADE }
+    return { heart: core, core, rim: { paint, fade: EDGE_FADE }, mote: paint, lick: wave, rimFrom: () => RIM_FROM }
+  }
+  const rimFrom = (reach: number) => Math.max(RIM_FROM, reach - SHELL + 1)
+  if (element === 'star') {
+    const hue = (x: number) => rainbow(x * STAR_PER_COLUMN + tick * STAR_PER_TICK)
+    return {
+      heart: { paint: x => mix(hue(x), WHITE, STAR_GLOW), fade: VIVID[0] },
+      core: { paint: hue, fade: VIVID[1] },
+      rim: { paint: hue, fade: VIVID[2] },
+      mote: solid(STAR_MOTE), lick: wave, rimFrom,
+    }
+  }
+  const tones = element === 'fire' ? FIRE : VOLT
+  const fades = element === 'fire' ? VIVID : FIELD
+  return {
+    heart: { paint: solid(tones.heart), fade: fades[0] },
+    core: { paint: solid(tones.core), fade: fades[1] },
+    rim: { paint: solid(tones.rim), fade: fades[2] },
+    mote: element === 'fire' ? x => (noise(x, Math.floor(tick)) < EMBER_SHARE ? FIRE.heart : FIRE.core) : solid(VOLT.spark),
+    lick: element === 'volt' ? x => zap(x, tick) : wave,
+    rimFrom,
+  }
+}
+
+/** O raio de uma aura: a classe a partir da qual cai, a força que pede, de quantos em quantos quadros, e a tinta dele. */
+export type Storm = { tier: number; from: number; every: number; paint: Paint }
+
+const VOLT_BOLT_FROM = MOTES_FROM // o avatar de raio solta raios desde que as fagulhas sobem…
+const VOLT_BOLT_EVERY = 13 // …e mais vezes que os da classe
+
+/**
+ * O raio de uma aura. O da classe só cai de Opus para cima, com a aura bem forte, na cor do texto; o
+ * do avatar de raio cai em qualquer classe, mais cedo e mais vezes, em amarelo (mais escuro num tema
+ * claro, para não sumir no fundo).
+ */
+export const stormOf = (element: Element | undefined, isLight: boolean): Storm =>
+  element === 'volt'
+    ? { tier: 0, from: VOLT_BOLT_FROM, every: VOLT_BOLT_EVERY, paint: sparkOf(VOLT.spark, isLight) }
+    : { tier: BOLT_TIER, from: BOLT_FROM, every: BOLT_EVERY, paint: INK }
+
+/** Cai um raio neste quadro: o poder e a força da aura dão para ele, e é a vez dele. */
+export const strikes = (storm: Storm, p: Power, strength: number, tick: number): boolean =>
+  p.tier >= storm.tier && strength >= storm.from && ((tick % storm.every) + storm.every) % storm.every < BOLT_FRAMES
+
+const ARC_HOLD = 2 // quadros que um estalo fica aceso
+const ARC_SHARE = 0.75 // a fração dos estalos que acende de cada vez: os outros descansam
+const ARC_MIN = 2 // o comprimento de um estalo, em sublinhas: no mínimo…
+const ARC_SWING = 3 // …e quantas a mais ele pode ter
+const ARC_STRAIGHT = 0.2 // a fração dos passos de um estalo que desce reto, sem ir para o lado
+
+/** Um estalo: um raio curto, ponto a ponto. O x é em subpixels a partir da borda esquerda do desenho; o y, a sublinha na cena. */
+export type Arc = readonly (readonly [x: number, y: number])[]
+
+/**
+ * Os estalos do avatar de raio: raios curtos que acendem e apagam em volta dele, de um lado e do
+ * outro, tantos mais quanto mais forte a aura. Cada um desce em ziguezague de um ponto perto do corpo
+ * e fica acima da linha dos pés. Quem não é de raio, ou não tem aura, não estala.
+ */
+export const arcsOf = ({ bitmap, top, floor, strength, element }: Pick<Figure, 'bitmap' | 'top' | 'floor' | 'strength' | 'element'>, tick: number): Arc[] => {
+  if (element !== 'volt' || strength <= 0) return []
+  const beat = Math.floor(tick / ARC_HOLD)
+  const width = widthOf(bitmap)
+  const reach = REACH[strength] ?? 0
+  return Array.from({ length: 1 + Math.ceil(strength / 2) }).flatMap((_, k): Arc[] => {
+    if (noise(k * 11 + 5, beat) >= ARC_SHARE) return []
+    const spread = Math.floor(noise(k * 7 + 3, beat) * (reach + 1))
+    const start = noise(k * 17 + 2, beat) < 0.5 ? width + spread : -1 - spread
+    const length = ARC_MIN + Math.floor(noise(k * 5 + 9, beat) * ARC_SWING)
+    const room = Math.max(1, floor - length - Math.max(0, top - 1))
+    const from = Math.max(0, top - 1) + Math.floor(noise(k * 3 + 7, beat) * room)
+    // em ziguezague: um passo para um lado, o seguinte para o outro; de vez em quando, um passo reto
+    const lean = noise(k * 19 + 1, beat) < 0.5 ? 0 : 1
+    const xs = Array.from({ length }).reduce<number[]>((path, _step, i) => {
+      const sway = i === 0 || noise(k * 13 + i, beat + 31) < ARC_STRAIGHT ? 0 : (i + lean) % 2 === 0 ? 1 : -1
+      return [...path, (path[path.length - 1] ?? start) + sway]
+    }, [])
+    return [xs.flatMap((x, i): [number, number][] => (from + i < floor ? [[x, from + i]] : []))]
+  })
+}
+
 // A primeira linha pintada de cada coluna do desenho, de cima para baixo.
 export const columnTops = (bitmap: Bitmap): (number | undefined)[] =>
   Array.from({ length: widthOf(bitmap) }, (_, col) => {
@@ -148,9 +294,9 @@ export const columnTops = (bitmap: Bitmap): (number | undefined)[] =>
   })
 
 /**
- * A aura: um clarão atrás do bicho, na cor da classe dele. Sobre o corpo, línguas de fogo sobem e
- * descem a cada quadro; para os lados, o clarão arredonda e fecha. O miolo é mais vivo; as pontas e
- * as beiradas, mais apagadas. `null` quando o poder não dá aura.
+ * A aura: um clarão atrás do bicho, na cor da classe dele ou nas tintas do elemento do avatar. Sobre o
+ * corpo, línguas de fogo sobem e descem a cada quadro; para os lados, o clarão arredonda e fecha. O
+ * miolo é mais vivo; as pontas e as beiradas, mais apagadas. `null` quando o poder não dá aura.
  */
 export const glowOf = (p: Power, figure: Figure, mood: Mood): Glow | null => {
   const { bitmap, left, top, floor, strength } = figure
@@ -161,13 +307,15 @@ export const glowOf = (p: Power, figure: Figure, mood: Mood): Glow | null => {
   const from = left - reach
   // O clarão para uma sublinha acima do chão: a linha dos pés fica limpa, com as patas à mostra.
   const base = floor - 1
+  const flare = flareOf(p, mood.tick, figure.element)
+  const rimFrom = flare.rimFrom(reach)
   // Em cada coluna: de que sublinha a que sublinha o clarão vai, e se a coluna é beirada.
   const flames = Array.from({ length: tops.length + reach * 2 }, (_, i) => {
     const col = i - reach
     const away = Array.from({ length: reach + 1 }, (_, d) => d).find(d => tops[col - d] !== undefined || tops[col + d] !== undefined)
     if (away === undefined) return null
     const bodyTop = top + (tops[col - away] ?? tops[col + away] ?? 0)
-    const lick = rise * tongue(from + i, mood.tick)
+    const lick = rise * flare.lick(from + i)
     if (away === 0) return { from: Math.max(0, Math.round(bodyTop - lick)), to: base, isRim: false }
     // Ao lado do corpo o clarão é uma meia elipse: mais baixo e mais curto quanto mais longe.
     const span = base - bodyTop + 1
@@ -175,30 +323,33 @@ export const glowOf = (p: Power, figure: Figure, mood: Mood): Glow | null => {
     const curve = Math.sqrt(1 - (away / (reach + 1)) ** 2)
     const flameTop = Math.max(0, Math.round(middle - (span / 2 + lick) * curve))
     const flameEnd = Math.min(base, Math.round(middle + (span / 2) * curve))
-    return flameTop > flameEnd ? null : { from: flameTop, to: flameEnd, isRim: away >= 2 }
+    return flameTop > flameEnd ? null : { from: flameTop, to: flameEnd, isRim: away >= rimFrom }
   })
-  const paint = classPaint(p, mood.tick)
   const backdrop = backdropOf(mood.isLight)
   return (x, y) => {
     const flame = flames[x - from]
     if (!flame || y < flame.from || y > flame.to) return undefined
     // a cor é a da célula (as duas colunas dela juntas): dentro de uma célula só mudam o miolo e a beirada
-    return mix(paint(x & ~1), backdrop, flame.isRim || y === flame.from ? EDGE_FADE : CORE_FADE)
+    const band = flame.isRim || y === flame.from ? flare.rim : flare.core
+    return mix(band.paint(x & ~1), backdrop, band.fade)
   }
 }
 
 /**
  * O que a aura solta na frente da cena: fagulhas que sobem pelos lados do bicho e, nos poderes mais
- * altos, um raio que cai ao lado dele de tempos em tempos.
+ * altos, um raio que cai ao lado dele de tempos em tempos. O avatar de raio ainda estala em volta.
  */
 export const sparksOf = (p: Power, figure: Figure, mood: Mood): Dot[] => {
-  const { bitmap, left, floor, strength } = figure
-  if (strength < MOTES_FROM) return []
+  const { bitmap, left, floor, strength, element } = figure
   const { tick, isLight } = mood
+  const paint = flareOf(p, tick, element).mote
+  // Os estalos do avatar de raio vêm com qualquer aura; o resto, só com ela forte.
+  const arcs = arcsOf(figure, tick).flat().map(([x, y]): Dot => [dotKey(left + x, y), sparkOf(paint(left + x), isLight)])
+  if (strength < MOTES_FROM) return arcs
   const width = widthOf(bitmap)
   const reach = REACH[strength] ?? 0
-  const paint = classPaint(p, tick)
-  const motes = Array.from({ length: strength - 1 }, (_, k): Dot => {
+  const storm = stormOf(element, isLight)
+  const motes = [...arcs, ...Array.from({ length: strength - 1 }, (_, k): Dot => {
     const clock = tick + k * MOTE_STAGGER
     const age = clock % MOTE_LIFE
     const life = Math.floor(clock / MOTE_LIFE)
@@ -207,16 +358,16 @@ export const sparksOf = (p: Power, figure: Figure, mood: Mood): Dot[] => {
     const sway = Math.round(Math.sin((age + k) * 1.1))
     const x = (isRight ? left + width + spread : left - 1 - spread) + sway
     return [dotKey(x, floor - 1 - age), sparkOf(paint(x), isLight)]
-  })
-  if (p.tier < BOLT_TIER || strength < BOLT_FROM || tick % BOLT_EVERY >= BOLT_FRAMES) return motes
+  })]
+  if (!strikes(storm, p, strength, tick)) return motes
   // O raio: desce do alto até o chão em ziguezague, de um lado e depois do outro.
-  const strike = Math.floor(tick / BOLT_EVERY)
+  const strike = Math.floor(tick / storm.every)
   const start = strike % 2 === 1 ? left + width + reach + 2 : left - reach - 3
   const bolt = Array.from({ length: floor + 1 }).reduce<{ x: number; dots: Dot[] }>(
     (acc, _, y) => {
       const turn = noise(strike * 13 + y, 3)
       const x = acc.x + (turn < 0.34 ? -1 : turn > 0.66 ? 1 : 0)
-      return { x, dots: [...acc.dots, [dotKey(x, y), INK]] }
+      return { x, dots: [...acc.dots, [dotKey(x, y), storm.paint]] }
     },
     { x: start, dots: [] },
   ).dots
@@ -231,7 +382,7 @@ export const streaksOf = (p: Power, figure: Figure, mood: Mood, side: -1 | 1): D
   const { bitmap, left, top, strength } = figure
   if (p.tier < STREAK_TIER || strength < STREAK_FROM) return []
   const width = widthOf(bitmap)
-  const paint = classPaint(p, mood.tick)
+  const paint = flareOf(p, mood.tick, figure.element).core.paint
   const reach = REACH[strength] ?? 0
   return STREAK_ROWS.flatMap((row, k): Dot[] => {
     if (row >= bitmap.length) return []
@@ -249,7 +400,7 @@ export const streaksOf = (p: Power, figure: Figure, mood: Mood, side: -1 | 1): D
 export const jetsOf = (p: Power, figure: Figure, mood: Mood): Dot[] => {
   const { bitmap, left, floor } = figure
   const under = bitmap[bitmap.length - 1] ?? ''
-  const paint = classPaint(p, mood.tick)
+  const paint = flareOf(p, mood.tick, figure.element).mote
   return [...under].flatMap((mark, col): Dot[] =>
     isPainted(mark) && noise(col * 5 + 2, mood.tick) < JET_SHARE ? [[dotKey(left + col, floor), sparkOf(paint(left + col), mood.isLight)]] : [],
   )

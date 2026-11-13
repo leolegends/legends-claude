@@ -1,4 +1,4 @@
-import { canFly } from './aura'
+import { MOTES_FROM, canFly } from './aura'
 import { tintOf } from './palette'
 import { PLAIN, auraOf } from './power'
 import type { Power } from './power'
@@ -21,6 +21,8 @@ const WAVE_PERIOD = 4 // quem espera uma ferramenta sobe e desce os braços nest
 const HELPER_AURA = 0.6 // a aura de um ajudante é a fração da do mascote com o mesmo poder: ele é menor
 const DOTS_HOLD = 2 // quadros com cada número de pontinhos depois do nome da ferramenta
 const DOTS_MAX = 3
+/** A força da aura a partir da qual um avatar se transforma na forma com poder: a mesma em que as fagulhas sobem. */
+export const FORM_FROM = MOTES_FROM
 
 /** O que um bicho mostra sobre a cabeça, ou ao lado: um sinal, não um desenho. */
 export type Mark =
@@ -77,7 +79,8 @@ const markOf = (w: Worker, sim: Sim, isResting: boolean, isCarrying: boolean): M
 /**
  * Puro: a pose de um bicho. Sem poder (`undefined`: quem desenha não disse nenhum), é o bicho de
  * sempre; quem falhou apaga e quem dorme descansa: nos dois casos, sem poder nenhum. `mascot` é o
- * desenho do mascote (o avatar escolhido nos ajustes); os ajudantes são sempre os mesmos.
+ * desenho do mascote (o avatar escolhido nos ajustes): com a aura forte, ele aparece na forma com
+ * poder, se tem uma. Os ajudantes são sempre os mesmos.
  */
 export const poseOf = (w: Worker, sim: Sim, given: Power | undefined, mascot: Art = CLAWD): Pose => {
   const isMain = w.id === MAIN
@@ -92,6 +95,7 @@ export const poseOf = (w: Worker, sim: Sim, given: Power | undefined, mascot: Ar
     : 'open'
   const power = !given || w.act === 'fail' || w.act === 'sleep' ? PLAIN : given
   const isFlying = isWalking && canFly(power) // em vez de andar, voa: sem patas, um jato por baixo
+  const strength = isMain ? auraOf(power) : Math.ceil(auraOf(power) * HELPER_AURA)
   const lift =
     w.act === 'cheer' ? (JUMP[w.t % JUMP.length] ?? 0)
     : w.act === 'enter' && !isMain ? (FALL[w.t - SPAWN] ?? 0)
@@ -100,7 +104,7 @@ export const poseOf = (w: Worker, sim: Sim, given: Power | undefined, mascot: Ar
     : 0
   return {
     isMain,
-    art: isMain ? mascot : MINI,
+    art: !isMain ? MINI : strength >= FORM_FROM ? (mascot.form ?? mascot) : mascot,
     tint: isMain ? 'claude' : tintOf(w.id),
     isUnseen: w.act === 'poof' || (!isMain && w.act === 'enter' && w.t < SPAWN),
     isWalking,
@@ -113,7 +117,7 @@ export const poseOf = (w: Worker, sim: Sim, given: Power | undefined, mascot: Ar
     isFailed: w.act === 'fail',
     lift,
     power,
-    strength: isMain ? auraOf(power) : Math.ceil(auraOf(power) * HELPER_AURA),
+    strength,
     // Quem corre com poder risca o ar atrás de si: indo buscar, à direita; levando, à esquerda.
     wake: w.shout > 0 ? 0 : w.act === 'haul' ? -1 : w.act === 'fetch' ? 1 : 0,
     mark: markOf(w, sim, isResting, isCarrying),

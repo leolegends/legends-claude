@@ -1,3 +1,4 @@
+import type { Element } from './aura'
 import { EYE } from './pixels'
 import type { Bitmap } from './pixels'
 
@@ -29,6 +30,10 @@ export type Art = {
   pupil?: string
   /** O desenho fino, para o palco que mostra detalhe (pixels, vetor, blocos no tamanho grande). */
   detail?: Detail
+  /** O elemento da aura de um avatar (fogo, raio, estrela); sem ele, a aura tem a cor da classe do modelo. */
+  element?: Element
+  /** A forma com poder de um avatar: o desenho em que ele se transforma quando a aura fica forte. */
+  form?: Art
 }
 
 /** Quantos pontos do desenho fino cabem num subpixel: na largura e na altura. */

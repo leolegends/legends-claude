@@ -92,7 +92,7 @@ const actorOf = (w: Worker, sim: Sim, power: Power | undefined, isLight: boolean
   const bitmap = drawing(art, { eyes: pose.eyes, isArmsUp: pose.isArmsUp, step: pose.step, isSitting: pose.isSitting, hasLitEyes: eyesOf(p) !== null })
   // A última linha do desenho (as patas, ou o corpo de quem está sentado) fica no chão.
   const top = FLOOR_Y + 1 - bitmap.length + pose.lift
-  const figure: Figure = { bitmap, left: x, top, floor: FLOOR_Y, tint, paints: art.paints, strength: pose.strength }
+  const figure: Figure = { bitmap, left: x, top, floor: FLOOR_Y, tint, paints: art.paints, strength: pose.strength, element: art.element }
   const mood = { tick: sim.tick, isLight }
   // quem falhou apaga: a cor dele (ou, num avatar colorido, a de cada marca) esmaecida
   const faded: Shade = art.paints ? (_x, _y, mark) => `~${art.paints?.[mark] ?? tint}` : `~${tint}`

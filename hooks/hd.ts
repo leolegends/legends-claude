@@ -5,7 +5,7 @@ import { bitmapShapes, box } from './canvas'
 import type { Shape } from './canvas'
 import { blend, rgbOf } from './color'
 import { BRICK_SUBS, beltShapes, brickShapes, floorShapes, outlined, shoutIcon, snoreIcon, starShapes, thinkSpark, toolIcon, verdictIcon } from './hd-art'
-import { boltShapes, fireworkShapes, haloShapes, jetShapes, moteShapes, streakShapes } from './hd-aura'
+import { arcShapes, boltShapes, fireworkShapes, haloShapes, jetShapes, moteShapes, streakShapes } from './hd-aura'
 import type { Body, Light, Unit } from './hd-aura'
 import { KIND_PAINT, kindOf } from './palette'
 import type { Kind } from './palette'
@@ -246,7 +246,7 @@ const castOf = (w: Worker, prev: Sim, cur: Sim, powers: ReadonlyMap<string, Powe
     return { rgb: rgbOf(typeof shade === 'string' ? shade : shade(Math.round(x) + col, Math.round(topSub) + row, mark), isLight) }
   }
   const sheen = view.hasDetail && !pose.isFailed ? sheenOf(power, tint, mood) : null
-  const body: Body = { rows, left, top, feet: FLOOR_Y * v, unit, power, strength: pose.strength }
+  const body: Body = { rows, left, top, feet: FLOOR_Y * v, unit, power, strength: pose.strength, element: art.element }
   // Os tijolos na cabeça: lado a lado na camada de baixo, e os seguintes empilhados em cima. No palco
   // de blocos do tamanho de sempre ficam na grade das células: dois tijolos não dividem uma célula.
   const perLayer = Math.max(1, Math.floor(art.headWidth / BRICK_SUBS))
@@ -263,6 +263,7 @@ const castOf = (w: Worker, prev: Sim, cur: Sim, powers: ReadonlyMap<string, Powe
     ],
     tiles,
     fore: [
+      ...arcShapes(body, view),
       ...moteShapes(body, view),
       ...boltShapes(body, view),
       ...(pose.wake === 0 ? [] : streakShapes(body, view, pose.wake)),

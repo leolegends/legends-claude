@@ -4,7 +4,7 @@
 
 Uma barra acima do prompt do Claude Code que mostra o que importa enquanto você trabalha: **modelo e effort**, **custo da sessão e do turno**, **limites de uso**, **cada agente em execução** e um **palco** onde o mascote do Claude Code constrói, tijolo por tijolo, o que o turno está fazendo. O mascote muda com o **modelo** e com o **effort**: quanto mais forte o modelo e mais alto o effort, mais ele brilha. Não mostra barra de contexto.
 
-![A barra durante um turno como Fable em max: o mascote voa com uma aura furta-cor, carrega tijolos, chama ajudantes e comemora com fogos](docs/demo.pt-BR.gif)
+![A barra durante um turno, com o palco grande: o mascote troca de avatar (Clawd, Pikachu, Mario, Kratos) e, quando o effort sobe para max, cada um se transforma (Raichu, Super Mario, Kratos em fúria), enquanto carrega tijolos, chama ajudantes e comemora](docs/demo.pt-BR.gif)
 
 A barra ocupa a largura toda do terminal. Num terminal estreito, modelo, custo e limites empilham em linhas próprias.
 
@@ -65,6 +65,7 @@ O mascote não é sempre o mesmo. A **classe do modelo** decide quem ele é; o *
 - **Cada ajudante tem o poder do seu agente**: o modelo e o effort com que ele roda. A aura de um ajudante é menor que a do mascote; dormindo ou depois de falhar, ele fica sem nenhuma.
 - **Fora de um turno**, quando só os ajudantes ainda trabalham, o mascote descansa: segue com os olhos e o brilho da classe, sem a energia do effort.
 - **Num tema claro** a aura clareia em direção ao branco, em vez de escurecer; os raios têm a cor do texto do tema.
+- **Os avatares coloridos têm aura própria.** A cor da classe é a aura do Clawd e dos ajudantes. Pikachu, Mario e Kratos têm cada um a aura do seu elemento e, com ela forte, se transformam: veja [Mascotes](#mascotes-clawd-pikachu-mario-e-kratos).
 - O poder é só desenho: não muda o que o palco conta (cada ferramenta segue sendo um tijolo) nem a velocidade de ninguém.
 
 Para ver uma combinação sem trocar de modelo: `/legends-claude demo opus max` roda a demonstração com essa aparência (um modelo, um effort, ou os dois; uma palavra que não é nem um nem outro é recusada com um aviso). Na demonstração, um ajudante é um Sonnet em `high` e o outro um Haiku em `max`.
@@ -75,25 +76,27 @@ A animação só roda enquanto há o que mostrar (um turno, um agente, a demonst
 
 ## Mascotes: Clawd, Pikachu, Mario e Kratos
 
-![Os três avatares coloridos no palco em pixels, no tamanho grande: Pikachu, Mario e Kratos carregam tijolos, com a aura de Opus](docs/avatars.gif)
+![Os três avatares coloridos no palco em pixels, no tamanho grande, com o effort subindo de low a max: a aura de cada um cresce e, em xhigh, Pikachu vira Raichu, Mario vira Super Mario e Kratos entra em fúria](docs/avatars.gif)
 
 Quem é o mascote no palco se escolhe na aba de ajustes (`⚙`), na linha `mascote`. A troca vale na hora e fica salva.
 
-| Mascote | Como é |
-| --- | --- |
-| Clawd | O de sempre, o do logo do Claude Code, de uma cor só: a cor de destaque dos ajustes. |
-| Pikachu | Amarelo, de orelhas de ponta escura, bochechas vermelhas e o rabo em raio. |
-| Mario | Boné e camisa vermelhos, bigode, macacão azul de botões amarelos, luvas brancas. |
-| Kratos | Pele de cinza, a faixa vermelha sobre o olho, barba, ombreira dourada e saiote de couro. |
+| Mascote | Como é | A aura dele | Com a aura forte |
+| --- | --- | --- | --- |
+| Clawd | O de sempre, o do logo do Claude Code, de uma cor só: a cor de destaque dos ajustes. | A cor da classe do modelo. | O mesmo de sempre. |
+| Pikachu | Amarelo, de orelhas de ponta escura, bochechas vermelhas e o rabo em raio. | **Raio**: um campo elétrico azul, de contorno espetado, com estalos amarelos em volta. | Vira **Raichu**: laranja, de barriga branca, bochechas amarelas, orelhas e patas marrons, e o rabo fino que termina num raio. |
+| Mario | Boné e camisa vermelhos, bigode, macacão azul de botões amarelos, luvas brancas. | **Estrela**: o arco-íris inteiro, correndo, com estrelinhas de ouro subindo. | Vira **Super Mario**: de capa amarela, dos ombros aos pés. |
+| Kratos | Pele de cinza, a faixa vermelha sobre o olho, barba, ombreira dourada e saiote de couro. | **Fogo**: labaredas laranja de pontas vermelhas, amarelas rente ao corpo, com brasas subindo. | Entra em **fúria**: a faixa e os olhos acendem, a pele pega o calor do fogo e os punhos ardem. |
 
-- **Dois desenhos por avatar colorido.** O fino (36×20 pontos) aparece onde há detalhe: em pixels, em vetor e em blocos no tamanho `grande`. Em blocos no tamanho `normal` e no palco de texto vai uma versão de baixa resolução (18×5), bem mais simples: é o que cabe em blocos de quadrante com duas cores por célula.
+- **Dois desenhos por avatar colorido, e por forma com poder.** O fino (36×20 pontos) aparece onde há detalhe: em pixels, em vetor e em blocos no tamanho `grande`. Em blocos no tamanho `normal` e no palco de texto vai uma versão de baixa resolução (18×5), bem mais simples: é o que cabe em blocos de quadrante com duas cores por célula.
 - **Tudo o que o Clawd faz, eles fazem.** Piscam, olham para os lados quando pensam, levantam os braços para carregar e comemorar, andam, sentam para dormir, apagam quando falham.
-- **O poder vale para todos.** A aura, os riscos, as fagulhas, os raios, o voo de Fable e os fogos saem do modelo e do effort, como no Clawd. De Opus para cima são as pupilas que acendem. A faixa de brilho é mais leve sobre um avatar colorido, para ele seguir aparecendo por baixo dela.
+- **A aura é do personagem, não da classe.** Num avatar colorido as tintas da aura (e dos riscos, das fagulhas e dos jatos) são as do elemento dele, em qualquer modelo. É uma aura mais viva que o clarão de uma classe, com três camadas onde há detalhe: o coração, mais claro, rente ao corpo; o miolo; e as pontas e beiradas. O effort segue dando o tamanho dela, e a classe, o resto: a faísca, a faixa de brilho, as pupilas acesas de Opus para cima, o voo de Fable e os fogos. A faixa de brilho é mais leve sobre um avatar colorido, para ele seguir aparecendo por baixo dela.
+- **A transformação vem com o effort.** O avatar muda de forma quando a aura chega à força em que as fagulhas sobem: de `xhigh` para cima em Sonnet e Opus, já em `high` em Fable, só em `max` em Haiku. Fora de um turno, dormindo ou depois de falhar ele volta ao desenho de base.
+- **O raio é do Pikachu.** Os estalos aparecem com qualquer aura, e desde que ele vira Raichu caem raios amarelos ao lado dele, em qualquer classe e mais vezes que os de Opus e Fable. Fogo e estrela seguem a regra da classe para os raios.
 - **As cores são deles.** A cor de destaque dos ajustes não pinta um avatar colorido; segue valendo no resto da barra (a faísca, o modelo, o cometa, a régua).
 - **Os ajudantes não mudam**: seguem sendo os pequenos Clawds, cada um na cor do seu agente.
 - A escolha é só desenho: todos têm a largura e a cabeça do Clawd, então o palco conta a mesma história com qualquer um (onde ele para, quantos tijolos carrega).
 
-Pikachu, Mario e Kratos são personagens e marcas dos seus donos (Nintendo / The Pokémon Company e Sony Interactive Entertainment). Os desenhos daqui são pixel art feita por fãs, sem vínculo com essas empresas nem endosso delas.
+Pikachu, Raichu, Mario e Kratos são personagens e marcas dos seus donos (Nintendo / The Pokémon Company e Sony Interactive Entertainment). Os desenhos daqui são pixel art feita por fãs, sem vínculo com essas empresas nem endosso delas.
 
 ## Resolução: pixels, blocos, vetor ou texto
 
@@ -161,7 +164,7 @@ agentes      3  ● 6  10
 | --- | --- |
 | idioma | Português ou inglês: muda na hora todos os textos da barra, os avisos e a descrição do comando. Sem uma escolha salva, uma instalação nova segue o idioma do sistema (`LC_ALL`, `LC_MESSAGES`, `LANG`): português se ele disser `pt`, senão inglês. "Restaurar padrão" não mexe no idioma. |
 | cor | A cor de destaque: o mascote, a faísca, o modelo, o cometa, o pulso da régua, o custo aceso. Cada opção já aparece na própria cor. `Claude` e `Mono` seguem o tema claro/escuro do Claude Code. |
-| mascote | Quem é o mascote no palco. `Clawd` é o de sempre, na cor de destaque. `Pikachu`, `Mario` e `Kratos` são avatares coloridos, com cores próprias (a cor de destaque segue valendo no resto da barra): em pixels, em vetor e em blocos no tamanho grande aparecem no desenho fino; em blocos no tamanho normal e no palco de texto, numa versão de baixa resolução. O poder (aura, brilho, olhos acesos, voo) vale para todos; os ajudantes seguem sendo os pequenos Clawds. |
+| mascote | Quem é o mascote no palco. `Clawd` é o de sempre, na cor de destaque. `Pikachu`, `Mario` e `Kratos` são avatares coloridos, com cores próprias (a cor de destaque segue valendo no resto da barra): em pixels, em vetor e em blocos no tamanho grande aparecem no desenho fino; em blocos no tamanho normal e no palco de texto, numa versão de baixa resolução. Cada avatar colorido tem a aura do seu elemento (raio, estrela, fogo) e se transforma com o effort alto (Raichu, Super Mario, Kratos em fúria); o brilho, os olhos acesos e o voo seguem a classe do modelo. Os ajudantes seguem sendo os pequenos Clawds. |
 | animação | `completa` é tudo, palco incluído; `suave` deixa só a faísca pulsando e o cometa (sem palco, pulso na régua, nome surgindo, brilho nem estouro); `parada` não mexe nada e só atualiza o tempo uma vez por segundo. |
 | velocidade | A duração de um quadro: 200, 125 ou 80 ms. É também o ritmo do palco. Sem efeito com a animação parada. |
 | resolução | Em que o palco é desenhado. `automática` é o melhor que a tela oferece: pixels de verdade num terminal que desenha imagens, blocos de terminal nos outros, vetor no app desktop. `blocos` mantém os blocos mesmo onde há pixels. `clássica` é o palco de texto. Ao lado das opções, a aba diz o que está em uso nesta tela. |
@@ -207,9 +210,9 @@ O módulo de hooks e o que ele importa, em `hooks/`:
 - `canvas.ts`, `png.ts`, `blocks.ts`, `vector.ts`: dos retângulos a um quadro de pixels, a um PNG (o mod não tem zlib: o codificador é próprio), a células de terminal (o bloco e as duas cores que mais se aproximam de cada célula) e a SVG.
 - `stage.ts`, `stage-node.tsx`, `painter.ts`: em que o palco sai em cada tela, o elemento dele (`Image`, `Raster` ou `Svg`), e o relógio que o repinta entre os quadros e pergunta ao terminal se ele desenha imagens.
 - `power.ts`: o poder de quem trabalha: a classe do modelo, o degrau do effort, a força da aura e a faísca de cada classe.
-- `aura.ts`: a aparência de um bicho com poder, pura: a aura, o brilho do corpo, os olhos, as fagulhas, os raios, os jatos e os fogos.
+- `aura.ts`: a aparência de um bicho com poder, pura: a aura (a da classe ou a do elemento de um avatar: fogo, raio, estrela), o brilho do corpo, os olhos, as fagulhas, os estalos, os raios, os jatos e os fogos.
 - `pixels.ts`, `sprites.ts`, `palette.ts`, `color.ts`: o desenhador de subpixels (com o clarão de fundo), os desenhos dos bichos, as cores e as contas de cor.
-- `avatars.ts`: os avatares coloridos do mascote, como texto: a paleta de cada um, o desenho comum e o fino, com as posturas como remendos sobre ele. Um avatar novo é um desenho novo aqui, uma opção em `settings.ts` e um nome no tipo `StatusAvatar`.
+- `avatars.ts`: os avatares coloridos do mascote, como texto: a paleta de cada um, o desenho comum e o fino, com as posturas como remendos sobre ele; e, de cada um, o elemento da aura e a forma com poder (outro desenho, declarado antes do de base). Um avatar novo é um desenho novo aqui, uma opção em `settings.ts` e um nome no tipo `StatusAvatar`.
 - `demo.ts`: o roteiro da demonstração.
 - `i18n.ts`: os textos da barra em português e em inglês. Um texto novo entra no tipo `Strings` e o compilador cobra a tradução nos dois.
 - `settings.ts`, `settings-panel.tsx`: os ajustes e a aba deles.
@@ -217,13 +220,13 @@ O módulo de hooks e o que ele importa, em `hooks/`:
 
 Os comentários do código e os nomes dos testes estão em português, a língua em que o projeto nasceu.
 
-Os testes (`*.test.ts`, 399 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena, o poder de cada classe, o codificador de PNG e o ajuste em blocos, e a barra montada em cada superfície, em texto, em blocos, em pixels e em vetor.
+Os testes (`*.test.ts`, 437 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena, o poder de cada classe, a aura e a forma de cada avatar, o codificador de PNG e o ajuste em blocos, e a barra montada em cada superfície, em texto, em blocos, em pixels e em vetor.
 
-Os GIFs dos dois READMEs saem das mesmas funções que desenham a barra, fora do Claude Code (precisa de `bun` e de Pillow). O turno de mentira roda com o modelo e o effort pedidos (o padrão é `fable high`), com o palco em blocos, como a maioria dos terminais o mostra (`texto` no fim dá o palco de texto); a tabela de poderes é a mesma nos dois idiomas:
+Os GIFs dos dois READMEs saem das mesmas funções que desenham a barra, fora do Claude Code (precisa de `bun` e de Pillow). O turno de mentira tem o palco grande, em blocos, como a maioria dos terminais o mostra, e o mascote troca de avatar a cada trecho: o Clawd em Fable max e, depois, Pikachu (Opus), Mario (Sonnet) e Kratos (Opus), cada um primeiro em `high`, no desenho de base, e depois em `max`, transformado; `scripts/demo-frames.ts` segue dando um turno com um modelo e um effort só. A tabela de poderes é a mesma nos dois idiomas:
 
 ```
-bun run scripts/demo-frames.ts 100 en fable max | python3 scripts/demo-gif.py docs/demo.gif
-bun run scripts/demo-frames.ts 100 pt fable max | python3 scripts/demo-gif.py docs/demo.pt-BR.gif
+bun run scripts/cast-frames.ts 112 en | python3 scripts/demo-gif.py docs/demo.gif 10
+bun run scripts/cast-frames.ts 112 pt | python3 scripts/demo-gif.py docs/demo.pt-BR.gif 10
 bun run scripts/power-frames.ts | python3 scripts/demo-gif.py docs/power.gif
 ```
 
@@ -233,9 +236,9 @@ O GIF do palco em pixels é feito só do palco, em duas faixas que andam juntas 
 bun run scripts/stage-frames.ts /tmp/pixels.bin 100 pixels normal fable max
 bun run scripts/stage-frames.ts /tmp/grande.bin 112 blocos grande fable max
 python3 scripts/stage-gif.py docs/stage.gif "pixels=/tmp/pixels.bin" "blocos, grande  ·  blocks, large=/tmp/grande.bin"
-# o GIF dos mascotes: o último argumento de stage-frames.ts é o avatar
-for a in pikachu mario kratos; do bun run scripts/stage-frames.ts /tmp/$a.bin 120 pixels grande opus high escuro $a; done
-python3 scripts/stage-gif.py docs/avatars.gif "Pikachu=/tmp/pikachu.bin" "Mario=/tmp/mario.bin" "Kratos=/tmp/kratos.bin"
+# o GIF dos mascotes: o último argumento de stage-frames.ts é o avatar; com o effort `escada`, ele sobe de low a max ao longo da demonstração
+for a in pikachu mario kratos; do bun run scripts/stage-frames.ts /tmp/$a.bin 120 pixels grande opus escada escuro $a; done
+python3 scripts/stage-gif.py docs/avatars.gif "Pikachu → Raichu=/tmp/pikachu.bin" "Mario → Super Mario=/tmp/mario.bin" "Kratos → Fúria Espartana  ·  Spartan Rage=/tmp/kratos.bin"
 ```
 
 A documentação tem dois arquivos, que mudam juntos: `README.md` (inglês) e `README.pt-BR.md` (português).

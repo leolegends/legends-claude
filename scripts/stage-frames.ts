@@ -7,7 +7,9 @@
 // `pixels` é o que um terminal que desenha imagens mostra (kitty, Ghostty, iTerm2) e, em vetor, o app
 // desktop; `blocos`, o que os outros terminais mostram. O modelo (`fable`, `opus`, `sonnet`, `haiku`; o
 // padrão é `fable`) e o effort (`low` a `max`; o padrão é `high`) dão a aparência do mascote; o avatar
-// (`clawd`, `pikachu`, `mario`, `kratos`; o padrão é `clawd`), quem ele é.
+// (`clawd`, `pikachu`, `mario`, `kratos`; o padrão é `clawd`), quem ele é. Com o effort `escada`, ele
+// sobe de `low` a `max` ao longo da demonstração, um degrau de cada vez, e o placar diz em qual está:
+// é como se vê a aura crescer e o avatar se transformar.
 //
 // O arquivo: uma linha JSON com as medidas; depois, para cada quadro, uma linha JSON com os textos dele
 // (as células de texto do palco em blocos: quem monta o GIF as escreve com uma fonte) e os pixels RGBA.
@@ -22,7 +24,7 @@ import type { Frame } from '../hooks/canvas'
 import { DEMO_CAST, DEMO_FRAMES, applyDemo } from '../hooks/demo'
 import { CELL_H, CELL_W, hdScene } from '../hooks/hd'
 import type { HdScene } from '../hooks/hd'
-import { powerOf } from '../hooks/power'
+import { EFFORTS, powerOf } from '../hooks/power'
 import { sanitize } from '../hooks/settings'
 import { EMPTY_SIM, MAIN, geometry, step, syncHelpers } from '../hooks/sim'
 import type { Sim } from '../hooks/sim'
@@ -44,11 +46,20 @@ const BLOCK_LAST = 0x259f
 const geo = geometry(Math.floor(COLUMNS / ZOOM))
 if (!geo) throw new Error(`o palco não cabe em ${COLUMNS} colunas no tamanho ${size}`)
 
-const powers = new Map([...DEMO_CAST, [MAIN, powerOf(`claude-${model}-5`, effort)] as const])
+const IS_RAMP = effort === 'escada'
+const HUD_INK = IS_LIGHT ? '#6f6f76' : '#8a8a92' // o placar em pixels: a cor de um texto apagado
+
+// O effort num passo da demonstração: o pedido ou, na escada, o degrau daquele trecho.
+const effortAt = (tick: number) => (IS_RAMP ? (EFFORTS[Math.min(EFFORTS.length - 1, Math.floor((tick * EFFORTS.length) / (DEMO_FRAMES + 1)))] ?? effort) : effort)
+const hudAt = (tick: number) => (IS_RAMP ? `▶ demo · ${effortAt(tick)}` : '▶ demo')
 
 // A cena num instante: entre o estado de antes de um passo da demonstração e o de depois dele.
-const sceneAt = (before: Sim, after: Sim, alpha: number): HdScene =>
-  hdScene({ prev: before, cur: after, alpha, geo, hud: [{ text: '▶ demo', dim: true }], powers, isLight: IS_LIGHT, avatar: AVATAR, trace: IS_BLOCKS ? 'blocks' : 'pixels', zoom: ZOOM })
+const sceneAt = (before: Sim, after: Sim, alpha: number, tick: number): HdScene =>
+  hdScene({
+    prev: before, cur: after, alpha, geo, hud: [{ text: hudAt(tick), dim: true }],
+    powers: new Map([...DEMO_CAST, [MAIN, powerOf(`claude-${model}-5`, effortAt(tick))] as const]),
+    isLight: IS_LIGHT, avatar: AVATAR, trace: IS_BLOCKS ? 'blocks' : 'pixels', zoom: ZOOM,
+  })
 
 const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
 
@@ -57,8 +68,12 @@ type Text = [column: number, row: number, char: string, color: string | null]
 
 // O quadro e os textos de uma cena. Em blocos, as células de bloco viram retângulos, como um terminal as
 // pinta, e as de texto (o chão, as estrelas, os sinais, o placar) vão à parte, para quem tem fonte.
-const drawn = (scene: HdScene): { frame: Frame; texts: Text[] } => {
-  if (!IS_BLOCKS) return { frame: rasterize(scene.shapes, scene.width, scene.height), texts: [] }
+const drawn = (scene: HdScene, tick: number): { frame: Frame; texts: Text[] } => {
+  if (!IS_BLOCKS) {
+    // em pixels a cena não tem textos: na escada, o placar vai escrito no canto, como nos blocos
+    const hud = IS_RAMP ? [...hudAt(tick)] : []
+    return { frame: rasterize(scene.shapes, scene.width, scene.height), texts: hud.map((char, i): Text => [scene.columns - hud.length + i, 0, char, HUD_INK]) }
+  }
   const cells = rasterCells(scene, LOOK)
   const isBlock = (cell: Cell) => cell.code >= BLOCK_FIRST && cell.code <= BLOCK_LAST
   const texts = cells.flatMap((cell, i): Text[] =>
@@ -66,7 +81,7 @@ const drawn = (scene: HdScene): { frame: Frame; texts: Text[] } => {
   return { frame: rasterize(cellShapes(cells, scene.columns, CELL_W, CELL_H), scene.width, scene.height), texts }
 }
 
-const first = sceneAt(EMPTY_SIM, EMPTY_SIM, 1)
+const first = sceneAt(EMPTY_SIM, EMPTY_SIM, 1, 0)
 writeFileSync(out, `${JSON.stringify({ width: first.width, height: first.height, cellW: CELL_W, cellH: CELL_H, frameMs: Math.round(FRAME_MS / PAINTS), isLight: IS_LIGHT })}\n`)
 
 let sim: Sim = EMPTY_SIM
@@ -75,7 +90,7 @@ for (let tick = 0; tick <= DEMO_FRAMES; tick++) {
   const before = applyDemo(sim, tick)
   const after = step(syncHelpers(before, []), geo)
   for (let paint = 0; paint < PAINTS; paint++) {
-    const { frame, texts } = drawn(sceneAt(before, after, paint / PAINTS))
+    const { frame, texts } = drawn(sceneAt(before, after, paint / PAINTS, tick), tick)
     appendFileSync(out, `${JSON.stringify({ texts })}\n`)
     appendFileSync(out, frame.data)
     count += 1
