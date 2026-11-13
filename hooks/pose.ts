@@ -76,9 +76,10 @@ const markOf = (w: Worker, sim: Sim, isResting: boolean, isCarrying: boolean): M
 
 /**
  * Puro: a pose de um bicho. Sem poder (`undefined`: quem desenha não disse nenhum), é o bicho de
- * sempre; quem falhou apaga e quem dorme descansa: nos dois casos, sem poder nenhum.
+ * sempre; quem falhou apaga e quem dorme descansa: nos dois casos, sem poder nenhum. `mascot` é o
+ * desenho do mascote (o avatar escolhido nos ajustes); os ajudantes são sempre os mesmos.
  */
-export const poseOf = (w: Worker, sim: Sim, given: Power | undefined): Pose => {
+export const poseOf = (w: Worker, sim: Sim, given: Power | undefined, mascot: Art = CLAWD): Pose => {
   const isMain = w.id === MAIN
   const isWalking = w.shout === 0 && (w.act === 'fetch' || w.act === 'haul' || w.act === 'home' || (isMain && w.act === 'enter'))
   const isCarrying = w.load.length > 0
@@ -99,7 +100,7 @@ export const poseOf = (w: Worker, sim: Sim, given: Power | undefined): Pose => {
     : 0
   return {
     isMain,
-    art: isMain ? CLAWD : MINI,
+    art: isMain ? mascot : MINI,
     tint: isMain ? 'claude' : tintOf(w.id),
     isUnseen: w.act === 'poof' || (!isMain && w.act === 'enter' && w.t < SPAWN),
     isWalking,

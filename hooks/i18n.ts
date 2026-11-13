@@ -71,6 +71,8 @@ export type Strings = {
     size: string
     /** Ao lado das opções de tamanho, quando o grande foi pedido e a barra não tem largura ou altura para ele. */
     noRoom: string
+    /** O rótulo da linha que escolhe quem é o mascote no palco. */
+    avatar: string
     show: string
     agents: string
     stillSpeed: string
@@ -125,6 +127,7 @@ const PT: Strings = {
     inUse: backend => `em uso: ${backend}`,
     size: 'tamanho',
     noRoom: '(sem efeito agora: a barra não tem espaço, ou a resolução é a clássica)',
+    avatar: 'mascote',
     show: 'mostrar',
     agents: 'agentes',
     stillSpeed: '(sem efeito com animação parada)',
@@ -178,6 +181,7 @@ const EN: Strings = {
     inUse: backend => `in use: ${backend}`,
     size: 'size',
     noRoom: '(no effect right now: the bar has no room, or the resolution is classic)',
+    avatar: 'mascot',
     show: 'show',
     agents: 'agents',
     stillSpeed: '(no effect while the animation is still)',

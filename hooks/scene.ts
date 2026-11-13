@@ -1,4 +1,5 @@
 import { bodyShade, eyesOf, fireworksOf, glowOf, jetsOf, sparksOf, streaksOf } from './aura'
+import { artOf } from './avatars'
 import type { Figure } from './aura'
 import { SPINNER, noise } from './effects'
 import { cols } from './format'
@@ -7,7 +8,7 @@ import type { Kind } from './palette'
 import { partsWidth } from './parts'
 import type { Part } from './parts'
 import { BRICK_CELLS, brick, dotKey, dotsLayer, rasterRow, spriteLayer } from './pixels'
-import type { Glow, Layer, Paint } from './pixels'
+import type { Glow, Layer, Paint, Shade } from './pixels'
 import { poseOf } from './pose'
 import type { Mark } from './pose'
 import { PLAIN, sparkAt } from './power'
@@ -15,6 +16,8 @@ import type { Power } from './power'
 import { FLOOR_Y, LOAD_LAYERS, MAIN, PILE_COLS, PILE_ROWS, WALL_ROWS, partyAge, wallFront } from './sim'
 import type { Geo, Sim, Worker } from './sim'
 import { CLAWD, drawing } from './sprites'
+import type { Art } from './sprites'
+import type { StatusAvatar as Avatar } from '../types'
 
 // O desenho de um quadro da cena: do estado da simulação às quatro linhas de células do palco.
 // Linha 0 é o ar (balões, tijolos na cabeça, placar); 1 e 2, cabeças e corpos; 3, patas e chão.
@@ -81,17 +84,19 @@ export const markLabels = (mark: Mark | null, at: { above: number; beside: numbe
 
 // Um bicho num quadro: a camada do desenho dele, os tijolos na cabeça, o balão e o poder. Sem poder
 // (`undefined`: quem desenha não disse nenhum), é o bicho de sempre, com a faísca do próprio Claude Code.
-const actorOf = (w: Worker, sim: Sim, power: Power | undefined, isLight: boolean): Actor => {
-  const pose = poseOf(w, sim, power)
+const actorOf = (w: Worker, sim: Sim, power: Power | undefined, isLight: boolean, mascot: Art): Actor => {
+  const pose = poseOf(w, sim, power, mascot)
   if (pose.isUnseen) return NO_ACTOR
   const { art, tint, power: p } = pose
   const x = Math.round(w.x)
   const bitmap = drawing(art, { eyes: pose.eyes, isArmsUp: pose.isArmsUp, step: pose.step, isSitting: pose.isSitting, hasLitEyes: eyesOf(p) !== null })
   // A última linha do desenho (as patas, ou o corpo de quem está sentado) fica no chão.
   const top = FLOOR_Y + 1 - bitmap.length + pose.lift
-  const figure: Figure = { bitmap, left: x, top, floor: FLOOR_Y, tint, strength: pose.strength }
+  const figure: Figure = { bitmap, left: x, top, floor: FLOOR_Y, tint, paints: art.paints, strength: pose.strength }
   const mood = { tick: sim.tick, isLight }
-  const layer = spriteLayer(bitmap, x, top, pose.isFailed ? `~${tint}` : bodyShade(p, figure, mood))
+  // quem falhou apaga: a cor dele (ou, num avatar colorido, a de cada marca) esmaecida
+  const faded: Shade = art.paints ? (_x, _y, mark) => `~${art.paints?.[mark] ?? tint}` : `~${tint}`
+  const layer = spriteLayer(bitmap, x, top, pose.isFailed ? faded : bodyShade(p, figure, mood))
   const glow = glowOf(p, figure, mood)
   const fore = [
     ...sparksOf(p, figure, mood),
@@ -183,6 +188,8 @@ export type SceneInput = {
   powers?: ReadonlyMap<string, Power>
   /** O tema é claro: a aura esmaece para branco, não para preto. */
   isLight?: boolean
+  /** O avatar do mascote; sem ele, o Clawd. */
+  avatar?: Avatar
 }
 
 /**
@@ -196,9 +203,10 @@ export const scenePower = (sim: Sim, powers: ReadonlyMap<string, Power> | undefi
 }
 
 /** Puro: as quatro linhas do palco para um estado da simulação. */
-export const sceneRows = ({ sim, geo, hud, powers, isLight = false }: SceneInput): Part[][] => {
+export const sceneRows = ({ sim, geo, hud, powers, isLight = false, avatar }: SceneInput): Part[][] => {
   const powerOf = (id: string) => scenePower(sim, powers, id)
-  const actors = sim.workers.map(w => actorOf(w, sim, powerOf(w.id), isLight))
+  const mascot = artOf(avatar)
+  const actors = sim.workers.map(w => actorOf(w, sim, powerOf(w.id), isLight, mascot))
   const wall = visibleWall(sim.wall, geo)
   // Os fogos da festa do fim, em volta do mascote.
   const party = partyAge(sim)

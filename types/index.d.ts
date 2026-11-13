@@ -17,6 +17,8 @@ export type StatusSpeed = 'lenta' | 'normal' | 'rapida'
 export type StatusResolution = 'auto' | 'blocos' | 'classica'
 /** O tamanho do palco: o de sempre (quatro linhas) ou o dobro, onde os blocos de terminal mostram mais detalhe. */
 export type StatusSize = 'normal' | 'grande'
+/** Quem é o mascote no palco: o Clawd de sempre (na cor de destaque) ou um avatar colorido. */
+export type StatusAvatar = 'clawd' | 'pikachu' | 'mario' | 'kratos'
 
 /** Os ajustes da aba ⚙: guardados no store do plugin, valem para todas as sessões. */
 export type StatusSettings = {
@@ -31,6 +33,8 @@ export type StatusSettings = {
   resolution: StatusResolution
   /** O tamanho do palco; `grande` só vale fora do palco de texto, e onde a barra tem largura e altura para ele. */
   size: StatusSize
+  /** O avatar do mascote no palco. */
+  avatar: StatusAvatar
   showLimits: boolean
   showTurnCost: boolean
   maxAgents: 3 | 6 | 10

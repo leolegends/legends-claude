@@ -376,7 +376,7 @@ function drawStage($: EngineInterface, e: BandInput, table: object, { backend, k
     if (isTerminal) dropStage()
     return { backend, node: null, lines: [], probe: null }
   }
-  const look = { isLight: isLightTheme, accent: accentColor(s) }
+  const look = { isLight: isLightTheme, accent: accentColor(s), avatar: s.avatar }
   const alpha = isTerminal && canRepaint() ? alphaOf(now, steppedAt, fx.frameMs) : 1
   const scene = geo && hasScene(sim) && backend !== 'text'
     ? onStage($, () => hdScene({ prev: shownSim, cur: sim, alpha, geo, hud, powers, ...look, trace: backend === 'raster' ? 'blocks' : 'pixels', zoom }), null)
@@ -390,7 +390,7 @@ function drawStage($: EngineInterface, e: BandInput, table: object, { backend, k
   // Enquanto não se sabe se o terminal desenha imagens, uma imagem de sondagem vai no canto da barra.
   const probe = isTerminal && s.resolution === 'auto' && known === 'unknown' && canRepaint() ? probeNode(table) : null
   if (probe) askPixels($, e.requestId, now, (where, err) => report($, where, err))
-  const lines = node || !geo || !hasScene(sim) ? [] : onStage($, () => sceneRows({ sim, geo, hud, powers, isLight: isLightTheme }).map(parts => ({ parts })), [])
+  const lines = node || !geo || !hasScene(sim) ? [] : onStage($, () => sceneRows({ sim, geo, hud, powers, isLight: isLightTheme, avatar: s.avatar }).map(parts => ({ parts })), [])
   return { backend, node, lines, probe }
 }
 

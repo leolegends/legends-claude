@@ -126,6 +126,7 @@ Para remover: `claude plugin uninstall legends-claude`.
 ⚙ ajustes                                          ▶ demonstração   restaurar padrão   ✕
 idioma       ● Português  English
 cor          ● Claude  Azul  Verde  Roxo  Rosa  Ciano  Âmbar  Mono
+mascote      ● Clawd  Pikachu  Mario  Kratos
 animação     ● completa  suave  parada
 velocidade   lenta  ● normal  rápida
 resolução    ● automática  blocos  clássica    em uso: blocos
@@ -138,6 +139,7 @@ agentes      3  ● 6  10
 | --- | --- |
 | idioma | Português ou inglês: muda na hora todos os textos da barra, os avisos e a descrição do comando. Sem uma escolha salva, uma instalação nova segue o idioma do sistema (`LC_ALL`, `LC_MESSAGES`, `LANG`): português se ele disser `pt`, senão inglês. "Restaurar padrão" não mexe no idioma. |
 | cor | A cor de destaque: o mascote, a faísca, o modelo, o cometa, o pulso da régua, o custo aceso. Cada opção já aparece na própria cor. `Claude` e `Mono` seguem o tema claro/escuro do Claude Code. |
+| mascote | Quem é o mascote no palco. `Clawd` é o de sempre, na cor de destaque. `Pikachu`, `Mario` e `Kratos` são avatares coloridos, com cores próprias (a cor de destaque segue valendo no resto da barra): em pixels, em vetor e em blocos no tamanho grande aparecem no desenho fino; em blocos no tamanho normal e no palco de texto, numa versão de baixa resolução. O poder (aura, brilho, olhos acesos, voo) vale para todos; os ajudantes seguem sendo os pequenos Clawds. |
 | animação | `completa` é tudo, palco incluído; `suave` deixa só a faísca pulsando e o cometa (sem palco, pulso na régua, nome surgindo, brilho nem estouro); `parada` não mexe nada e só atualiza o tempo uma vez por segundo. |
 | velocidade | A duração de um quadro: 200, 125 ou 80 ms. É também o ritmo do palco. Sem efeito com a animação parada. |
 | resolução | Em que o palco é desenhado. `automática` é o melhor que a tela oferece: pixels de verdade num terminal que desenha imagens, blocos de terminal nos outros, vetor no app desktop. `blocos` mantém os blocos mesmo onde há pixels. `clássica` é o palco de texto. Ao lado das opções, a aba diz o que está em uso nesta tela. |

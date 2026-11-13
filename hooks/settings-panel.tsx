@@ -2,7 +2,7 @@ import type { EngineInterface, RenderElement } from 'claude-code'
 
 import { LANGUAGES } from './i18n'
 import type { Strings } from './i18n'
-import { ACCENTS, AGENT_LIMITS, MOTIONS, RESOLUTIONS, SIZES, SPEEDS, TOGGLES } from './settings'
+import { ACCENTS, AGENT_LIMITS, AVATARS, MOTIONS, RESOLUTIONS, SIZES, SPEEDS, TOGGLES } from './settings'
 import { VERSION } from './version'
 import type { StatusSettings as Settings } from '../types'
 
@@ -64,6 +64,10 @@ export const SettingsPanel = ({ el, settings: s, strings: t, accent, inUse, isCr
     <Box key="set-accent">
       {label(t.panel.accent)}
       {ACCENTS.flatMap(a => option(`set-accent-${a.id}`, t.accents[a.id], s.accent === a.id, () => onChange({ accent: a.id }), a.color))}
+    </Box>,
+    <Box key="set-avatar">
+      {label(t.panel.avatar)}
+      {AVATARS.flatMap(a => option(`set-avatar-${a.id}`, a.label, s.avatar === a.id, () => onChange({ avatar: a.id })))}
     </Box>,
     <Box key="set-motion">
       {label(t.panel.motion)}

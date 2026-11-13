@@ -126,6 +126,7 @@ To remove: `claude plugin uninstall legends-claude`.
 ⚙ settings                                                   ▶ demo   restore defaults   ✕
 language     Português  ● English
 color        ● Claude  Blue  Green  Purple  Pink  Cyan  Amber  Mono
+mascot       ● Clawd  Pikachu  Mario  Kratos
 animation    ● full  subtle  still
 speed        slow  ● normal  fast
 resolution   ● auto  blocks  classic    in use: blocks
@@ -138,6 +139,7 @@ agents       3  ● 6  10
 | --- | --- |
 | language | English or Portuguese: switches every text in the bar, the notices and the command's description at once. With no saved choice, a fresh install follows the system language (`LC_ALL`, `LC_MESSAGES`, `LANG`): Portuguese if it says `pt`, English otherwise. "Restore defaults" leaves the language alone. |
 | color | The accent color: the mascot, the spark, the model, the comet, the rule's pulse, the lit-up cost. Each option is already shown in its own color. `Claude` and `Mono` follow Claude Code's light/dark theme. |
+| mascot | Who the mascot is on the stage. `Clawd` is the usual one, in the accent color. `Pikachu`, `Mario` and `Kratos` are colored avatars with their own colors (the accent color still applies to the rest of the bar): in pixels, vector and large blocks they show in the fine drawing; in normal-size blocks and on the text stage, in a low-resolution version. The power (aura, sheen, lit eyes, flight) applies to all of them; the helpers are still the small Clawds. |
 | animation | `full` is everything, stage included; `subtle` keeps only the pulsing spark and the comet (no stage, rule pulse, emerging name, shimmer or burst); `still` moves nothing and only updates the time once a second. |
 | speed | The duration of a frame: 200, 125 or 80 ms. It is also the pace of the stage. No effect while the animation is still. |
 | resolution | What the stage is drawn in. `auto` is the best the screen offers: real pixels in a terminal that draws images, terminal blocks in the others, vector in the desktop app. `blocks` keeps the blocks even where there are pixels. `classic` is the text stage. Next to the options, the tab says what is in use on this screen. |

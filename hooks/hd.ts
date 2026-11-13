@@ -1,5 +1,6 @@
 import { bodyShade, eyesOf, isPainted, sheenOf } from './aura'
 import type { Sheen } from './aura'
+import { artOf } from './avatars'
 import { bitmapShapes, box } from './canvas'
 import type { Shape } from './canvas'
 import { blend, rgbOf } from './color'
@@ -9,6 +10,7 @@ import type { Body, Light, Unit } from './hd-aura'
 import { KIND_PAINT, kindOf } from './palette'
 import type { Kind } from './palette'
 import type { Part } from './parts'
+import { EYE } from './pixels'
 import type { Bitmap } from './pixels'
 import { poseOf } from './pose'
 import type { Pose } from './pose'
@@ -18,7 +20,9 @@ import { SCENE_ROWS, anchorsOf, backdropAt, cornerLabels, markLabels, scenePower
 import type { Label } from './scene'
 import { BELT_SPEED, FLOOR_Y, LOAD_LAYERS, MAIN, PILE_COLS, PILE_ROWS, WALL_ROWS, partyAge, wallFront } from './sim'
 import type { Geo, Sim, Worker } from './sim'
-import { CLAWD, drawing } from './sprites'
+import { CLAWD, FINE_X, FINE_Y, detailDrawing, drawing } from './sprites'
+import type { Art } from './sprites'
+import type { StatusAvatar as Avatar } from '../types'
 
 // O palco em alta resolução: a mesma cena do palco de texto, do mesmo estado da simulação, desenhada
 // em pixels (8 de largura por 16 de altura para cada célula do terminal) em vez de quadrantes de
@@ -41,6 +45,7 @@ const SHADE = 0.22 // quanto o topo do corpo clareia e a base escurece, no traç
 const SPARK_SIZE = 0.75 // o lado de uma faísca no traço livre, em subpixels
 const SHEEN_SLICE = 2 // a altura de cada fatia da faixa de brilho, em pixels: o degrau da inclinação dela
 const SHEEN_ALPHA = 0.85
+const FINE_SHEEN_ALPHA = 0.3 // sobre um desenho fino a faixa é mais leve: o avatar segue aparecendo por baixo dela
 const SIGN_LIFT = 0.3 // quanto a faísca e o grito clareiam a cor de destaque, para saltarem da aura
 const NIGHT = 0x0b0b10 // o fundo de um terminal escuro, aproximado
 const DAY = 0xffffff
@@ -70,6 +75,8 @@ export type HdInput = {
   isLight?: boolean
   /** A cor de destaque dos ajustes: a do mascote. Uma cor do tema ou hex. */
   accent?: string
+  /** O avatar do mascote; sem ele, o Clawd. */
+  avatar?: Avatar
   trace: Trace
   zoom?: Zoom
 }
@@ -101,6 +108,8 @@ type View = Light & {
   accent: string
   alpha: number
   zoom: Zoom
+  /** O desenho do mascote: o avatar escolhido nos ajustes. */
+  mascot: Art
   unit: Unit
   /** Uma célula do mundo, em pixels: no tamanho dobrado, duas células do terminal. */
   cell: { w: number; h: number }
@@ -133,29 +142,31 @@ const volumeShapes = (rows: Bitmap, left: number, top: number, rgb: number, isSi
   ]
 }
 
-// Os trechos pintados de uma linha do desenho (só o corpo: os olhos acesos ficam de fora), em subpixels.
+// Os trechos pintados de uma linha do desenho (só o corpo: os olhos acesos ficam de fora), em marcas.
+const isBody = (mark: string | undefined) => isPainted(mark) && mark !== EYE
 const runsOf = (marks: string): (readonly [from: number, to: number])[] =>
   [...marks].flatMap((mark, col): (readonly [number, number])[] => {
-    if (mark !== '#' || marks[col - 1] === '#') return []
-    const end = [...marks].findIndex((next, i) => i > col && next !== '#')
+    if (!isBody(mark) || isBody(marks[col - 1])) return []
+    const end = [...marks].findIndex((next, i) => i > col && !isBody(next))
     return [[col, end < 0 ? marks.length : end]]
   })
 
 // A faixa de brilho no traço com relevo: a mesma do palco de texto, mas inclinada de verdade e cortada
-// no corpo, em fatias finas, em vez de pintar células inteiras.
-const sheenShapes = (rows: Bitmap, left: number, top: number, sheen: Sheen, view: View): Shape[] => {
-  const { unit: { u, v }, cell, zoom } = view
-  const slice = SHEEN_SLICE * zoom
+// no corpo, em fatias finas, em vez de pintar células inteiras. `dot` é o tamanho de uma marca de
+// `rows`, em pixels: um subpixel no desenho comum, um ponto no desenho fino.
+const sheenShapes = (rows: Bitmap, left: number, top: number, sheen: Sheen, view: View, dot: Unit, alpha: number): Shape[] => {
+  const { unit: { u }, cell, zoom } = view
+  const slice = Math.min(dot.v, SHEEN_SLICE * zoom)
   return rows.flatMap((marks, row) => {
     const runs = runsOf(marks)
-    return Array.from({ length: Math.round(v / slice) }).flatMap((_, k): Shape[] => {
-      const y = top + row * v + k * slice
+    return Array.from({ length: Math.max(1, Math.round(dot.v / slice)) }).flatMap((_, k): Shape[] => {
+      const y = top + row * dot.v + k * slice
       const from = left + (sheen.front - (y + slice / 2) / cell.h) * cell.w
       const to = from + sheen.width * cell.w
       return runs.flatMap(([a, b]): Shape[] => {
-        const x0 = Math.max(from, left + a * u)
-        const x1 = Math.min(to, left + b * u)
-        return x1 - x0 >= 1 ? [box(x0, y, x1 - x0, slice, rgbOf(sheen.paintAt(Math.floor((x0 + x1) / 2 / u)), view.isLight), SHEEN_ALPHA)] : []
+        const x0 = Math.max(from, left + a * dot.u)
+        const x1 = Math.min(to, left + b * dot.u)
+        return x1 - x0 >= 1 ? [box(x0, y, x1 - x0, slice, rgbOf(sheen.paintAt(Math.floor((x0 + x1) / 2 / u)), view.isLight), alpha)] : []
       })
     })
   })
@@ -199,29 +210,39 @@ const signLabels = (pose: Pose, given: Power | undefined, x: number, tick: numbe
 // Um bicho entre dois quadros: desenhado como está em `prev`, a caminho de onde `cur` o põe.
 const castOf = (w: Worker, prev: Sim, cur: Sim, powers: ReadonlyMap<string, Power> | undefined, view: View): Cast => {
   const given = scenePower(prev, powers, w.id)
-  const pose = poseOf(w, prev, given)
+  const pose = poseOf(w, prev, given, view.mascot)
   if (pose.isUnseen) return NO_CAST
   const target = cur.workers.find(next => next.id === w.id)
-  const after = target ? poseOf(target, cur, scenePower(cur, powers, w.id)) : pose
+  const after = target ? poseOf(target, cur, scenePower(cur, powers, w.id), view.mascot) : pose
   const { art, power } = pose
   const { unit, unit: { u, v }, isLight } = view
   // Em blocos, o bicho anda na grade de meia célula: fora dela, a borda dele não teria bloco que a desenhe.
   const x = placed(lerp(w.x, target?.x ?? w.x, view.alpha), u, view.grain.x, view)
   const lift = placed(lerp(pose.lift, after.isUnseen ? pose.lift : after.lift, view.alpha), v, view.grain.y, view)
-  const rows = drawing(art, { eyes: pose.eyes, isArmsUp: pose.isArmsUp, step: pose.step, isSitting: pose.isSitting, hasLitEyes: eyesOf(power) !== null })
+  const stance = { eyes: pose.eyes, isArmsUp: pose.isArmsUp, step: pose.step, isSitting: pose.isSitting }
+  const rows = drawing(art, { ...stance, hasLitEyes: eyesOf(power) !== null })
+  // Onde há detalhe, um avatar com desenho fino é pintado com ele; o comum segue sendo a silhueta da aura.
+  const fine = view.hasDetail ? detailDrawing(art, stance) : null
+  const dot: Unit = fine ? { u: u / FINE_X, v: v / FINE_Y } : unit
   const topSub = FLOOR_Y + 1 - rows.length + lift
   const left = x * u
   const top = topSub * v
   const tint = pose.isMain ? view.accent : pose.tint
   const base = rgbOf(tint, isLight)
   const mood = { tick: view.time, isLight }
-  const shade = bodyShade(power, { bitmap: rows, left: Math.round(x), top: Math.round(topSub), floor: FLOOR_Y, tint, strength: pose.strength }, mood)
+  const shade = bodyShade(power, { bitmap: rows, left: Math.round(x), top: Math.round(topSub), floor: FLOOR_Y, tint, paints: art.paints, strength: pose.strength }, mood)
   const lit = eyesOf(power)
+  // A tinta chapada de uma marca: a cor do bicho, a da paleta dele, ou a dos olhos acesos (nas pupilas).
+  const flat = (mark: string) => {
+    if (lit && (mark === EYE || mark === art.pupil)) return rgbOf(lit, isLight)
+    const own = art.paints?.[mark]
+    return own ? rgbOf(own, isLight) : base
+  }
   const inkOf = (mark: string, col: number, row: number) => {
     if (!isPainted(mark)) return null
-    if (pose.isFailed) return { rgb: blend(base, backdropRgb(isLight), DIMMED) }
+    if (pose.isFailed) return { rgb: blend(flat(mark), backdropRgb(isLight), DIMMED) }
     // com relevo o corpo é chapado (a faixa de brilho vem por cima, inclinada); sem ele, a tinta é a da célula
-    if (view.hasDetail) return { rgb: mark === '#' || !lit ? base : rgbOf(lit, isLight) }
+    if (view.hasDetail) return { rgb: flat(mark) }
     return { rgb: rgbOf(typeof shade === 'string' ? shade : shade(Math.round(x) + col, Math.round(topSub) + row, mark), isLight) }
   }
   const sheen = view.hasDetail && !pose.isFailed ? sheenOf(power, tint, mood) : null
@@ -235,9 +256,10 @@ const castOf = (w: Worker, prev: Sim, cur: Sim, powers: ReadonlyMap<string, Powe
   return {
     glow: haloShapes(body, view),
     body: [
-      ...bitmapShapes(rows, { left, top, cellW: u, cellH: v }, inkOf),
-      ...(view.hasDetail && !pose.isFailed ? volumeShapes(rows, left, top, base, pose.isSitting, unit) : []),
-      ...(sheen ? sheenShapes(rows, left, top, sheen, view) : []),
+      ...bitmapShapes(fine ?? rows, { left, top, cellW: dot.u, cellH: dot.v }, inkOf),
+      // o volume é do desenho comum: o fino já traz as próprias cores
+      ...(view.hasDetail && !fine && !pose.isFailed ? volumeShapes(rows, left, top, base, pose.isSitting, unit) : []),
+      ...(sheen ? sheenShapes(fine ?? rows, left, top, sheen, view, dot, fine ? FINE_SHEEN_ALPHA : SHEEN_ALPHA) : []),
     ],
     tiles,
     fore: [
@@ -324,7 +346,7 @@ const underOf = (prev: Sim, geo: Geo, wall: string, zoom: Zoom) => (cell: number
 }
 
 /** Puro: a cena do palco em pixels, entre dois quadros da simulação. */
-export const hdScene = ({ prev: shown, cur, alpha, geo, hud, powers, isLight = false, accent = 'claude', trace, zoom = 1 }: HdInput): HdScene => {
+export const hdScene = ({ prev: shown, cur, alpha, geo, hud, powers, isLight = false, accent = 'claude', avatar, trace, zoom = 1 }: HdInput): HdScene => {
   // Com o caminho todo percorrido, o que se mostra é o estado seguinte, inteiro: o bicho que chegou já
   // está na pose de quem chegou, e a cena pode parar ali.
   const isThere = !(alpha < 1)
@@ -332,7 +354,7 @@ export const hdScene = ({ prev: shown, cur, alpha, geo, hud, powers, isLight = f
   const t = isThere ? 0 : clamp01(alpha)
   const isFree = trace === 'pixels'
   const view: View = {
-    time: prev.tick + t, isLight, isFine: isFree, grain: GRAIN, accent, alpha: t, zoom,
+    time: prev.tick + t, isLight, isFine: isFree, grain: GRAIN, accent, alpha: t, zoom, mascot: artOf(avatar),
     unit: { u: SUB_W * zoom, v: SUB_H * zoom },
     cell: { w: CELL_W * zoom, h: CELL_H * zoom },
     isFree,

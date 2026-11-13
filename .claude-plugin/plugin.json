@@ -1,6 +1,6 @@
 {
   "name": "legends-claude",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Status bar above the Claude Code prompt: model, effort, cost, usage limits, running agents and an animated stage where the mascot builds what the turn does and glows with the model and the effort, drawn in real pixels where the terminal can. — Barra de status acima do prompt do Claude Code: modelo, effort, custo, limites, agentes e um palco animado onde o mascote constrói o que o turno faz e brilha conforme o modelo e o effort, desenhado em pixels de verdade onde o terminal consegue.",
   "author": {
     "name": "leolegends",

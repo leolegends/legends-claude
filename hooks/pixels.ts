@@ -14,11 +14,17 @@ export type Paint = string
  */
 export type Layer = (x: number, y: number) => Paint | null | undefined
 
-/** Um desenho em subpixels: `#` é o corpo, `o` um olho aceso, qualquer outra coisa vazio. */
+/**
+ * Um desenho em subpixels: `#` é o corpo, `o` um olho aceso, `.` (ou um espaço) vazio. Qualquer outra
+ * marca é tinta da paleta de quem desenha (um avatar colorido): quem pinta decide a cor dela.
+ */
 export type Bitmap = readonly string[]
 
 /** O símbolo de um olho aceso num desenho. */
 export const EYE = 'o'
+
+/** A marca tem tinta: não é um vazio do desenho, nem está fora dele. */
+export const isInk = (mark: string | undefined): mark is string => mark !== undefined && mark !== '.' && mark !== ' '
 
 /**
  * A tinta de um desenho: uma só, ou uma por subpixel (o brilho que percorre o corpo, o olho aceso).
@@ -78,7 +84,7 @@ export const spriteLayer = (bitmap: Bitmap, left: number, top: number, shade: Sh
   const col = x - left
   if (row === undefined || col < -1 || col > row.length) return undefined
   const mark = row[col]
-  if (mark !== '#' && mark !== EYE) return null
+  if (!isInk(mark)) return null
   return typeof shade === 'string' ? shade : shade(x, y, mark)
 }
 

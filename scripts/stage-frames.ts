@@ -1,12 +1,13 @@
 // Gera os quadros do GIF do palco em alta resolução: a demonstração do palco, desenhada em pixels ou em
 // blocos de terminal, com as mesmas funções que o mod usa. Sai um arquivo com os quadros crus.
 //
-//   bun run scripts/stage-frames.ts <saída.bin> [colunas] [pixels|blocos] [normal|grande] [modelo] [effort] [claro]
+//   bun run scripts/stage-frames.ts <saída.bin> [colunas] [pixels|blocos] [normal|grande] [modelo] [effort] [claro|escuro] [avatar]
 //   python3 scripts/stage-gif.py docs/stage.gif "pixels=<a.bin>" "blocos=<b.bin>" …
 //
 // `pixels` é o que um terminal que desenha imagens mostra (kitty, Ghostty, iTerm2) e, em vetor, o app
 // desktop; `blocos`, o que os outros terminais mostram. O modelo (`fable`, `opus`, `sonnet`, `haiku`; o
-// padrão é `fable`) e o effort (`low` a `max`; o padrão é `high`) dão a aparência do mascote.
+// padrão é `fable`) e o effort (`low` a `max`; o padrão é `high`) dão a aparência do mascote; o avatar
+// (`clawd`, `pikachu`, `mario`, `kratos`; o padrão é `clawd`), quem ele é.
 //
 // O arquivo: uma linha JSON com as medidas; depois, para cada quadro, uma linha JSON com os textos dele
 // (as células de texto do palco em blocos: quem monta o GIF as escreve com uma fonte) e os pixels RGBA.
@@ -22,11 +23,12 @@ import { DEMO_CAST, DEMO_FRAMES, applyDemo } from '../hooks/demo'
 import { CELL_H, CELL_W, hdScene } from '../hooks/hd'
 import type { HdScene } from '../hooks/hd'
 import { powerOf } from '../hooks/power'
+import { sanitize } from '../hooks/settings'
 import { EMPTY_SIM, MAIN, geometry, step, syncHelpers } from '../hooks/sim'
 import type { Sim } from '../hooks/sim'
 import { rasterCells } from '../hooks/stage'
 
-const [out, columnsArg = '100', mode = 'pixels', size = 'normal', model = 'fable', effort = 'high', theme = 'escuro'] = process.argv.slice(2)
+const [out, columnsArg = '100', mode = 'pixels', size = 'normal', model = 'fable', effort = 'high', theme = 'escuro', avatarArg = 'clawd'] = process.argv.slice(2)
 if (!out) throw new Error('falta o arquivo de saída')
 const COLUMNS = Number(columnsArg)
 const ZOOM = size === 'grande' ? 2 : 1
@@ -34,7 +36,8 @@ const IS_LIGHT = theme === 'claro'
 const IS_BLOCKS = mode === 'blocos'
 const FRAME_MS = 125
 const PAINTS = 2 // pinturas por quadro da simulação: o GIF sai a 16 quadros por segundo
-const LOOK = { isLight: IS_LIGHT, accent: 'claude' }
+const AVATAR = sanitize({ avatar: avatarArg }).avatar
+const LOOK = { isLight: IS_LIGHT, accent: 'claude', avatar: AVATAR }
 const BLOCK_FIRST = 0x2580
 const BLOCK_LAST = 0x259f
 
@@ -45,7 +48,7 @@ const powers = new Map([...DEMO_CAST, [MAIN, powerOf(`claude-${model}-5`, effort
 
 // A cena num instante: entre o estado de antes de um passo da demonstração e o de depois dele.
 const sceneAt = (before: Sim, after: Sim, alpha: number): HdScene =>
-  hdScene({ prev: before, cur: after, alpha, geo, hud: [{ text: '▶ demo', dim: true }], powers, isLight: IS_LIGHT, trace: IS_BLOCKS ? 'blocks' : 'pixels', zoom: ZOOM })
+  hdScene({ prev: before, cur: after, alpha, geo, hud: [{ text: '▶ demo', dim: true }], powers, isLight: IS_LIGHT, avatar: AVATAR, trace: IS_BLOCKS ? 'blocks' : 'pixels', zoom: ZOOM })
 
 const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
 

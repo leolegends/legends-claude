@@ -1,6 +1,6 @@
 import { hexOf, mix, rainbow } from './color'
 import { noise } from './effects'
-import { EYE, dotKey } from './pixels'
+import { EYE, dotKey, isInk } from './pixels'
 import type { Bitmap, Glow, Paint, Shade } from './pixels'
 import type { Power } from './power'
 
@@ -21,6 +21,8 @@ export type Figure = {
   floor: number
   /** A cor dele: do tema ou hex. */
   tint: Paint
+  /** A paleta de um avatar colorido: a tinta de cada marca do desenho que não é a cor dele. */
+  paints?: Readonly<Record<string, Paint>>
   /** A força da aura dele, de 0 (nenhuma) a `AURA_MAX`: sai do poder, e é menor num ajudante. */
   strength: number
 }
@@ -51,6 +53,7 @@ const SHEEN_WIDTH = [0, 1, 2, 2] // e a largura da faixa, em células
 const SHEEN_SPEED = 2 // células por quadro
 const SHEEN_LIFT = 0.62 // quanto a faixa clareia a cor do corpo
 const GOLD_SHEEN = '#FFE9A8' // o brilho de Opus
+const PALETTE_SHEEN = 0.5 // num avatar colorido a faixa mistura com a cor de cada marca: ele segue aparecendo sob o brilho
 export const MOTES_FROM = 3 // a força da aura a partir da qual sobem fagulhas
 export const MOTE_LIFE = 8 // quadros que uma fagulha leva subindo
 export const MOTE_STAGGER = 5 // quadros entre uma fagulha e a seguinte
@@ -65,7 +68,7 @@ export const STREAK_FROM = 2 // com a aura a partir dessa força
 export const STREAK_ROWS = [1, 3] // as linhas do desenho de onde saem os riscos (olhos e corpo)
 export const JET_SHARE = 0.45 // a fração das colunas sob o corpo que solta jato num quadro
 
-export const isPainted = (mark: string | undefined) => mark === '#' || mark === EYE
+export const isPainted = isInk
 export const backdropOf = (isLight: boolean) => (isLight ? WHITE : NIGHT)
 // Uma fagulha: a cor da classe puxada para longe do fundo, para saltar dele.
 export const sparkOf = (paint: string, isLight: boolean) => (isLight ? mix(paint, BLACK, SPARK_SINK) : mix(paint, WHITE, SPARK_LIFT))
@@ -111,14 +114,19 @@ export const sheenOf = ({ tier }: Power, tint: Paint, mood: Mood): Sheen | null 
  */
 export const bodyShade = (p: Power, figure: Figure, mood: Mood): Shade => {
   const eyes = eyesOf(p)
-  const { tint, left } = figure
+  const { tint, left, paints } = figure
   const sheen = sheenOf(p, tint, mood)
-  if (!sheen) return tint
+  if (!sheen && !paints) return tint
+  const own = (mark: string) => paints?.[mark] ?? tint // a cor do bicho, ou a da paleta dele naquela marca
   return (x, y, mark) => {
     if (mark === EYE && eyes) return eyes
+    if (!sheen) return own(mark)
     const cell = x >> 1
     const across = cell - (left >> 1) + (y >> 1) // a faixa é inclinada
-    return across >= sheen.front && across < sheen.front + sheen.width ? sheen.paintAt(cell * 2) : tint // a cor é a da célula, não a do subpixel
+    if (across < sheen.front || across >= sheen.front + sheen.width) return own(mark)
+    const gloss = sheen.paintAt(cell * 2) // a cor é a da célula, não a do subpixel
+    const inked = paints?.[mark]
+    return inked ? mix(inked, gloss, PALETTE_SHEEN) : gloss
   }
 }
 

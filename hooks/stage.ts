@@ -10,7 +10,7 @@ import { encodePng, toBase64 } from './png'
 import { SCENE_ROWS, textCells, textKey } from './scene'
 import { geometry } from './sim'
 import { SVG_LIMIT, toSvg } from './vector'
-import type { StatusResolution as Resolution } from '../types'
+import type { StatusAvatar as Avatar, StatusResolution as Resolution } from '../types'
 
 // Do palco em pixels ao que cada tela sabe mostrar. Num terminal que desenha imagens (kitty, Ghostty,
 // iTerm2), a cena vai como imagem: pixels de verdade. Nos outros terminais vai como uma grade de
@@ -71,8 +71,8 @@ export const paintEvery = (frameMs: number): number => Math.round(frameMs / Math
 export const isPixelRefusal = ({ deny, fix }: { deny?: string; fix?: string }): boolean =>
   fix === 'tmux-passthrough' || /draws its alt/.test(deny ?? '')
 
-/** O tema e a cor de destaque: de onde saem as cores dos textos da cena. */
-export type Look = { isLight: boolean; accent: string }
+/** O tema, a cor de destaque (de onde saem as cores dos textos da cena) e o avatar do mascote. */
+export type Look = { isLight: boolean; accent: string; avatar?: Avatar }
 
 // Os caracteres que uma célula do `Raster` aceita com certeza: imprimíveis, de uma coluna, do plano
 // básico. O engine recusa a barra inteira por uma célula com um caractere de controle, combinante (um

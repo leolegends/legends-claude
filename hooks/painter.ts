@@ -74,7 +74,7 @@ export const canRepaint = (): boolean => canBlit
 
 /** Puro: o que o palco mostra num instante do caminho, como o elemento dele o quer. */
 export const stagePayload = (backend: Mount['backend'], { geo, zoom, hud, powers, look }: StageView, { prev, cur }: Tween, alpha: number) => {
-  const scene = hdScene({ prev, cur, alpha, geo, hud, powers, isLight: look.isLight, accent: look.accent, trace: backend === 'image' ? 'pixels' : 'blocks', zoom })
+  const scene = hdScene({ prev, cur, alpha, geo, hud, powers, isLight: look.isLight, accent: look.accent, avatar: look.avatar, trace: backend === 'image' ? 'pixels' : 'blocks', zoom })
   return backend === 'image' ? { source: { png: stageImage(scene) } } : { cells: packCells(rasterCells(scene, look)) }
 }
 

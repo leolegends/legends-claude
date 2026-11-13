@@ -2,6 +2,7 @@ import { LANGUAGES } from './i18n'
 import type { ToggleKey } from './i18n'
 import type {
   StatusAccent as Accent,
+  StatusAvatar as Avatar,
   StatusLanguage as Language,
   StatusMotion as Motion,
   StatusResolution as Resolution,
@@ -45,13 +46,21 @@ export const RESOLUTIONS: readonly { id: Resolution }[] = [{ id: 'auto' }, { id:
 // O tamanho do palco: o de sempre, ou o dobro (o mundo fica com a metade da largura da barra).
 export const SIZES: readonly { id: Size }[] = [{ id: 'normal' }, { id: 'grande' }]
 
+// Quem é o mascote no palco. Os nomes são nomes próprios: iguais em qualquer idioma.
+export const AVATARS: readonly { id: Avatar; label: string }[] = [
+  { id: 'clawd', label: 'Clawd' },
+  { id: 'pikachu', label: 'Pikachu' },
+  { id: 'mario', label: 'Mario' },
+  { id: 'kratos', label: 'Kratos' },
+]
+
 export const AGENT_LIMITS = [3, 6, 10] as const
 
 // O idioma do padrão é o português, em que a barra nasceu. Numa instalação nova quem decide é o idioma
 // do sistema (veja `sanitize` e quem a chama); "restaurar padrão" não mexe no idioma.
 export const DEFAULT_SETTINGS: Settings = {
   language: 'pt', accent: 'claude', motion: 'completa', speed: 'normal',
-  showRule: true, showStage: true, resolution: 'auto', size: 'normal', showLimits: true, showTurnCost: true, maxAgents: 6,
+  showRule: true, showStage: true, resolution: 'auto', size: 'normal', avatar: 'clawd', showLimits: true, showTurnCost: true, maxAgents: 6,
 }
 
 /** Os interruptores da linha "mostrar", na ordem em que aparecem. */
@@ -77,6 +86,7 @@ export const sanitize = (raw: unknown, language: Language = DEFAULT_SETTINGS.lan
     showStage: flag(r.showStage, d.showStage),
     resolution: oneOf(idsOf(RESOLUTIONS), r.resolution, d.resolution),
     size: oneOf(idsOf(SIZES), r.size, d.size),
+    avatar: oneOf(idsOf(AVATARS), r.avatar, d.avatar),
     showLimits: flag(r.showLimits, d.showLimits),
     showTurnCost: flag(r.showTurnCost, d.showTurnCost),
     maxAgents: oneOf(AGENT_LIMITS, r.maxAgents, d.maxAgents),
