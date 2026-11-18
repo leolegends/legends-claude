@@ -314,11 +314,14 @@ async function applySettings($: EngineInterface, change: (s: Settings) => Settin
 
 // A demonstração: um turno de mentira no palco. Só com a sessão parada e o palco ligado. `look` pede
 // outra aparência para o mascote ("opus max", "haiku"): sem ele, vale o modelo e o effort da sessão.
-async function startDemo($: EngineInterface, look = ''): Promise<string> {
+// `isCommand`: quem pede é o comando `/legends-claude demo`. O Claude Code (visto na versão 2.1.327) dá
+// a faixa como "trabalhando" enquanto um comando roda, o próprio incluído: vinda dele, só um turno de
+// verdade impede a demonstração. Vinda do botão, a faixa "trabalhando" é um turno cujo começo o mod não viu.
+async function startDemo($: EngineInterface, look = '', isCommand = false): Promise<string> {
   const words = look.trim()
   // A única espera antes de marcar a cena: as conferências vêm depois dela, para valerem no instante em que a cena entra.
   const f = await read($, figures)
-  if (isBandWorking || isTurnOn) return strings.demoBusy
+  if (isTurnOn || (isBandWorking && !isCommand)) return strings.demoBusy
   if (!fx.hasStage) return strings.demoOff
   if (lastBandColumns < MIN_COLUMNS) return strings.demoNarrow(MIN_COLUMNS)
   const asked = words ? lookOf(words, powerOf(f.model, f.effort)) : null
@@ -430,7 +433,7 @@ export const register: Register = on => {
       return { text: strings.opened }
     }
     const demo = /^\s*demo\S*(\s.*)?$/i.exec(e.args) // "demo", "demonstração", "demonstration"; o resto é a aparência pedida
-    if (demo) return { text: await startDemo($, demo[1]) }
+    if (demo) return { text: await startDemo($, demo[1], true) }
     const hidden = await update($, isHidden, h => !h)
     if (hidden) return { text: strings.hidden }
     return { text: lastBandColumns < MIN_COLUMNS ? strings.tooNarrow(MIN_COLUMNS) : strings.shown }
