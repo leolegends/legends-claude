@@ -1,7 +1,7 @@
 import { kindOf } from './palette'
 import { power } from './power'
 import type { Power } from './power'
-import { DEMO_PREFIX, MAIN, begin, enqueue, finish, retire, settle, summon, think } from './sim'
+import { DEMO_PREFIX, MAIN, begin, enqueue, finish, retire, settle, shift, summon, think } from './sim'
 import type { Sim } from './sim'
 
 // A demonstração: um turno de mentira, com hora marcada para cada coisa, para ver o palco sem gastar
@@ -18,49 +18,60 @@ export const DEMO_CAST: readonly (readonly [string, Power])[] = [
 
 type Cue = readonly [at: number, run: (sim: Sim) => Sim]
 
+// O fim do roteiro: a última leva entregue e o mascote de volta em casa (numa barra larga, onde a
+// pista é mais comprida, ele chega por último), a resposta sendo escrita, e a festa.
+const WRITE_AT = 212
+const END_AT = 238
+
 const tools = (who: string, ...names: string[]) => (sim: Sim) => names.reduce((s, name) => enqueue(s, who, kindOf(name), name), sim)
 const done = (who: string, count = 1) => (sim: Sim) => Array.from({ length: count }).reduce<Sim>(s => settle(s, who), sim)
 const thinking = (who: string, isOn: boolean) => (sim: Sim) => think(sim, who, isOn)
+// As fases de um pedido em curso: monta a chamada de uma ferramenta, escreve a resposta.
+const drafting = (who: string, tool: string) => (sim: Sim) => shift(sim, who, 'draft', tool)
+const writing = (who: string) => (sim: Sim) => shift(sim, who, 'write')
 
-// O roteiro: pensa, lê e busca, pensa de novo, uma rajada com um shell demorado, chama dois ajudantes,
-// todos trabalham, os ajudantes terminam, uma última leva, e o fim com confete.
+// O roteiro: entra pensando e monta a primeira chamada, lê e busca, pensa de novo, uma rajada com um
+// shell demorado, chama dois ajudantes, todos trabalham, os ajudantes terminam, uma última leva, o
+// mascote volta para casa, escreve a resposta, e o fim com confete.
 const SCRIPT: readonly Cue[] = [
   [0, begin],
   [0, thinking(MAIN, true)],
-  [16, thinking(MAIN, false)],
-  [16, tools(MAIN, 'Read', 'Read', 'Grep')],
-  [18, done(MAIN, 3)],
-  [18, thinking(MAIN, true)],
-  [50, thinking(MAIN, false)],
-  [50, tools(MAIN, 'Read', 'Edit', 'Bash', 'Read', 'Write', 'Glob', 'WebFetch', 'Edit')],
-  [52, done(MAIN, 7)], // o Bash segue rodando
-  [78, done(MAIN)],
-  [78, tools(MAIN, 'Agent')],
-  [80, sim => summon(sim, ANA)],
-  [86, tools(ANA, 'Grep', 'Read', 'Read')],
-  [88, done(ANA, 3)],
-  [90, tools(MAIN, 'Agent')],
-  [92, sim => summon(sim, BIA)],
-  [98, tools(BIA, 'Read', 'Edit')],
-  [100, done(BIA, 2)],
-  [106, tools(ANA, 'Bash')],
-  [112, tools(BIA, 'Write', 'Edit', 'Read')],
-  [114, done(BIA, 3)],
-  [120, done(ANA)],
-  [120, tools(ANA, 'Read', 'Read')],
-  [122, done(ANA, 2)],
-  [140, sim => retire(sim, ANA, true)],
-  [142, done(MAIN, 2)],
-  [142, tools(MAIN, 'Read', 'Edit', 'mcp__docs__search', 'Bash')],
-  [144, done(MAIN, 4)],
-  [150, sim => retire(sim, BIA, true)],
-  [152, thinking(MAIN, true)],
-  [184, thinking(MAIN, false)],
-  [184, finish],
+  [20, drafting(MAIN, 'Read')],
+  [26, thinking(MAIN, false)],
+  [26, tools(MAIN, 'Read', 'Read', 'Grep')],
+  [28, done(MAIN, 3)],
+  [28, thinking(MAIN, true)],
+  [60, thinking(MAIN, false)],
+  [60, tools(MAIN, 'Read', 'Edit', 'Bash', 'Read', 'Write', 'Glob', 'WebFetch', 'Edit')],
+  [62, done(MAIN, 7)], // o Bash segue rodando
+  [88, done(MAIN)],
+  [88, tools(MAIN, 'Agent')],
+  [90, sim => summon(sim, ANA)],
+  [96, tools(ANA, 'Grep', 'Read', 'Read')],
+  [98, done(ANA, 3)],
+  [100, tools(MAIN, 'Agent')],
+  [102, sim => summon(sim, BIA)],
+  [108, tools(BIA, 'Read', 'Edit')],
+  [110, done(BIA, 2)],
+  [116, tools(ANA, 'Bash')],
+  [122, tools(BIA, 'Write', 'Edit', 'Read')],
+  [124, done(BIA, 3)],
+  [130, done(ANA)],
+  [130, tools(ANA, 'Read', 'Read')],
+  [132, done(ANA, 2)],
+  [150, sim => retire(sim, ANA, true)],
+  [152, done(MAIN, 2)],
+  [152, tools(MAIN, 'Read', 'Edit', 'mcp__docs__search', 'Bash')],
+  [154, done(MAIN, 4)],
+  [160, sim => retire(sim, BIA, true)],
+  [162, thinking(MAIN, true)],
+  [WRITE_AT, writing(MAIN)],
+  [END_AT, thinking(MAIN, false)],
+  [END_AT, finish],
 ]
 
 /** Quadros que a demonstração dura, da entrada do mascote ao fim do confete. */
-export const DEMO_FRAMES = 206
+export const DEMO_FRAMES = END_AT + 22
 
 /** Puro: a cena depois do que o roteiro marca para o quadro `frame`. */
 export const applyDemo = (sim: Sim, frame: number): Sim => SCRIPT.filter(([at]) => at === frame).reduce((s, [, run]) => run(s), sim)

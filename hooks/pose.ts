@@ -21,6 +21,10 @@ const WAVE_PERIOD = 4 // quem espera uma ferramenta sobe e desce os braços nest
 const HELPER_AURA = 0.6 // a aura de um ajudante é a fração da do mascote com o mesmo poder: ele é menor
 const DOTS_HOLD = 2 // quadros com cada número de pontinhos depois do nome da ferramenta
 const DOTS_MAX = 3
+/** Os pontinhos de quem escreve a resposta: um deles aceso de cada vez. */
+export const TYPING_DOTS = 3
+const TYPING_HOLD = 2 // quadros com cada pontinho aceso
+const CURSOR_HOLD = 2 // quadros com o cursor de quem monta uma chamada aceso, e outros tantos apagado
 /** A força da aura a partir da qual um avatar se transforma na forma com poder: a mesma em que as fagulhas sobem. */
 export const FORM_FROM = MOTES_FROM
 
@@ -33,6 +37,10 @@ export type Mark =
   | { kind: 'sleep'; isLoud: boolean }
   /** Esperando uma ferramenta: o nome dela e de um a três pontinhos. */
   | { kind: 'tool'; tool: string; dots: number }
+  /** O modelo monta a chamada de uma ferramenta: o nome dela, e um cursor que pisca. */
+  | { kind: 'draft'; tool: string; isCursorOn: boolean }
+  /** O modelo escreve a resposta: os pontinhos, e qual deles está aceso (a partir de 0). */
+  | { kind: 'write'; dot: number }
   | { kind: 'think' }
 
 export type Pose = {
@@ -73,7 +81,11 @@ const markOf = (w: Worker, sim: Sim, isResting: boolean, isCarrying: boolean): M
   if (w.act === 'sleep') return { kind: 'sleep', isLoud: Math.floor(sim.tick / SNORE) % 2 === 1 }
   if (!isResting || isCarrying) return null
   if (w.busy > 0 && w.tool) return { kind: 'tool', tool: w.tool, dots: 1 + (Math.floor(sim.tick / DOTS_HOLD) % DOTS_MAX) }
-  return w.thinking > 0 ? { kind: 'think' } : null
+  if (w.thinking <= 0) return null
+  // Com um pedido ao modelo em curso, o sinal é o da fase dele.
+  if (w.phase === 'write') return { kind: 'write', dot: Math.floor(sim.tick / TYPING_HOLD) % TYPING_DOTS }
+  if (w.phase === 'draft' && w.draft) return { kind: 'draft', tool: w.draft, isCursorOn: Math.floor(sim.tick / CURSOR_HOLD) % 2 === 0 }
+  return { kind: 'think' }
 }
 
 /**
@@ -91,7 +103,8 @@ export const poseOf = (w: Worker, sim: Sim, given: Power | undefined, mascot: Ar
   const phase = sim.tick + seedOf(w.id)
   const eyes: Eyes =
     w.act === 'sleep' || w.act === 'fail' || phase % BLINK_EVERY === 0 ? 'closed'
-    : isResting && w.thinking > 0 ? (LOOK[Math.floor(phase / LOOK_HOLD) % LOOK.length] ?? 'open')
+    // quem pensa olha para os lados; quem já escreve a resposta ou monta uma chamada olha para a frente
+    : isResting && w.thinking > 0 && w.phase === 'think' ? (LOOK[Math.floor(phase / LOOK_HOLD) % LOOK.length] ?? 'open')
     : 'open'
   const power = !given || w.act === 'fail' || w.act === 'sleep' ? PLAIN : given
   const isFlying = isWalking && canFly(power) // em vez de andar, voa: sem patas, um jato por baixo

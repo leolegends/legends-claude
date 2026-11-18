@@ -22,7 +22,7 @@ import type { Line, Part } from '../hooks/parts'
 import { scenePower } from '../hooks/scene'
 import { DEFAULT_SETTINGS } from '../hooks/settings'
 import { rasterCells } from '../hooks/stage'
-import { EMPTY_SIM, MAIN, begin, enqueue, finish, geometry, hasScene, isAnimating, settle, step, syncHelpers, think } from '../hooks/sim'
+import { EMPTY_SIM, MAIN, begin, enqueue, finish, geometry, hasScene, isAnimating, settle, shift, step, syncHelpers, think } from '../hooks/sim'
 import type { Sim } from '../hooks/sim'
 import type { StatusAgent } from '../types'
 
@@ -100,6 +100,13 @@ const BATCHES: Batch[] = [
 ]
 // Quando o modelo começa e para de pensar (o turno principal).
 const THINKING: [number, boolean][] = [[0, true], [18, false], [20, true], [52, false], [160, true], [TURN_ENDS, false]]
+// As fases do pedido em curso, dentro das janelas em que o modelo pensa: antes de cada uma das duas
+// primeiras levas ele monta a chamada da primeira ferramenta dela, e no fim escreve a resposta.
+const WRITES_AT = 182 // a última leva já foi entregue e o mascote está de volta em casa
+const PHASES: [at: number, phase: 'draft' | 'write', tool?: string][] = [[12, 'draft', 'Read'], [46, 'draft', 'Read'], [WRITES_AT, 'write']]
+// As ferramentas demoradas do turno principal (o shell e as duas chamadas de agente) terminam antes de
+// a resposta ser escrita: sem isso, o sinal sobre a cabeça seguiria sendo o da ferramenta que roda.
+const LINGERING = BATCHES.filter(b => b.who === MAIN).reduce((n, b) => n + (b.busy ?? 0), 0)
 // Os agentes: quando nascem e quando terminam.
 const TASKS = LANGUAGE === 'pt' ? ['mapear as rotas de vídeo', 'revisar o diff do palco'] : ['map the video routes', 'review the stage diff']
 const AGENTS = [
@@ -111,6 +118,8 @@ const LINGER_FRAMES = 64 // quanto uma linha de agente terminado fica na barra
 const cuesAt = (frame: number): Cue[] => [
   ...(frame === 0 ? [begin] : []),
   ...THINKING.filter(([at]) => at === frame).map(([, isOn]): Cue => sim => think(sim, MAIN, isOn)),
+  ...(frame === WRITES_AT ? [(sim: Sim) => Array.from({ length: LINGERING }).reduce<Sim>(s => settle(s, MAIN), sim)] : []),
+  ...PHASES.filter(([at]) => at === frame).map(([, phase, tool]): Cue => sim => shift(sim, MAIN, phase, tool ?? null)),
   ...BATCHES.filter(b => b.at === frame).map(({ who, tools }): Cue => sim => tools.reduce((s, name) => enqueue(s, who, kindOf(name), name), sim)),
   // dois quadros depois, as ferramentas rápidas da leva já terminaram
   ...BATCHES.filter(b => b.at + 2 === frame).map(({ who, tools, busy = 0 }): Cue => sim =>

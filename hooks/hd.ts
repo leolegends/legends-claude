@@ -4,7 +4,7 @@ import { artOf } from './avatars'
 import { bitmapShapes, box } from './canvas'
 import type { Shape } from './canvas'
 import { blend, rgbOf } from './color'
-import { BRICK_SUBS, beltShapes, brickShapes, floorShapes, outlined, shoutIcon, snoreIcon, starShapes, thinkSpark, toolIcon, verdictIcon } from './hd-art'
+import { BRICK_SUBS, beltShapes, brickShapes, draftIcon, floorShapes, outlined, shoutIcon, snoreIcon, starShapes, thinkSpark, toolIcon, typingDots, verdictIcon } from './hd-art'
 import { arcShapes, boltShapes, fireworkShapes, haloShapes, jetShapes, moteShapes, streakShapes } from './hd-aura'
 import type { Body, Light, Unit } from './hd-aura'
 import { KIND_PAINT, kindOf } from './palette'
@@ -12,7 +12,7 @@ import type { Kind } from './palette'
 import type { Part } from './parts'
 import { EYE } from './pixels'
 import type { Bitmap } from './pixels'
-import { poseOf } from './pose'
+import { TYPING_DOTS, poseOf } from './pose'
 import type { Pose } from './pose'
 import { PLAIN } from './power'
 import type { Power } from './power'
@@ -195,6 +195,13 @@ const signShapes = (pose: Pose, given: Power | undefined, left: number, top: num
       const kind = kindOf(mark.tool)
       return toolIcon(kind, cx, Math.max(dot * 2, top - 12 * dot), unit, rgbOf(KIND_PAINT[kind]), view.time)
     }
+    case 'draft': {
+      // o mesmo lugar do ícone da ferramenta que roda: quando ela começa, ele só enche e passa a balançar
+      const kind = kindOf(mark.tool)
+      return draftIcon(kind, cx, Math.max(dot * 2, top - 12 * dot), unit, rgbOf(KIND_PAINT[kind]), view.time)
+    }
+    case 'write':
+      return typingDots(mark.dot, TYPING_DOTS, cx, Math.max(4 * dot, top - 8 * dot), unit, accent)
     case 'think':
       return thinkSpark((given ?? PLAIN).tier, cx, Math.max(8 * dot, top - 8 * dot), unit, accent, view.time)
   }

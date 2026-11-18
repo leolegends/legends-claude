@@ -2,8 +2,11 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { DEFAULT_COLOR, packCells, unpackCells } from './blocks'
 import type { Cell } from './blocks'
+import type { Shape } from './canvas'
+import { rgbOf } from './color'
 import { CELL_H, CELL_W, hdScene } from './hd'
 import type { Part } from './parts'
+import { KIND_PAINT } from './palette'
 import { EMPTY_SIM, MAIN, geometry } from './sim'
 import type { Geo, Sim, Worker } from './sim'
 import { SPINNER } from './effects'
@@ -13,7 +16,7 @@ import { IMAGE_SCALE, PROBE_PNG, alphaOf, backendOf, codeOf, isPixelRefusal, pai
 import type { Abilities } from './stage'
 
 const geo = geometry(80) as Geo
-const worker = (id: string, x: number, change: Partial<Worker> = {}): Worker => ({ id, x, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, isAsleep: false, shout: 0, ...change })
+const worker = (id: string, x: number, change: Partial<Worker> = {}): Worker => ({ id, x, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, phase: 'think', draft: null, isAsleep: false, shout: 0, ...change })
 const still = (workers: Worker[], change: Partial<Sim> = {}): Sim => ({ ...EMPTY_SIM, isOn: true, tick: 8, workers, ...change })
 const thinking = still([worker(MAIN, 40, { thinking: 1 })])
 const CLAUDE = 0xd97757
@@ -263,5 +266,104 @@ describe('o palco no tamanho dobrado', () => {
     expect(stageSvg(scene)?.startsWith(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${small.width * 2 * CELL_W} ${8 * CELL_H}"`)).toBe(true)
     expect(stageImage(scene).startsWith('iVBORw0KGgo')).toBe(true)
     expect(scene.labels).toEqual([])
+  })
+})
+
+describe('os sinais de um pedido em curso, fora do palco de texto', () => {
+  const sceneOf = (change: Partial<Worker>, tick = 8, trace: 'pixels' | 'blocks' = 'pixels', zoom: 1 | 2 = 1) => {
+    const sim = still([worker(MAIN, 40, change)], { tick })
+    return hdScene({ prev: sim, cur: sim, alpha: 0, geo, hud: [], trace, zoom })
+  }
+  const keyOf = (s: Shape) => [s.x, s.y, s.w, s.h, s.rgb, s.a].join()
+  // O que o sinal acrescenta à cena de quem só espera, de olhos para a frente: os retângulos dele.
+  const signOf = (change: Partial<Worker>, tick = 8, zoom: 1 | 2 = 1) => {
+    const plain = new Set(sceneOf({}, tick, 'pixels', zoom).shapes.map(keyOf))
+    return sceneOf(change, tick, 'pixels', zoom).shapes.filter(s => !plain.has(keyOf(s)))
+  }
+  const NIGHT = 0x0b0b10 // o contorno dos sinais é da cor do fundo
+  const inked = (shapes: Shape[]) => shapes.filter(s => s.rgb !== NIGHT)
+  const NONE: Shape = { x: 0, y: 0, w: 0, h: 0, rgb: 0, a: 0 }
+  const pick = (shapes: Shape[], i = 0) => shapes[i] ?? NONE
+  const upperHalf = sceneOf({}).height / 2 // os sinais ficam na metade de cima do quadro, sobre a cabeça
+  const writing = { thinking: 1, phase: 'write' } as const
+  const drafting = (draft: string) => ({ thinking: 1, phase: 'draft', draft }) as const
+
+  test('em pixels, quem escreve tem três pontinhos sobre a cabeça, cada um com o seu contorno', () => {
+    const sign = signOf(writing)
+    const dots = inked(sign).sort((a, b) => a.x - b.x)
+    expect(dots.length).toBe(3)
+    expect(sign.length).toBe(6)
+    expect(dots.every(s => s.y + s.h <= upperHalf)).toBe(true)
+    // lado a lado, sem se tocar, à mesma distância um do outro
+    const gap = pick(dots, 1).x - pick(dots, 0).x
+    expect(pick(dots, 2).x - pick(dots, 1).x).toBe(gap)
+    expect(gap).toBeGreaterThan(pick(dots).w)
+  })
+
+  test('o pontinho aceso sobe e clareia, e anda da esquerda para a direita', () => {
+    const litAt = (tick: number) => {
+      const dots = inked(signOf(writing, tick)).sort((a, b) => a.x - b.x)
+      const top = Math.min(...dots.map(s => s.y))
+      const raised = dots.filter(s => s.y === top)
+      const lit = pick(raised)
+      expect(raised.length).toBe(1)
+      expect(lit.a).toBe(1)
+      expect(dots.filter(s => s !== lit).every(s => s.a < 1 && s.rgb !== lit.rgb)).toBe(true)
+      return dots.indexOf(lit)
+    }
+    expect([8, 10, 12, 14].map(litAt)).toEqual([1, 2, 0, 1])
+  })
+
+  test('em pixels, quem monta uma chamada tem o ícone da família da ferramenta, na cor do tijolo dela, acendendo e apagando', () => {
+    const iconAt = (tick: number) => inked(signOf(drafting('Bash'), tick))
+    const amber = rgbOf(KIND_PAINT.b)
+    expect(iconAt(8).length).toBeGreaterThan(3)
+    expect(iconAt(8).every(s => s.rgb === amber && s.y + s.h <= upperHalf)).toBe(true)
+    const alphas = new Set([8, 9, 10, 11, 12, 13].map(tick => pick(iconAt(tick)).a))
+    expect(alphas.size).toBeGreaterThan(2) // a opacidade pulsa
+    expect([...alphas].every(a => a > 0.2 && a <= 1)).toBe(true)
+    // parado no lugar: quem balança é o ícone da ferramenta que já roda, e esse é opaco
+    expect(new Set([8, 9, 10, 11].map(tick => pick(iconAt(tick)).y)).size).toBe(1)
+    expect(inked(signOf({ busy: 1, tool: 'Bash' }, 8)).every(s => s.a === 1)).toBe(true)
+  })
+
+  test('a ferramenta montada de outra família tem outro ícone e outra cor', () => {
+    const read = inked(signOf(drafting('Read')))
+    const bash = inked(signOf(drafting('Bash')))
+    expect(pick(read).rgb).toBe(rgbOf(KIND_PAINT.r))
+    expect(read.map(s => [s.x, s.y, s.w].join())).not.toEqual(bash.map(s => [s.x, s.y, s.w].join()))
+  })
+
+  test('no tamanho dobrado os sinais dobram com o resto', () => {
+    const small = inked(signOf(writing, 8, 1))
+    const large = inked(signOf(writing, 8, 2))
+    expect(large.length).toBe(3)
+    expect(pick(large).w).toBe(pick(small).w * 2)
+  })
+
+  test('em blocos os sinais são texto, os mesmos do palco clássico', () => {
+    const labelsOf = (change: Partial<Worker>, tick = 8) => sceneOf(change, tick, 'blocks').labels.map(l => l.parts.map(p => p.text).join('')).join('|')
+    expect(labelsOf(writing)).toContain('·●·')
+    expect(labelsOf(writing, 10)).toContain('··●')
+    expect(labelsOf(drafting('Bash'))).toContain('Bash▁')
+    expect(sceneOf(writing, 8, 'blocks').shapes.length).toBe(sceneOf({}, 8, 'blocks').shapes.length) // nenhum retângulo a mais
+  })
+
+  test('em blocos, cada caractere desses sinais chega à célula dele como é: o terminal aceita todos', () => {
+    // Um caractere fora da lista do que uma célula aceita com certeza viraria "?" no palco.
+    const airOf = (change: Partial<Worker>, tick = 8) => {
+      const cells = rasterCells(sceneOf(change, tick, 'blocks'), { isLight: false, accent: 'claude' })
+      return cells.slice(0, geo.width).map(c => String.fromCodePoint(c.code)).join('')
+    }
+    expect(airOf(writing)).toContain('·●·')
+    expect(airOf(writing, 12)).toContain('●··')
+    expect(airOf(drafting('Bash'))).toContain('Bash▁')
+    for (const air of [airOf(writing), airOf(drafting('Bash'))]) expect(air).not.toContain('?')
+  })
+
+  test('o vetor leva os sinais: o documento cresce com eles', () => {
+    const size = (change: Partial<Worker>) => (stageSvg(sceneOf(change, 9)) ?? '').length
+    expect(size(writing)).toBeGreaterThan(size({}))
+    expect(size(drafting('Bash'))).toBeGreaterThan(size({}))
   })
 })

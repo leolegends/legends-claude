@@ -38,7 +38,7 @@ const header: Part[] = [{ text: ' '.repeat(LABEL) }, ...EFFORTS.map((effort): Pa
 const cellAt = (tier: number, level: number, tick: number): Part[][] => {
   const sim: Sim = {
     ...EMPTY_SIM, isOn: true, tick,
-    workers: [{ id: MAIN, x: MASCOT_X, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 1, isAsleep: false, shout: 0 }],
+    workers: [{ id: MAIN, x: MASCOT_X, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 1, phase: 'think', draft: null, isAsleep: false, shout: 0 }],
   }
   return sceneRows({ sim, geo: stage, hud: [], powers: new Map([[MAIN, power(tier, level)]]), isLight: IS_LIGHT }).map(row => padded(row, CELL))
 }

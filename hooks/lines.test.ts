@@ -4,8 +4,8 @@ import { reconcileRows, upsert } from './agents'
 import { SPINNER, burst, noise, reveal, ruleParts, shimmer, spin, trail } from './effects'
 import { clean, fit, fmtCost, fmtSpan, fmtTokens, prettyModel, shortTool } from './format'
 import { stringsOf } from './i18n'
-import { agentLine, cardLines, hudParts, sortAgents } from './lines'
-import { lineWidth, merge } from './parts'
+import { agentLine, cardLines, hudParts, sortAgents, viewParts } from './lines'
+import { lineWidth, merge, partsWidth } from './parts'
 
 import { DEFAULT_SETTINGS, effectsOf, sanitize } from './settings'
 import type { Line } from './parts'
@@ -102,6 +102,8 @@ describe('animações da skill ascii-animations', () => {
   test('trechos vizinhos de mesmo estilo viram um só, sem mudar o texto', () => {
     const merged = merge([{ text: 'a', color: 'claude' }, { text: 'b', color: 'claude' }, { text: 'c' }, { text: 'd', action: 'model' }])
     expect(merged.map(p => p.text)).toEqual(['ab', 'c', 'd'])
+    // o sublinhado é estilo: um trecho sublinhado não se junta a um vizinho sem ele
+    expect(merge([{ text: 'a', underline: true }, { text: 'b', underline: true }, { text: 'c' }]).map(p => p.text)).toEqual(['ab', 'c'])
   })
 
   test('a régua parada é uma linha fina; com trabalho, um pulso nasce no centro e corre para as pontas', () => {
@@ -290,6 +292,57 @@ describe('agentes', () => {
     const lost = agent({ id: 'lost', seenAt: NOW - 700_000 })
     const workflow = agent({ id: 'wf', seenAt: NOW - 5_000 }) // agente de workflow: fora da lista, mas vivo
     expect(reconcileRows([ended, recent, lost, workflow], [], NOW).map(a => a.id)).toEqual(['new', 'wf'])
+  })
+
+  test('cada linha de agente diz de quem é; as outras linhas da barra não são de ninguém', () => {
+    const lines = card({ agents: [agent({ id: 'a1' }), agent({ id: 'a2', type: 'planner' })] })
+    expect(lines.flatMap(l => (l.agentId === undefined ? [] : [l.agentId]))).toEqual(['a1', 'a2'])
+    expect(lines[0]?.agentId).toBeUndefined()
+    // o resumo "+N agentes" não é de um agente só
+    const many = card({ agents: Array.from({ length: 8 }, (_, i) => agent({ id: `a${i}` })) })
+    expect(many.filter(l => l.agentId !== undefined).length).toBe(6)
+    expect(many[many.length - 1]?.agentId).toBeUndefined()
+  })
+
+  test('o agente cuja transcrição está na tela tem o nome sublinhado, sem mudar o texto nem a largura', () => {
+    const still = effectsOf({ ...DEFAULT_SETTINGS, motion: 'parada' })
+    const plain = agentLine(agent(), NOW, 0, 0, 80, still)
+    const viewed = agentLine(agent(), NOW, 0, 0, 80, still, stringsOf('pt'), true)
+    expect(text(viewed)).toBe(text(plain))
+    expect(lineWidth(viewed)).toBe(lineWidth(plain))
+    expect(viewed.parts.filter(p => p.underline).map(p => p.text).join('')).toBe('Explore')
+    expect(plain.parts.some(p => p.underline)).toBe(false)
+    expect((viewed.tail ?? []).some(p => p.underline)).toBe(false)
+  })
+
+  test('o sublinhado segue o nome em todo estado: rodando com o brilho passando, esperando, terminado ou falho', () => {
+    const states = [agent(), agent({ state: 'waiting' }), agent({ state: 'done', endedAt: NOW }), agent({ state: 'failed', endedAt: NOW })]
+    for (const a of states) {
+      const line = agentLine(a, NOW + 5_000, 7, 0, 80, undefined, undefined, true)
+      expect(line.parts.filter(p => p.underline).map(p => p.text).join('')).toBe('Explore')
+    }
+  })
+
+  test('de quem é a transcrição na tela: o nome e, no espaço que sobra, a descrição', () => {
+    const shown = (parts: ReturnType<typeof viewParts>) => parts.map(p => p.text).join('')
+    expect(shown(viewParts(agent(), 60))).toBe('vendo Explore · buscar rotas HLS')
+    expect(viewParts(agent(), 60)[1]).toMatchObject({ text: 'Explore', color: 'claude', bold: true })
+    const long = agent({ description: 'uma descrição comprida demais para caber inteira numa barra estreita' })
+    for (const room of [24, 30, 40]) expect(partsWidth(viewParts(long, room)) <= room).toBe(true)
+    expect(shown(viewParts(long, 40)).endsWith('…')).toBe(true)
+    expect(shown(viewParts(agent(), 20))).toBe('vendo Explore') // sem espaço para ela, a descrição sai
+    expect(shown(viewParts(agent({ description: '' }), 60))).toBe('vendo Explore')
+    // um agente que a barra já não tem, ou cujo tipo ainda não chegou, é só "agente"
+    expect(shown(viewParts(undefined, 60))).toBe('vendo agente')
+    expect(shown(viewParts(agent({ type: '', description: '' }), 60, stringsOf('en')))).toBe('viewing agent')
+  })
+
+  test('na barra, só a linha do agente em vista é sublinhada', () => {
+    const agents = [agent({ id: 'a1' }), agent({ id: 'a2', type: 'planner' })]
+    const underlined = (viewedId?: string) => card({ agents, viewedId }).filter(l => l.parts.some(p => p.underline)).map(l => l.agentId)
+    expect(underlined('a2')).toEqual(['a2'])
+    expect(underlined()).toEqual([])
+    expect(underlined('outro')).toEqual([]) // um agente que a barra já não mostra
   })
 })
 

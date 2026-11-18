@@ -15,6 +15,8 @@ export const DEMO_PREFIX = 'demo:'
 
 /** O que um bicho está fazendo. */
 export type Act = 'enter' | 'idle' | 'home' | 'fetch' | 'lift' | 'haul' | 'drop' | 'sleep' | 'cheer' | 'fail' | 'poof'
+/** O que um pedido ao modelo em curso está fazendo: pensando, escrevendo a resposta, ou montando a chamada de uma ferramenta. */
+export type Phase = 'think' | 'write' | 'draft'
 
 export type Worker = {
   /** `MAIN` para o mascote; o id do agente para um ajudante. */
@@ -34,6 +36,10 @@ export type Worker = {
   tool: string | null
   /** Pedidos ao modelo em curso: enquanto houver algum, ele está pensando. */
   thinking: number
+  /** O que o pedido em curso faz agora, pelos trechos que chegam dele; só vale enquanto `thinking` é maior que zero. */
+  phase: Phase
+  /** A ferramenta cuja chamada o modelo está montando, para o balão; `null` fora dessa fase. */
+  draft: string | null
   /** O agente dele está à espera: quando chegar em casa, dorme. */
   isAsleep: boolean
   /** Quadros que ainda fica parado gritando por um ajudante. */
@@ -132,8 +138,11 @@ const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(
 const artOf = (w: Worker) => (w.id === MAIN ? CLAWD : MINI)
 const isLeaving = (w: Worker) => w.act === 'cheer' || w.act === 'fail' || w.act === 'poof'
 
+/** Sem pedido ao modelo em curso: nada a pensar, fase nenhuma. */
+const QUIET = { thinking: 0, phase: 'think', draft: null } as const
+
 const worker = (id: string, x: number): Worker => ({
-  id, x, act: 'enter', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, isAsleep: false, shout: 0,
+  id, x, act: 'enter', t: 0, load: '', queue: '', busy: 0, tool: null, ...QUIET, isAsleep: false, shout: 0,
 })
 
 /** As medidas do palco numa barra de `columns` células, ou `null` quando não cabe. */
@@ -195,7 +204,7 @@ const spawnHelper = (sim: Sim, id: string): Sim => {
 export const begin = (sim: Sim): Sim => {
   const main = mainOf(sim)
   const onStage =
-    main && hasScene(sim) ? { ...main, act: main.act === 'cheer' ? ('idle' as const) : main.act, busy: 0, tool: null, thinking: 0 } : worker(MAIN, -CLAWD.width)
+    main && hasScene(sim) ? { ...main, act: main.act === 'cheer' ? ('idle' as const) : main.act, busy: 0, tool: null, ...QUIET } : worker(MAIN, -CLAWD.width)
   return { ...sim, isOn: true, finale: 0, work: 0, workers: [onStage, ...sim.workers.filter(w => w.id !== MAIN)] }
 }
 
@@ -215,16 +224,32 @@ export const enqueue = (sim: Sim, id: string, kind: Kind, tool: string): Sim => 
 export const settle = (sim: Sim, id: string): Sim =>
   patch(sim, id, w => ({ ...w, busy: Math.max(0, w.busy - 1), tool: w.busy <= 1 ? null : w.tool }))
 
-/** Um pedido ao modelo começou (`true`) ou terminou. São contados: dois ao mesmo tempo só acabam quando os dois acabam. */
+/**
+ * Um pedido ao modelo começou (`true`) ou terminou. São contados: dois ao mesmo tempo só acabam quando
+ * os dois acabam. Um pedido novo começa pensando, e o fim do último não deixa fase para trás.
+ */
 export const think = (sim: Sim, id: string, isStarting: boolean): Sim =>
-  patch(sim, id, w => ({ ...w, thinking: Math.max(0, w.thinking + (isStarting ? 1 : -1)) }))
+  patch(sim, id, w => {
+    const thinking = Math.max(0, w.thinking + (isStarting ? 1 : -1))
+    return isStarting || thinking === 0 ? { ...w, ...QUIET, thinking } : { ...w, thinking }
+  })
+
+/**
+ * O pedido em curso mudou de fase: pensa, escreve a resposta, ou monta a chamada de `tool`. Chega a
+ * cada trecho da resposta do modelo, então uma fase repetida devolve a mesma cena, sem copiar nada.
+ */
+export const shift = (sim: Sim, id: string, phase: Phase, tool: string | null = null): Sim => {
+  const draft = phase === 'draft' ? tool : null
+  const w = sim.workers.find(x => x.id === id)
+  return !w || (w.phase === phase && w.draft === draft) ? sim : patch(sim, id, x => ({ ...x, phase, draft }))
+}
 
 /** Um ajudante terminou (ou falhou): entrega o que tinha, comemora e some. O mascote não se aposenta. */
 export const retire = (sim: Sim, id: string, isOk: boolean): Sim => {
   const w = sim.workers.find(x => x.id === id)
   if (!w || w.id === MAIN || isLeaving(w)) return sim
   return {
-    ...patch(sim, id, x => ({ ...x, act: isOk ? 'cheer' : 'fail', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, isAsleep: false, shout: 0 })),
+    ...patch(sim, id, x => ({ ...x, act: isOk ? 'cheer' : 'fail', t: 0, load: '', queue: '', busy: 0, tool: null, ...QUIET, isAsleep: false, shout: 0 })),
     wall: sim.wall + w.queue + w.load,
   }
 }
@@ -233,7 +258,7 @@ export const retire = (sim: Sim, id: string, isOk: boolean): Sim => {
 export const summon = (sim: Sim, id: string): Sim => (has(sim, id) ? sim : spawnHelper(sim, id))
 
 // O mascote larga tudo e passa a fazer outra coisa: o que carregava e o que esperava na pilha dele saem com ele.
-const dropAll = (w: Worker, act: Act): Worker => ({ ...w, act, t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, shout: 0 })
+const dropAll = (w: Worker, act: Act): Worker => ({ ...w, act, t: 0, load: '', queue: '', busy: 0, tool: null, ...QUIET, shout: 0 })
 
 /**
  * O turno principal acabou bem: o que faltava vai para o mosaico e o mascote comemora. A festa é do

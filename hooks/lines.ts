@@ -30,6 +30,7 @@ const LIMIT_GAUGE = 5
 const AGENT_TRAIL_WIDTH = 5 // o rastro de cada agente rodando
 const TYPE_MAX = 20
 const DESC_MIN = 6
+const VIEW_JOIN = ' · ' // entre o nome e a descrição do agente cuja transcrição está na tela
 export { EFFORTS }
 
 /**
@@ -144,30 +145,48 @@ const agentTail = (a: Agent, now: number, t: Strings): Part[] => {
 }
 
 // "✶ Explore ✳✶✻··  buscar rotas HLS        12s · 4 tools · Grep": a descrição cede espaço antes de tudo.
-export const agentLine = (a: Agent, now: number, fr: number, index: number, max: number, fx: Effects = FULL_EFFECTS, t: Strings = BASE): Line => {
+// `isViewed`: a transcrição dele está na tela, no lugar da conversa principal: o nome vai sublinhado.
+export const agentLine = (
+  a: Agent, now: number, fr: number, index: number, max: number, fx: Effects = FULL_EFFECTS, t: Strings = BASE, isViewed = false,
+): Line => {
   const age = (since: number) => Math.floor((now - since) / fx.frameMs)
   const type = fit(a.type || t.agent, TYPE_MAX) // um agente cujo tipo ainda não chegou é só "agente"
   const tail = agentTail(a, now, t)
   const tier = tierOf(a.model)
+  // o nome surge de faíscas quando o agente nasce; depois, o brilho passa por ele
+  const name: Part[] = a.state !== 'running' ? [{ text: type, dim: a.state !== 'failed' }]
+    : fx.isFull ? (reveal(type, age(a.startedAt), seedOf(a.id)) ?? shimmer(type, fr + index * 5))
+    : [{ text: type, bold: true }]
+  const named = isViewed ? name.map(p => ({ ...p, underline: true })) : name
   // cada agente pulsa e corre fora de fase do vizinho
   const head: Part[] = a.state === 'running'
     ? [
         // a faísca é a da classe do modelo do agente; com o palco ligado, na cor do ajudante dele em cena
         { text: fx.isStill ? idleSpark(tier) : sparkAt(tier, fr, index * 3), color: fx.hasStage ? tintOf(a.id) : 'claude', bold: true },
         { text: ' ' },
-        // o nome surge de faíscas quando o agente nasce; depois, o brilho passa por ele
-        ...(fx.isFull ? (reveal(type, age(a.startedAt), seedOf(a.id)) ?? shimmer(type, fr + index * 5)) : [{ text: type, bold: true }]),
+        ...named,
         ...(fx.isStill ? [] : [{ text: ' ' }, ...trail(fr + index * 2, AGENT_TRAIL_WIDTH)]),
       ]
     : [
         GLYPH[a.state],
         { text: ' ' },
-        { text: type, dim: a.state !== 'failed' },
+        ...named,
         ...(fx.isFull && a.state === 'done' && a.endedAt !== undefined ? burst(age(a.endedAt)) : []),
       ]
   const room = max - partsWidth(head) - 2 - TAIL_GAP - partsWidth(tail)
   const description = a.description && room >= DESC_MIN ? [{ text: `  ${fit(a.description, room)}`, dim: true }] : []
-  return { parts: [...head, ...description], tail }
+  return { parts: [...head, ...description], tail, agentId: a.id }
+}
+
+/**
+ * "vendo Explore · buscar rotas HLS": de quem é a transcrição que está na tela, no lugar da conversa
+ * principal. Cabe em `room` colunas: a descrição cede espaço, e sai quando não sobra nenhum. Um agente
+ * que a barra já não tem (`undefined`) é só "agente".
+ */
+export const viewParts = (a: Agent | undefined, room: number, t: Strings = BASE): Part[] => {
+  const head: Part[] = [{ text: t.viewing, dim: true }, { text: fit(a?.type || t.agent, TYPE_MAX), color: 'claude', bold: true }]
+  const left = room - partsWidth(head) - VIEW_JOIN.length
+  return a?.description && left >= DESC_MIN ? [...head, { text: VIEW_JOIN, dim: true }, { text: fit(a.description, left), dim: true }] : head
 }
 
 const RANK: Record<AgentState, number> = { running: 0, waiting: 1, failed: 2, done: 3 }
@@ -200,12 +219,14 @@ export type CardInput = {
   hasStageHud?: boolean
   /** Quantas linhas de agente cabem na faixa; os ajustes mandam quando o número deles é menor. */
   agentRows?: number
+  /** O agente cuja transcrição está na tela, no lugar da conversa principal: a linha dele vai marcada. */
+  viewedId?: string
 }
 
 // Puro: as linhas da barra, na largura `max`. Não há linha de contexto: é sobre custo, modelo e quem trabalha.
 // Quando cabe, modelo fica à esquerda e custo e limites encostam à direita da mesma linha; senão, empilham.
 export const cardLines = (input: CardInput): Line[] => {
-  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], hasStageHud = true, agentRows = Infinity } = input
+  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], hasStageHud = true, agentRows = Infinity, viewedId } = input
   const fx = effectsOf(s)
   const t = stringsOf(s.language)
   const head = headLine(f, isWorking, fr, fx, t)
@@ -219,7 +240,7 @@ export const cardLines = (input: CardInput): Line[] => {
   const hiddenCount = sorted.length - shown.length
   return [
     ...(isOneRow ? [top, ...stage, ...work] : [head, cost, ...stage, ...work, ...(limits ? [limits] : [])]),
-    ...shown.map((a, n) => agentLine(a, now, fr, n, max, fx, t)),
+    ...shown.map((a, n) => agentLine(a, now, fr, n, max, fx, t, a.id === viewedId)),
     ...(hiddenCount > 0 ? [{ parts: [{ text: t.more(hiddenCount), dim: true }] }] : []),
   ]
 }

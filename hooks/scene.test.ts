@@ -17,7 +17,7 @@ const GEO = geometry(100) as Geo
 const HUD: Part[] = [{ text: '1m12s · 14 tools · ', dim: true }, { text: 'Bash', color: 'claude' }]
 const text = (row: Part[] | undefined) => (row ?? []).map(p => p.text).join('')
 const worker = (id: string, x: number, over: Partial<Worker> = {}): Worker => ({
-  id, x, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, isAsleep: false, shout: 0, ...over,
+  id, x, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, phase: 'think', draft: null, isAsleep: false, shout: 0, ...over,
 })
 const scene = (over: Partial<Sim>, hud: Part[] = []) => sceneRows({ sim: { ...EMPTY_SIM, isOn: true, ...over }, geo: GEO, hud })
 const paintsOf = (rows: Part[][]) => new Set(rows.flat().flatMap(p => [p.color, p.bg]))
@@ -64,6 +64,36 @@ describe('os balões', () => {
   test('esperando uma ferramenta: o nome dela e reticências que andam', () => {
     expect(text(air({ busy: 1, tool: 'Bash' }, 0))).toContain('Bash·')
     expect(text(air({ busy: 1, tool: 'Bash' }, 4))).toContain('Bash···')
+  })
+
+  test('escrevendo a resposta: três pontinhos sobre a cabeça, um aceso de cada vez', () => {
+    const writing = { thinking: 1, phase: 'write' } as const
+    expect(text(air(writing, 0))).toContain('●··')
+    expect(text(air(writing, 2))).toContain('·●·')
+    expect(text(air(writing, 4))).toContain('··●')
+    expect(text(air(writing, 6))).toContain('●··') // e recomeça
+    expect(air(writing, 0).find(p => p.text.includes('●'))).toMatchObject({ color: 'claude', bold: true })
+    expect(text(air(writing, 0))).not.toContain('✻') // a faísca é de quem pensa
+  })
+
+  test('montando a chamada de uma ferramenta: o nome dela e um cursor que pisca', () => {
+    const drafting = { thinking: 1, phase: 'draft', draft: 'Write' } as const
+    expect(text(air(drafting, 0))).toContain('Write▁')
+    expect(air(drafting, 0).find(p => p.text.includes('▁'))).toMatchObject({ color: 'claude' })
+    expect(text(air(drafting, 2))).toContain('Write')
+    expect(text(air(drafting, 2))).not.toContain('▁')
+    expect(text(air(drafting, 0))).not.toContain('Write·') // as reticências são de quem espera a ferramenta rodar
+  })
+
+  test('com uma ferramenta rodando é ela que aparece; sem pedido em curso, fase nenhuma', () => {
+    expect(text(air({ thinking: 1, phase: 'write', busy: 1, tool: 'Bash' }, 0))).toContain('Bash·')
+    expect(text(air({ thinking: 1, phase: 'write', busy: 1, tool: 'Bash' }, 0))).not.toContain('●')
+    expect(text(air({ thinking: 0, phase: 'write' }, 0))).not.toContain('●')
+    expect(text(air({ thinking: 0, phase: 'draft', draft: 'Write' }, 0))).not.toContain('Write')
+  })
+
+  test('uma chamada montada com nome largo não desalinha a linha', () => {
+    for (const row of scene({ workers: [worker(MAIN, 20, { thinking: 1, phase: 'draft', draft: '検索' })] })) expect(partsWidth(row) <= GEO.width).toBe(true)
   })
 
   test('carregando ou andando não há balão; gritando por um ajudante, um ponto de exclamação', () => {

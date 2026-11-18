@@ -92,6 +92,35 @@ const DIM = 0.6 // a opacidade do z de quem dorme
 export const toolIcon = (kind: Kind, cx: number, top: number, unit: Unit, rgb: number, time: number): Shape[] =>
   stamp(TOOL_ICONS[kind] ?? TOOL_ICONS.o, cx, top + Math.sin(time * ICON_PACE) * ICON_BOB * dotOf(unit), unit, rgb)
 
+const DRAFT_PACE = 1.1 // o ritmo em que o ícone de uma chamada em montagem acende e apaga, por quadro
+const DRAFT_FAINT = 0.35 // a opacidade dele no ponto mais apagado
+
+/**
+ * O ícone da família da ferramenta cuja chamada o modelo ainda monta: parado sobre a cabeça, acendendo
+ * e apagando. Quando a ferramenta começa a rodar, é o mesmo ícone, cheio e balançando (`toolIcon`).
+ */
+export const draftIcon = (kind: Kind, cx: number, top: number, unit: Unit, rgb: number, time: number): Shape[] =>
+  stamp(TOOL_ICONS[kind] ?? TOOL_ICONS.o, cx, top, unit, rgb, DRAFT_FAINT + (1 - DRAFT_FAINT) * (0.5 + 0.5 * Math.sin(time * DRAFT_PACE)))
+
+const TYPING_SIDE = 3 // o lado de cada pontinho de quem escreve, em pontos
+const TYPING_GAP = 2 // o espaço entre dois deles
+const TYPING_HOP = 2 // quanto o pontinho aceso sobe
+const TYPING_FAINT = 0.8 // a opacidade dos apagados
+
+/**
+ * Os pontinhos de quem escreve a resposta, lado a lado e centrados em `cx`: `count` deles, e o de
+ * número `lit` (a partir de 0) sobe um pouco e acende.
+ */
+export const typingDots = (lit: number, count: number, cx: number, top: number, unit: Unit, rgb: number): Shape[] => {
+  const dot = dotOf(unit)
+  const side = TYPING_SIDE * dot
+  const stride = (TYPING_SIDE + TYPING_GAP) * dot
+  const left = Math.round(cx - (count * stride - TYPING_GAP * dot) / 2)
+  return Array.from({ length: count }, (_, i) =>
+    i === lit ? box(left + i * stride, Math.round(top) - TYPING_HOP * dot, side, side, blend(rgb, WHITE, 0.5)) : box(left + i * stride, Math.round(top), side, side, rgb, TYPING_FAINT),
+  )
+}
+
 /** O grito de quem chama um ajudante. */
 export const shoutIcon = (cx: number, top: number, unit: Unit, rgb: number): Shape[] => stamp(SHOUT, cx, top, unit, rgb)
 

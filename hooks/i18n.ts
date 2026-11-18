@@ -38,6 +38,12 @@ export type Strings = {
   pickEffort: string
   switchFailed: (what: string, why: string) => string
   saveFailed: (why: string) => string
+  // A transcrição de um agente na tela, no lugar da conversa principal.
+  /** O que vem antes do nome do agente cuja transcrição está na tela. */
+  viewing: string
+  /** O botão que volta à conversa principal. */
+  backToMain: string
+  viewFailed: (why: string) => string
   hidden: string
   shown: string
   tooNarrow: (columns: number) => string
@@ -101,6 +107,9 @@ const PT: Strings = {
   pickEffort: 'effort ',
   switchFailed: (what, why) => `Não deu para trocar ${what}: ${why}`,
   saveFailed: why => `Não deu para salvar os ajustes: ${why}`,
+  viewing: 'vendo ',
+  backToMain: '← principal',
+  viewFailed: why => `Não deu para abrir a transcrição: ${why}`,
   hidden: 'Barra de status escondida.',
   shown: 'Barra de status visível.',
   tooNarrow: columns => `Barra de status visível; ela desenha quando o terminal tiver pelo menos ${columns} colunas.`,
@@ -155,6 +164,9 @@ const EN: Strings = {
   pickEffort: 'effort ',
   switchFailed: (what, why) => `Could not switch ${what}: ${why}`,
   saveFailed: why => `Could not save the settings: ${why}`,
+  viewing: 'viewing ',
+  backToMain: '← main',
+  viewFailed: why => `Could not open the transcript: ${why}`,
   hidden: 'Status bar hidden.',
   shown: 'Status bar visible.',
   tooNarrow: columns => `Status bar visible; it draws once the terminal is at least ${columns} columns wide.`,

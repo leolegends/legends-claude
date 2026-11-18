@@ -9,7 +9,7 @@ import { partsWidth } from './parts'
 import type { Part } from './parts'
 import { BRICK_CELLS, brick, dotKey, dotsLayer, rasterRow, spriteLayer } from './pixels'
 import type { Glow, Layer, Paint, Shade } from './pixels'
-import { poseOf } from './pose'
+import { TYPING_DOTS, poseOf } from './pose'
 import type { Mark } from './pose'
 import { PLAIN, sparkAt } from './power'
 import type { Power } from './power'
@@ -37,6 +37,12 @@ export type Label = { row: number; cell: number; parts: readonly Part[] }
 const FLOOR: Part = { text: '─', color: 'subtle' }
 const BELT: Part = { text: '═', color: 'subtle' }
 const ROLLER: Part = { text: '╪', color: 'subtle' }
+// Os sinais de um pedido em curso: os pontinhos de quem escreve a resposta e o cursor de quem monta uma
+// chamada. São caracteres que uma célula do palco em blocos aceita (a lista está em stage.ts): fora
+// dela, viram "?".
+const TYPING_LIT: Part = { text: '●', color: 'claude', bold: true }
+const TYPING_DIM: Part = { text: '·', dim: true }
+const CURSOR = '▁'
 
 const mod = (n: number, by: number) => ((n % by) + by) % by
 
@@ -76,6 +82,12 @@ export const markLabels = (mark: Mark | null, at: { above: number; beside: numbe
     case 'tool':
       // esperando uma ferramenta: o nome dela
       return label(0, Math.max(0, at.above - Math.floor((cols(mark.tool) + 1) / 2)), { text: mark.tool, dim: true }, { text: '·'.repeat(mark.dots), color: 'claude' })
+    case 'draft':
+      // montando a chamada de uma ferramenta: o nome dela, e um cursor que pisca
+      return label(0, Math.max(0, at.above - Math.floor((cols(mark.tool) + 1) / 2)), { text: mark.tool, dim: true }, ...(mark.isCursorOn ? [{ text: CURSOR, color: 'claude' }] : []))
+    case 'write':
+      // escrevendo a resposta: três pontinhos, um aceso de cada vez
+      return label(0, Math.max(0, at.above - Math.floor(TYPING_DOTS / 2)), ...Array.from({ length: TYPING_DOTS }, (_, i): Part => (i === mark.dot ? TYPING_LIT : TYPING_DIM)))
     case 'think':
       // pensando: a faísca da classe dele pulsando
       return label(0, at.above, { text: power ? sparkAt(power.tier, tick) : (SPINNER[tick % SPINNER.length] ?? '✻'), color: 'claude', bold: true })
