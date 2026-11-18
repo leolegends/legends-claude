@@ -3,23 +3,27 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
 import { LINGER_MS, isExpired, reconcileRows, upsert } from './agents'
 import { DEMO_CAST, DEMO_FRAMES, applyDemo } from './demo'
+import { PickerRow, ViewRow } from './bar-rows'
 import { BURST_FRAMES, ruleParts } from './effects'
-import { clean, prettyModel, shortTool } from './format'
+import { landingKey } from './focus'
+import type { Opened, Standing } from './focus'
+import { clean, cols, prettyModel, shortTool } from './format'
 import { hdScene } from './hd'
 import type { Zoom } from './hd'
 import { localeLanguage, stringsOf } from './i18n'
 import type { Strings } from './i18n'
-import { BUTTONS_WIDTH, EFFORTS, STAGE_SLOT, cardLines, fromUsage, hudParts } from './lines'
+import { BUTTONS_WIDTH, EFFORTS, STAGE_SLOT, cardLines, fromUsage, hudParts, viewParts } from './lines'
 import { askAgain, askPixels, canRepaint, dropStage, resetPainter, watchStage } from './painter'
 import type { Host } from './painter'
 import { kindOf } from './palette'
 import { TAIL_GAP, lineWidth } from './parts'
 import type { Line, Part, Switch } from './parts'
+import { THINKING, hear } from './phase'
 import { TIER_NAMES, energyOf, lookOf, powerOf } from './power'
 import type { Power } from './power'
 import { SCENE_ROWS, sceneRows } from './scene'
 import { SettingsPanel } from './settings-panel'
-import { EMPTY_SIM, MAIN, begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, settle, step, syncHelpers, think } from './sim'
+import { EMPTY_SIM, MAIN, begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, settle, shift, step, syncHelpers, think } from './sim'
 import type { Geo, Sim } from './sim'
 import { DEFAULT_SETTINGS, FULL_EFFECTS, accentColor, effectsOf, sanitize } from './settings'
 import type { Effects } from './settings'
@@ -59,6 +63,7 @@ const FRAME_WRAP = 1_000_000
 const FLASH_MS = 1_500 // quanto tempo o custo fica aceso depois de crescer
 const HEAL_AFTER_MS = 5_000 // um turno em curso com a faixa dizendo "parada" por esse tempo: o fim dele não foi avisado
 const STAGE_MIN_ROWS = SCENE_ROWS + 3 // a régua, o cabeçalho, o palco e ao menos uma linha de folga: menos que isso, sem palco
+const VIEW_GAP = 2 // colunas entre o nome do agente em vista e o botão que volta à conversa principal
 // Os apelidos que o /model aceita: cada um aponta sempre para a versão mais nova da família.
 const MODELS = [
   { value: 'fable', label: 'Fable' },
@@ -264,16 +269,43 @@ async function noteTool($: EngineInterface, agentId: string | undefined, tool: s
   }
 }
 
+// O anel de foco da faixa acompanha o que abre e fecha nela: quem navega pelo teclado (ctrl+x tab, Tab
+// ou as setas, Enter) cai na opção em vigor de um seletor recém-aberto e volta ao botão que o abriu
+// quando ele fecha. Sem o teclado na faixa o engine recusa o pedido, e nada muda: a recusa não é um
+// erro. Na versão 2.1.327 um clique num botão o aperta sem dar o teclado à faixa, então é a resposta
+// de sempre para quem usa o mouse; se um clique der o teclado, o anel aparece onde um Enter agiria.
+async function follow($: EngineInterface, requestId: string, key: string) {
+  try {
+    await $.ui.focus({ requestId, key })
+  } catch (err) {
+    report($, 'focus', err)
+  }
+}
+
 // Um clique num item do seletor: roda /model ou /effort como se a pessoa tivesse digitado. O comando
 // entra na fila e roda quando a sessão fica ociosa; a troca é a da sessão, não um desvio do mod.
-async function switchTo($: EngineInterface, command: Switch, value: string) {
+// `requestId` é a faixa em que o seletor estava: com ele fechado, o anel de foco volta ao botão que o abriu.
+async function switchTo($: EngineInterface, command: Switch, value: string, requestId: string) {
   try {
     await update($, picker, () => null)
+    void follow($, requestId, command)
     await $.command.run({ command, args: value })
     const model = await $.session.model()
     await update($, figures, f => ({ ...f, model: model || f.model, ...(command === 'effort' && { effort: value }) }))
   } catch (err) {
     $.ui.toast(strings.switchFailed(command, clean(err instanceof Error ? err.message : String(err), 120)))
+  }
+}
+
+// Um clique na linha de um agente: a transcrição dele vai para a vista principal, como a troca pela
+// lista de tarefas do Claude Code. Sem agente, volta a conversa principal. O engine só troca a vista
+// em resposta a um gesto da pessoa, e diz por que não trocou: o aviso repete o motivo.
+async function viewAgent($: EngineInterface, agentId: string | undefined) {
+  try {
+    const moved = await $.ui.view(agentId === undefined ? {} : { agentId })
+    if (moved?.deny !== undefined) $.ui.toast(strings.viewFailed(clean(moved.deny, 120)))
+  } catch (err) {
+    $.ui.toast(strings.viewFailed(clean(err instanceof Error ? err.message : String(err), 120)))
   }
 }
 
@@ -483,11 +515,22 @@ export const register: Register = on => {
     } catch (err) {
       report($, 'turn.step', err)
     }
-    // Enquanto o pedido ao modelo está em curso, quem o fez está pensando.
+    // Enquanto o pedido ao modelo está em curso, quem o fez está pensando. Cada trecho da resposta passa
+    // adiante como veio e diz o que o pedido faz agora (pensa, escreve, monta uma chamada): o palco mostra.
     const who = e.agentId ?? MAIN
     onStage($, () => void (sim = think(sim, who, true)), undefined)
     try {
-      return yield* next(e)
+      const stream = next(e)
+      let heard = THINKING
+      for await (const chunk of stream) {
+        const now = hear(heard, chunk)
+        if (now !== heard) {
+          heard = now
+          onStage($, () => void (sim = shift(sim, who, now.phase, now.tool)), undefined)
+        }
+        yield chunk
+      }
+      return await stream.result
     } finally {
       onStage($, () => void (sim = think(sim, who, false)), undefined)
     }
@@ -580,7 +623,11 @@ export const register: Register = on => {
     // O que os plugins abaixo desenharam aqui fica, acima do card.
     const below = await next(e).catch(() => null)
     const withBelow = (ours: RenderElement): RenderElement => (below ? <Box flexDirection="column">{below}{ours}</Box> : ours)
-    const setHidden = (hidden: boolean) => update($, isHidden, () => hidden)
+    // Esconder e mostrar trocam o botão em cena: o anel de foco vai para o que ficou.
+    const setHidden = async (hidden: boolean) => {
+      await update($, isHidden, () => hidden)
+      await follow($, e.requestId, hidden ? 'show' : 'hide')
+    }
 
     if (await read($, isHidden)) {
       if (isTerminal) dropStage()
@@ -628,15 +675,29 @@ export const register: Register = on => {
     // Com o palco em cena numa faixa baixa, é a lista de agentes que encolhe (o resto vira "+N agentes").
     const chrome = (s.showRule ? 1 : 0) + 1
     const agentRows = stageRows ? Math.max(1, e.props.maxRows - chrome - stageRows - 1) : undefined
+    // A transcrição na tela acima da faixa: a conversa principal, ou a de um agente (a linha dele vai marcada).
+    const viewedId = e.props.view?.agentId
     const lines = cardLines({
       figures: f, main: m, agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s,
-      stage: draw.node ? [STAGE_SLOT] : draw.lines, hasStageHud, agentRows,
+      stage: draw.node ? [STAGE_SLOT] : draw.lines, hasStageHud, agentRows, viewedId,
     })
-    const toggle = (kind: Exclude<Picker, null>) => update($, picker, p => (p === kind ? null : kind))
+    const current = f.model ? prettyModel(f.model).toLowerCase() : ''
+    // O que está em vigor: decide em que opção o anel de foco cai quando um seletor ou a aba abre.
+    const standing: Standing = { models: MODELS.map(option => option.value), model: current, efforts: EFFORTS, effort: f.effort, language: s.language }
+    // Abrir leva o anel para dentro. Fechar pelo mesmo botão deixa-o onde está; fechar por dentro (o ✕,
+    // a demonstração que fecha a aba) devolve-o ao botão que abriu.
+    const toggle = async (kind: Opened) => {
+      const now = await update($, picker, p => (p === kind ? null : kind))
+      if (now === kind) await follow($, e.requestId, landingKey(kind, standing))
+    }
+    const close = async (opener: Opened) => {
+      await update($, picker, () => null)
+      await follow($, e.requestId, opener)
+    }
     // A cor de destaque dos ajustes entra aqui, no desenho: as linhas falam 'claude', a barra pinta com a escolhida.
     const accent = accentColor(s)
     const paint = (color: string | undefined) => (color === 'claude' ? accent : color)
-    const run = (q: Part) => <Text color={paint(q.color)} backgroundColor={paint(q.bg)} dimColor={q.dim} bold={q.bold}>{q.text}</Text>
+    const run = (q: Part) => <Text color={paint(q.color)} backgroundColor={paint(q.bg)} dimColor={q.dim} bold={q.bold} underline={q.underline}>{q.text}</Text>
     const gap = (l: Line, room: number) =>
       ' '.repeat(Math.max(l.tail?.length ? TAIL_GAP : 0, room - lineWidth(l) + (l.tail?.length ? TAIL_GAP : 0)))
     // Uma linha é um Text só, cortado na borda da barra; o trecho da direita encosta na borda.
@@ -647,30 +708,34 @@ export const register: Register = on => {
         {(l.tail ?? []).map(run)}
       </Text>
     )
+    // A linha de um agente, no terminal, é um botão do tamanho dela: um clique põe a transcrição dele
+    // na tela; outro, na linha de quem já está em vista, volta à conversa principal.
+    const agentRow = (l: Line, id: string) => (
+      <Button key={`agent-${id}`} plain onPress={() => void viewAgent($, id === viewedId ? undefined : id)}>
+        {row(l, width)}
+      </Button>
+    )
+    const el = { Box, Button, Text } as never
+    // Com a transcrição de um agente na tela: de quem ela é, e a volta à conversa principal.
+    const viewRow = viewedId === undefined ? null : ViewRow({
+      el, who: viewParts(list.find(a => a.id === viewedId), width - VIEW_GAP - cols(t.backToMain), t).map(run),
+      gap: VIEW_GAP, back: t.backToMain, onBack: () => void viewAgent($, undefined),
+    })
     const [first = { parts: [] }, ...rest] = lines
     // Na primeira linha, modelo e effort são botões: um clique abre o seletor logo abaixo.
     const headParts = first.parts.map(q => {
       const action = q.action
       return action ? <Button key={action} plain onPress={() => void toggle(action)}>{run(q)}</Button> : run(q)
     })
-    const current = f.model ? prettyModel(f.model).toLowerCase() : ''
-    const choices =
-      open === 'settings' ? []
-      : open === 'model'
+    // O seletor aberto por um clique no modelo ou no effort: uma linha de opções, a em vigor marcada.
+    const pickerRow = open === 'model' || open === 'effort' ? PickerRow({
+      el, label: open === 'model' ? t.pickModel : t.pickEffort, accent, marks: MARKS,
+      choices: open === 'model'
         ? MODELS.map(m => ({ value: m.value, label: m.label, isCurrent: current.startsWith(m.value) }))
-        : EFFORTS.map(level => ({ value: level, label: level, isCurrent: f.effort === level }))
-    const pickerRow = open === 'model' || open === 'effort' ? (
-      <Box key="picker">
-        <Text dimColor>{open === 'model' ? t.pickModel : t.pickEffort}</Text>
-        {choices.flatMap(c => [
-          <Text> </Text>,
-          <Button key={`pick-${c.value}`} plain onPress={() => void switchTo($, open, c.value)}>
-            <Text color={c.isCurrent ? accent : undefined} bold={c.isCurrent}>{c.isCurrent ? `${MARKS.current}${c.label}` : c.label}</Text>
-          </Button>,
-        ])}
-        <Button key="pick-close" label={MARKS.close} plain dimColor onPress={() => void toggle(open)} />
-      </Box>
-    ) : null
+        : EFFORTS.map(level => ({ value: level, label: level, isCurrent: f.effort === level })),
+      onPick: value => void switchTo($, open, value, e.requestId),
+      onClose: () => void close(open),
+    }) : null
 
     return withBelow(
       <Box paddingRight={BAR_RIGHT_PAD}>
@@ -688,17 +753,22 @@ export const register: Register = on => {
           </Box>
           {open === 'settings'
             ? SettingsPanel({
-                el: { Box, Button, Text } as never, settings: s, strings: t, accent, inUse: t.backends[draw.backend], isCramped: s.size === 'grande' && zoom === 1,
+                el, settings: s, strings: t, accent, inUse: t.backends[draw.backend], isCramped: s.size === 'grande' && zoom === 1,
                 onChange: patch => {
                   // escolher "automática" de novo é pedir para conferir outra vez se o terminal desenha imagens
                   if (patch.resolution === 'auto') void recheckPixels($)
                   void applySettings($, cur => ({ ...cur, ...patch }))
                 },
                 onReset: () => void applySettings($, cur => ({ ...DEFAULT_SETTINGS, language: cur.language })), // o idioma não é aparência: fica
-                onDemo: () => void startDemo($).then(text => text === strings.demo || $.ui.toast(text)),
-                onClose: () => void update($, picker, () => null),
+                // a demonstração, quando começa, fecha a aba: o anel volta ao ⚙, como no ✕
+                onDemo: () => void startDemo($).then(text => (text === strings.demo ? void follow($, e.requestId, 'settings') : $.ui.toast(text))),
+                onClose: () => void close('settings'),
               })
-            : [...(pickerRow ? [pickerRow] : []), ...rest.map(l => (l === STAGE_SLOT && draw.node ? draw.node : row(l, width)))]}
+            : [
+                ...(viewRow ? [viewRow] : []),
+                ...(pickerRow ? [pickerRow] : []),
+                ...rest.map(l => (l === STAGE_SLOT && draw.node ? draw.node : l.agentId !== undefined && isTerminal ? agentRow(l, l.agentId) : row(l, width))),
+              ]}
         </Box>
       </Box>,
     )

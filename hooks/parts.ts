@@ -4,16 +4,20 @@ import { cols } from './format'
 export type Switch = 'model' | 'effort'
 /**
  * Um trecho de linha. `bg` pinta o fundo da célula (o palco usa para dois tijolos numa célula só);
- * com `action`, um clique nele abre o seletor de modelo ou de effort.
+ * `underline` sublinha (o nome do agente cuja transcrição está na tela); com `action`, um clique nele
+ * abre o seletor de modelo ou de effort.
  */
-export type Part = { text: string; color?: string; bg?: string; dim?: boolean; bold?: boolean; action?: Switch }
-/** Uma linha da barra: o texto e, opcionalmente, um trecho encostado à direita. */
-export type Line = { parts: Part[]; tail?: Part[] }
+export type Part = { text: string; color?: string; bg?: string; dim?: boolean; bold?: boolean; underline?: boolean; action?: Switch }
+/**
+ * Uma linha da barra: o texto e, opcionalmente, um trecho encostado à direita. Com `agentId`, é a
+ * linha desse agente: no terminal, um clique nela põe a transcrição dele na tela.
+ */
+export type Line = { parts: Part[]; tail?: Part[]; agentId?: string }
 
 export const TAIL_GAP = 2 // colunas entre o texto de uma linha e o que fica encostado à direita
 
 const isSameStyle = (a: Part, b: Part) =>
-  a.color === b.color && a.bg === b.bg && a.dim === b.dim && a.bold === b.bold && a.action === b.action
+  a.color === b.color && a.bg === b.bg && a.dim === b.dim && a.bold === b.bold && a.underline === b.underline && a.action === b.action
 
 // Junta trechos vizinhos de mesmo estilo: menos pedaços para desenhar, o mesmo texto.
 export const merge = (parts: readonly Part[]): Part[] =>

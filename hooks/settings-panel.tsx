@@ -1,5 +1,6 @@
 import type { EngineInterface, RenderElement } from 'claude-code'
 
+import { languageKey } from './focus'
 import { LANGUAGES } from './i18n'
 import type { Strings } from './i18n'
 import { ACCENTS, AGENT_LIMITS, AVATARS, MOTIONS, RESOLUTIONS, SIZES, SPEEDS, TOGGLES } from './settings'
@@ -59,7 +60,7 @@ export const SettingsPanel = ({ el, settings: s, strings: t, accent, inUse, isCr
     // O idioma vem primeiro, com cada opção escrita no próprio idioma: quem não lê o atual acha o seu.
     <Box key="set-language">
       {label(t.panel.language)}
-      {LANGUAGES.flatMap(l => option(`set-language-${l.id}`, l.label, s.language === l.id, () => onChange({ language: l.id })))}
+      {LANGUAGES.flatMap(l => option(languageKey(l.id), l.label, s.language === l.id, () => onChange({ language: l.id })))}
     </Box>,
     <Box key="set-accent">
       {label(t.panel.accent)}

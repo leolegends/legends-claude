@@ -4,7 +4,7 @@ import { DEMO_FRAMES, applyDemo } from './demo'
 import { kindOf, tintOf } from './palette'
 import {
   DEMO_PREFIX, EMPTY_SIM, FLOOR_Y, MAIN, WALL_ROWS,
-  begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, partyAge, retire, settle, step, summon, syncHelpers, think, wallFront,
+  begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, partyAge, retire, settle, shift, step, summon, syncHelpers, think, wallFront,
 } from './sim'
 import type { Geo, Sim } from './sim'
 
@@ -129,6 +129,46 @@ describe('o mascote', () => {
     expect(main(think(twice, MAIN, false))?.thinking).toBe(1)
     expect(main(think(think(twice, MAIN, false), MAIN, false))?.thinking).toBe(0)
     expect(main(think(AT_HOME, MAIN, false))?.thinking).toBe(0) // um fim sem começo não deixa negativo
+  })
+
+  test('um pedido começa pensando; os trechos dele dizem quando escreve a resposta e quando monta uma ferramenta', () => {
+    const asking = think(AT_HOME, MAIN, true)
+    expect(main(asking)).toMatchObject({ thinking: 1, phase: 'think', draft: null })
+    const writing = shift(asking, MAIN, 'write')
+    expect(main(writing)).toMatchObject({ phase: 'write', draft: null })
+    const drafting = shift(writing, MAIN, 'draft', 'Bash')
+    expect(main(drafting)).toMatchObject({ phase: 'draft', draft: 'Bash' })
+    // o nome da ferramenta só vale enquanto ela é montada
+    expect(main(shift(drafting, MAIN, 'write', 'Bash'))).toMatchObject({ phase: 'write', draft: null })
+  })
+
+  test('uma fase repetida devolve a mesma cena: nada muda, nada é copiado', () => {
+    const writing = shift(think(AT_HOME, MAIN, true), MAIN, 'write')
+    expect(shift(writing, MAIN, 'write')).toBe(writing)
+    const drafting = shift(writing, MAIN, 'draft', 'Read')
+    expect(shift(drafting, MAIN, 'draft', 'Read')).toBe(drafting)
+    expect(shift(drafting, MAIN, 'draft', 'Grep')).not.toBe(drafting) // outra ferramenta é outra fase
+    expect(shift(writing, 'ninguém', 'draft', 'Read')).toBe(writing) // quem não está em cena não muda nada
+  })
+
+  test('a fase não sobrevive ao pedido: o seguinte começa pensando, e o fim do último a apaga', () => {
+    const drafting = shift(think(AT_HOME, MAIN, true), MAIN, 'draft', 'Bash')
+    expect(main(think(drafting, MAIN, false))).toMatchObject({ thinking: 0, phase: 'think', draft: null })
+    expect(main(think(drafting, MAIN, true))).toMatchObject({ thinking: 2, phase: 'think', draft: null })
+    // com dois pedidos em curso, o fim de um deles não mexe na fase do que segue
+    const both = shift(think(think(AT_HOME, MAIN, true), MAIN, true), MAIN, 'write')
+    expect(main(think(both, MAIN, false))).toMatchObject({ thinking: 1, phase: 'write' })
+  })
+
+  test('o fim do turno e um turno novo não herdam a fase do pedido anterior', () => {
+    const writing = shift(think(AT_HOME, MAIN, true), MAIN, 'write')
+    expect(main(finish(writing))).toMatchObject({ thinking: 0, phase: 'think', draft: null })
+    expect(main(halt(writing))).toMatchObject({ thinking: 0, phase: 'think', draft: null })
+    expect(main(begin(writing))).toMatchObject({ thinking: 0, phase: 'think', draft: null })
+    // um ajudante que termina no meio de um pedido também não a leva consigo
+    const helper = shift(think(summon(AT_HOME, 'h1'), 'h1', true), 'h1', 'draft', 'Grep')
+    expect(who(helper, 'h1')).toMatchObject({ phase: 'draft', draft: 'Grep' })
+    expect(who(retire(helper, 'h1', true), 'h1')).toMatchObject({ thinking: 0, phase: 'think', draft: null })
   })
 })
 

@@ -112,7 +112,7 @@ describe('os avatares do mascote', () => {
 })
 
 describe('a forma com poder', () => {
-  const idle: Worker = { id: MAIN, x: 30, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, isAsleep: false, shout: 0 }
+  const idle: Worker = { id: MAIN, x: 30, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, phase: 'think', draft: null, isAsleep: false, shout: 0 }
   const working: Sim = { ...EMPTY_SIM, isOn: true, workers: [idle] }
   const artAt = (art: Art, tier: number, level: number, over: Partial<Worker> = {}) => poseOf({ ...idle, ...over }, working, power(tier, level), art).art
 
@@ -169,7 +169,7 @@ describe('a forma com poder', () => {
 describe('o avatar no palco', () => {
   const geo = geometry(100)
   if (!geo) throw new Error('o palco de teste não coube')
-  const sim: Sim = { ...EMPTY_SIM, isOn: true, workers: [{ id: MAIN, x: 30, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, isAsleep: false, shout: 0 }] }
+  const sim: Sim = { ...EMPTY_SIM, isOn: true, workers: [{ id: MAIN, x: 30, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, phase: 'think', draft: null, isAsleep: false, shout: 0 }] }
   const colorsOf = (shapes: readonly { rgb: number }[]) => new Set(shapes.map(s => s.rgb))
   const RED = 0xe52521 // o boné do encanador
 
