@@ -7,8 +7,7 @@ import { blend, rgbOf } from './color'
 import { BRICK_SUBS, beltShapes, brickShapes, draftIcon, floorShapes, outlined, shoutIcon, snoreIcon, starShapes, thinkSpark, toolIcon, typingDots, verdictIcon } from './hd-art'
 import { arcShapes, boltShapes, fireworkShapes, haloShapes, jetShapes, moteShapes, streakShapes } from './hd-aura'
 import type { Body, Light, Unit } from './hd-aura'
-import { KIND_PAINT, kindOf } from './palette'
-import type { Kind } from './palette'
+import { KIND_PAINT, isCracked, kindOf, tilePaint } from './palette'
 import type { Part } from './parts'
 import { EYE } from './pixels'
 import type { Bitmap } from './pixels'
@@ -259,7 +258,7 @@ const castOf = (w: Worker, prev: Sim, cur: Sim, powers: ReadonlyMap<string, Powe
   const perLayer = Math.max(1, Math.floor(art.headWidth / BRICK_SUBS))
   const headSub = view.isFree || view.zoom > 1 ? x + art.headFrom : Math.round((x + art.headFrom) / 2) * 2
   const tiles = [...w.load].slice(0, perLayer * LOAD_LAYERS).flatMap((kind, i) =>
-    brickShapes((headSub + (i % perLayer) * BRICK_SUBS) * u, top - (1 + Math.floor(i / perLayer)) * v, unit, rgbOf(KIND_PAINT[kind as Kind] ?? KIND_PAINT.o), view.hasDetail))
+    brickShapes((headSub + (i % perLayer) * BRICK_SUBS) * u, top - (1 + Math.floor(i / perLayer)) * v, unit, rgbOf(tilePaint(kind)), view.hasDetail, isCracked(kind)))
   return {
     glow: haloShapes(body, view),
     body: [
@@ -284,24 +283,24 @@ const castOf = (w: Worker, prev: Sim, cur: Sim, powers: ReadonlyMap<string, Powe
 // Os tijolos parados e os da esteira: a pilha à esquerda, o mosaico à direita, e os que estão a caminho.
 const brickwork = (prev: Sim, geo: Geo, wall: string, view: View): Shape[] => {
   const { unit, cell } = view
-  const paintOf = (kind: string) => rgbOf(KIND_PAINT[kind as Kind] ?? KIND_PAINT.o)
+  const paintOf = (tile: string) => rgbOf(tilePaint(tile))
   const lit = toneOf('text', view)
   const pile = prev.workers.map(w => w.queue).join('').slice(0, PILE_COLS * PILE_ROWS)
   const front = wallFront(wall, geo)
   // o tijolo recém-chegado acende e, no traço com relevo, apaga aos poucos
   const flash = view.hasDetail ? clamp01((prev.flash - view.alpha) / FLASH_FRAMES) : prev.flash > 0 ? 1 : 0
   return [
-    ...[...pile].flatMap((kind, i) => brickShapes(Math.floor(i / PILE_ROWS) * BRICK_CELLS * cell.w, (FLOOR_Y - (i % PILE_ROWS)) * unit.v, unit, paintOf(kind), view.hasDetail)),
+    ...[...pile].flatMap((kind, i) => brickShapes(Math.floor(i / PILE_ROWS) * BRICK_CELLS * cell.w, (FLOOR_Y - (i % PILE_ROWS)) * unit.v, unit, paintOf(kind), view.hasDetail, isCracked(kind))),
     ...prev.belt.flatMap(b => {
       // corre até encostar na frente do mosaico; em blocos, na grade de meia célula
       const at = Math.min(b.x + BELT_SPEED * view.alpha, front - BRICK_CELLS) * cell.w
-      return brickShapes(view.isFree ? at : snap(at, view.grain.x), FLOOR_Y * unit.v, unit, paintOf(b.kind), view.hasDetail)
+      return brickShapes(view.isFree ? at : snap(at, view.grain.x), FLOOR_Y * unit.v, unit, paintOf(b.kind), view.hasDetail, isCracked(b.kind))
     }),
     ...[...wall].flatMap((kind, i) => {
       // fiadas alternadas, como numa parede: as ímpares começam uma célula antes
       const column = geo.wallRight - 1 - Math.floor(i / WALL_ROWS) * BRICK_CELLS - ((i % WALL_ROWS) % 2)
       const rgb = i === wall.length - 1 && flash > 0 ? blend(paintOf(kind), lit, flash) : paintOf(kind)
-      return brickShapes(column * cell.w, (FLOOR_Y - (i % WALL_ROWS)) * unit.v, unit, rgb, view.hasDetail)
+      return brickShapes(column * cell.w, (FLOOR_Y - (i % WALL_ROWS)) * unit.v, unit, rgb, view.hasDetail, isCracked(kind))
     }),
   ]
 }

@@ -4,7 +4,7 @@ import { DEMO_FRAMES, applyDemo } from './demo'
 import { kindOf, tintOf } from './palette'
 import {
   DEMO_PREFIX, EMPTY_SIM, FLOOR_Y, MAIN, WALL_ROWS,
-  begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, partyAge, retire, settle, shift, step, summon, syncHelpers, think, wallFront,
+  begin, blank, crack, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, partyAge, retire, settle, shift, step, summon, syncHelpers, think, top, wallFront,
 } from './sim'
 import type { Geo, Sim } from './sim'
 
@@ -390,5 +390,55 @@ describe('a demonstração', () => {
     expect(isAnimating(end)).toBe(false)
     expect(end.wall.length + end.belt.length).toBe(28) // as 28 ferramentas do roteiro
     expect(end.workers.map(w => w.id)).toEqual([MAIN])
+  })
+})
+
+describe('o tijolo de uma chamada que falhou', () => {
+  const piled = tools(begin(EMPTY_SIM), MAIN, 'Read', 'Bash', 'Read') // a pilha: r, b, r
+
+  test('racha o mais novo da família que ainda está inteiro, a começar pela pilha de quem chamou', () => {
+    expect(main(crack(piled, MAIN, 'r'))?.queue).toBe('rbR')
+    expect(main(crack(crack(piled, MAIN, 'r'), MAIN, 'r'))?.queue).toBe('RbR')
+    // com o mesmo tijolo na pilha, na esteira e no mosaico, é o da pilha
+    const everywhere = crack({ ...piled, belt: [{ kind: 'r', x: 50 }], wall: 'r' }, MAIN, 'r')
+    expect([main(everywhere)?.queue, everywhere.belt[0]?.kind, everywhere.wall]).toEqual(['rbR', 'r', 'r'])
+  })
+
+  test('já na cabeça, na esteira ou no mosaico, racha onde está', () => {
+    const carrying = until(piled, s => (main(s)?.load.length ?? 0) === 3).sim
+    expect(main(crack(carrying, MAIN, 'b'))?.load).toBe('rBr')
+    // na esteira o mais novo é o mais atrasado
+    const rolling = crack({ ...EMPTY_SIM, belt: [{ kind: 'e', x: 60 }, { kind: 'e', x: 50 }, { kind: 'b', x: 40 }] }, MAIN, 'e')
+    expect(rolling.belt).toEqual([{ kind: 'e', x: 60 }, { kind: 'E', x: 50 }, { kind: 'b', x: 40 }])
+    expect(crack({ ...EMPTY_SIM, wall: 'rebe' }, MAIN, 'e').wall).toBe('rebE')
+  })
+
+  test('um tijolo rachado segue o caminho de todo tijolo, até o mosaico', () => {
+    const done = until(crack(piled, MAIN, 'b'), s => s.wall.length === 3 && s.belt.length === 0)
+    expect(sorted(done.sim.wall)).toBe('Brr')
+  })
+
+  test('sem tijolo inteiro da família, a cena é a mesma', () => {
+    expect(crack(EMPTY_SIM, MAIN, 'b')).toBe(EMPTY_SIM)
+    const once = crack({ ...EMPTY_SIM, wall: 'b' }, MAIN, 'b')
+    expect(once.wall).toBe('B')
+    expect(crack(once, MAIN, 'b')).toBe(once)
+  })
+})
+
+describe('um andar que fecha', () => {
+  test('no quadro seguinte sobem fogos sobre o mosaico, uma vez só', () => {
+    const walled = { ...begin(EMPTY_SIM), wall: 'r'.repeat(12) }
+    const topping = top(walled)
+    expect(topping.isTopping).toBe(true)
+    expect(top(topping)).toBe(topping)
+    expect(isAnimating(topping)).toBe(true)
+    const after = step(topping, GEO)
+    expect(after.isTopping).toBe(false)
+    expect(after.sparks.length).toBeGreaterThan(10)
+    // sobem do topo do mosaico, ao longo dele
+    const from = wallFront(walled.wall, GEO) * 2
+    expect(after.sparks.every(s => s.x >= from && s.x <= GEO.wallRight * 2 && s.vy < 0 && s.y === FLOOR_Y - WALL_ROWS)).toBe(true)
+    expect(step(after, GEO).sparks.length).toBeLessThanOrEqual(after.sparks.length)
   })
 })

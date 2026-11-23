@@ -225,6 +225,15 @@ async function probe($: EngineInterface, requestId: string, report: Report, born
 }
 
 /**
+ * A pessoa escolheu a resolução automática de novo: se o terminal tinha dito que não desenha imagens
+ * (um tmux sem passthrough, já corrigido, por exemplo), pergunta-se outra vez.
+ */
+export async function recheckPixels($: EngineInterface) {
+  askAgain()
+  await update($, pixels, known => (known === 'no' ? 'unknown' : known))
+}
+
+/**
  * A barra acabou de desenhar a imagem de sondagem: pergunta ao terminal, uma vez, se ele desenha
  * imagens. A resposta vai para o estado `pixels`, que redesenha a barra.
  */

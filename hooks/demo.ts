@@ -3,6 +3,7 @@ import { power } from './power'
 import type { Power } from './power'
 import { DEMO_PREFIX, MAIN, begin, enqueue, finish, retire, settle, shift, summon, think } from './sim'
 import type { Sim } from './sim'
+import type { Cue as Sound } from './sound'
 
 // A demonstração: um turno de mentira, com hora marcada para cada coisa, para ver o palco sem gastar
 // um turno de verdade. Usa as mesmas funções que os eventos reais usam.
@@ -69,6 +70,9 @@ const SCRIPT: readonly Cue[] = [
   [END_AT, thinking(MAIN, false)],
   [END_AT, finish],
 ]
+
+/** Os sons da demonstração, com o quadro de cada um: os ajudantes que nascem e a fanfarra do fim. */
+export const DEMO_SOUNDS: readonly (readonly [at: number, sound: Sound])[] = [[90, 'spawn'], [102, 'spawn'], [END_AT, 'party']]
 
 /** Quadros que a demonstração dura, da entrada do mascote ao fim do confete. */
 export const DEMO_FRAMES = END_AT + 22

@@ -14,11 +14,11 @@ The bar spans the full width of the terminal. On a narrow terminal, model, cost 
 | --- | --- |
 | Rule | The top line. While there is work in progress, a `━` pulse starts at the center and runs to both ends: wider and faster the higher the effort. |
 | Header | Model and effort of the last request, both **clickable** (see Usage). The spark is the one of the model's class (`✢` Haiku, `✻` Sonnet, `❋` Opus, `❂` Fable; see Power): it pulses while the turn runs and stays dim when idle. Cost and limits sit at the right end of the same line when they fit. |
-| Cost | Session total (the same sum `/cost` gives, subagents included) and how much was spent since the last prompt. Two decimal places (`$1.75`). The total lights up with `▲` for a moment whenever it grows. |
-| Limits | The 5-hour and 7-day windows, with the time left until each resets. Only shown on accounts that report a limit. |
+| Cost | Session total (the same sum `/cost` gives, subagents included) and how much was spent since the last prompt. Two decimal places (`$1.75`). The total lights up with `▲` for a moment whenever it grows. When another session also spent today (or this one started yesterday), the day's cost follows, summed across sessions: `today $9.80`. |
+| Limits | The 5-hour and 7-day windows, with the time left until each resets. When, at the pace of the last minutes, a window fills before it resets, the bar says how soon (`full in ~40m`): in amber, and in red with less than a quarter of an hour. Only shown on accounts that report a limit. |
 | Stage | Four lines of scene (eight at the large size), while a turn or an agent is running: in real pixels, in terminal blocks, in vector or in text, whichever the screen can show. See below. |
-| Work | With the stage off: a comet of sparks `✳✶✻·····`, elapsed time, how many tools were called and the last one. With the stage on, this information moves to the scoreboard in its corner. |
-| Agents | One line per subagent, teammate or workflow agent: the name emerges from a handful of sparks that settle letter by letter; then the pulsing spark of its model's class (in the color of its helper on the stage), a shimmer over the name and a comet of its own, each out of phase with its neighbor; elapsed time, tools and the last call. When it finishes it becomes `✓` with a burst of sparks that thins out, duration and tokens (or `✗` if it failed), and leaves after 8 seconds. Up to 6 lines by default (3, 6 or 10 in the settings tab); the rest becomes `+N agents`. In the terminal, a click on the line puts the agent's transcript on screen (see Usage). |
+| Work | With the stage off: a comet of sparks `✳✶✻·····`, elapsed time, how many tools were called, how many failed and the last one. With the stage on, this information moves to the scoreboard in its corner. |
+| Agents | One line per subagent, teammate or workflow agent: the name emerges from a handful of sparks that settle letter by letter; then the pulsing spark of its model's class (in the color of its helper on the stage), a shimmer over the name and a comet of its own, each out of phase with its neighbor; what it is doing now (the summary Claude Code keeps of it; before there is one, the task's description); a tiny graph of its activity (`▂▁▅█`), elapsed time, tools, failures, what it has cost so far and the last call. When it finishes it becomes `✓` with a burst of sparks that thins out, duration, tokens and cost (or `✗` if it failed), and leaves after 8 seconds. An agent called by another agent sits right under it, indented with `└`. Up to 6 lines by default (3, 6 or 10 in the settings tab); the rest becomes `+N agents`. In the terminal, a click on the line puts the agent's transcript on screen (see Usage). |
 
 ## The stage
 
@@ -27,9 +27,11 @@ The stage is not a looping drawing: it reacts to what is actually happening.
 - **The mascot** is the one from the Claude Code logo (`▐▛███▜▌` / `▝▜█████▛▘` / `▘▘ ▝▝`), dot for dot. It walks in from the left when the turn starts and waits in the middle of the lane.
 - **Thinking, writing or waiting.** The sign over its head follows what the model request is doing, piece by piece of the response. While the model thinks, the spark of its class pulses and its eyes move from side to side. When the answer starts coming out, the spark gives way to three dots, one lit at a time (`·●·`). When it puts a tool call together, the tool's name appears with a blinking cursor (`Bash▁`). While the tool runs, the name gets an ellipsis (`Bash···`) and it raises and lowers its claws. A helper shows the phases of its own agent the same way. The sign only shows while the creature stands still: walking or carrying bricks, there is none.
 - **Every tool is a brick.** A tool call becomes a brick on the pile at the left, in the color of its family. The mascot fetches it, carries it on its head (up to six per trip; with a big pile it picks up the pace), puts it on the conveyor belt, and the belt takes it to the **wall** growing at the right, in alternating courses. The brick that just arrived lights up. The wall stays from one turn to the next: it is the picture of what the session did.
+- **What failed cracks.** A call that ends in an error (a failing test, a command that exits non-zero, an edit that did not match) or is refused cracks its brick: it goes on to the wall in its family's color, faded, and, where there is detail, with the crack drawn. The wall now shows how much of the work was rework.
+- **Floors.** Every hundred bricks the session closes a floor: fireworks go up over the wall. `/legends-claude stats` counts how many there have been.
 - **Helpers.** When Claude starts a subagent, the mascot stops, shouts `!`, and a smaller helper pops up behind it in a cloud of sparks, in the agent's color (the same as its spark in the list). The helper carries the bricks of its own agent's tools. Agent waiting: the helper sits down and sleeps (`z`). Agent finished: it jumps, gets a `✓` and vanishes in sparks; if it failed, it dims and gets a `✗`. Up to six helpers on stage.
 - **The end.** When the turn ends with an answer, the mascot celebrates: with three tools or more, jumps and confetti in the colors of the bricks; on a short turn, just a little hop. A turn that was interrupted or ended in an error gets no party: the scene simply packs up.
-- **The scoreboard** in the top right corner shows the turn's elapsed time, how many tools it called and the last one. Where the stage is an image it has no room for text: the scoreboard is the work line, right below it.
+- **The scoreboard** in the top right corner shows the turn's elapsed time, how many tools it called, how many failed and the last one. Where the stage is an image it has no room for text: the scoreboard is the work line, right below it.
 
 The brick colors:
 
@@ -88,6 +90,7 @@ Who the mascot is on the stage is picked in the settings tab (`⚙`), on the `ma
 | Kratos | Ash-white skin, the red stripe over the eye, beard, golden pauldron and leather skirt. | **Fire**: orange flames with red tips, yellow next to the body, with embers rising. | Flies into a **rage**: the stripe and the eyes light up, the skin takes the heat of the fire and the fists burn. |
 | Elsa | Blond braid over the shoulder, lilac eyeshadow, ice-blue dress down to the floor, sheer sleeves and cape. | **Ice**: the blue of a winter night, with pale-tipped crystals around it and snowflakes falling. | Becomes the **fifth spirit**: hair down and a white dress, with lilac sleeves and ice diamonds. |
 
+- **The bar can pick, too.** `by model` puts the avatar of the model's class on stage: Pikachu on Haiku, Mario on Sonnet, Kratos on Opus and Elsa on Fable; switch the model and the mascot switches. `by session` draws a colored avatar from the session's id: the same one for the whole session, and almost always another in the session next to it, which helps tell windows apart. Either way the tab says who is on stage.
 - **Two drawings per colored avatar, and per powered form.** The fine one (36×20 dots) shows wherever there is detail: in pixels, in vector and in `large` blocks. In `normal`-size blocks and on the text stage a low-resolution version (18×5) is used, much simpler: it is what fits in quadrant blocks with two colors per cell.
 - **Everything Clawd does, they do.** They blink, look around while thinking, raise their arms to carry and to celebrate, walk, sit down to sleep, and fade when they fail.
 - **The aura belongs to the character, not to the class.** On a colored avatar the paints of the aura (and of the streaks, the sparks and the jets) are those of its element, on any model. It is a more vivid aura than a class glow, with three layers wherever there is detail: the heart, lighter, next to the body; the core; and the tips and edges. The effort still gives its size, and the class gives the rest: the spark, the sheen, the lit pupils from Opus up, Fable's flight and the fireworks. The sheen is lighter over a colored avatar, so it keeps showing underneath.
@@ -151,18 +154,20 @@ To remove: `claude plugin uninstall legends-claude`.
 - **From the keyboard.** `ctrl+x tab` moves the focus to the bar: `Tab` or the arrows walk the buttons (agent lines included) and `Enter` presses. The focus ring follows what opens: in a picker it lands on the option in force (the session's model, the effort of the last request), and in the settings tab, on the language; when that closes, it goes back to the button that opened it. `Esc`, or starting to type, returns the focus to the prompt.
 - `▾` at the corner of the bar hides it; `◂ status` brings it back. `/legends-claude` toggles between hidden and visible.
 - `/legends-claude demo` plays the stage, with the session idle. `/legends-claude demo fable max` plays it as another model and effort, without changing the session's.
+- `/legends-claude stats` shows the tallies: the bricks (every tool call is one), the floors, the failures and the turns of this session; today's cost summed across sessions; the all-time total; and the records (the longest turn, the one that called the most tools, the most agents at once). The text shows in the conversation for you alone: it does not go to the model.
 - **`⚙` opens the settings tab** in the bar itself (or `/legends-claude settings`; `ajustes` works too). Every change applies immediately and is saved for the next sessions:
 
 ```
 ⚙ settings                                                   ▶ demo   restore defaults   ✕
 language     Português  ● English
 color        ● Claude  Blue  Green  Purple  Pink  Cyan  Amber  Mono
-mascot       ● Clawd  Pikachu  Mario  Kratos  Elsa
+mascot       ● Clawd  Pikachu  Mario  Kratos  Elsa  by model  by session
+sound        ● off  low  loud
 animation    ● full  subtle  still
 speed        slow  ● normal  fast
 resolution   ● auto  blocks  classic    in use: blocks
 size         ● normal  large
-show         ☑ rule  ☑ stage  ☑ limits  ☑ turn cost
+show         ☑ rule  ☑ stage  ☑ limits  ☑ turn cost  ☑ day cost
 agents       3  ● 6  10
 ```
 
@@ -170,17 +175,18 @@ agents       3  ● 6  10
 | --- | --- |
 | language | English or Portuguese: switches every text in the bar, the notices and the command's description at once. With no saved choice, a fresh install follows the system language (`LC_ALL`, `LC_MESSAGES`, `LANG`): Portuguese if it says `pt`, English otherwise. "Restore defaults" leaves the language alone. |
 | color | The accent color: the mascot, the spark, the model, the comet, the rule's pulse, the lit-up cost. Each option is already shown in its own color. `Claude` and `Mono` follow Claude Code's light/dark theme. |
-| mascot | Who the mascot is on the stage. `Clawd` is the usual one, in the accent color. `Pikachu`, `Mario`, `Kratos` and `Elsa` are colored avatars with their own colors (the accent color still applies to the rest of the bar): in pixels, vector and large blocks they show in the fine drawing; in normal-size blocks and on the text stage, in a low-resolution version. Each colored avatar has the aura of its element (lightning, star, fire, ice) and transforms at a high effort (Raichu, Super Mario, Kratos in a rage, the fifth spirit); the sheen, the lit eyes and the flight follow the model's class. The helpers are still the small Clawds. |
+| mascot | Who the mascot is on the stage. `Clawd` is the usual one, in the accent color. `Pikachu`, `Mario`, `Kratos` and `Elsa` are colored avatars with their own colors (the accent color still applies to the rest of the bar): in pixels, vector and large blocks they show in the fine drawing; in normal-size blocks and on the text stage, in a low-resolution version. Each colored avatar has the aura of its element (lightning, star, fire, ice) and transforms at a high effort (Raichu, Super Mario, Kratos in a rage, the fifth spirit); the sheen, the lit eyes and the flight follow the model's class. `by model` and `by session` leave the choice to the bar (see [Mascots](#mascots-clawd-pikachu-mario-kratos-and-elsa)). The helpers are still the small Clawds. |
+| sound | The bar's sounds, eight-bit, made by the mod itself (there is no audio file): the fanfare of a turn that worked, a ping on a short turn, a helper being born, a failure (a turn that ended in an error, an agent that failed), a floor closing, and two beats when Claude asks you a question or waits for a plan to be approved. `off` is the default; picking a volume plays a sample. It only plays on macOS: on other systems the tab says so. |
 | animation | `full` is everything, stage included; `subtle` keeps only the pulsing spark and the comet (no stage, rule pulse, emerging name, shimmer or burst); `still` moves nothing and only updates the time once a second. |
 | speed | The duration of a frame: 200, 125 or 80 ms. It is also the pace of the stage. No effect while the animation is still. |
 | resolution | What the stage is drawn in. `auto` is the best the screen offers: real pixels in a terminal that draws images, terminal blocks in the others, vector in the desktop app. `blocks` keeps the blocks even where there are pixels. `classic` is the text stage. Next to the options, the tab says what is in use on this screen. |
 | size | `normal` is the four-line stage; `large` doubles it (see [Resolution](#resolution-pixels-blocks-vector-or-text)). It only applies outside the text stage, and where the bar has room. |
-| show | Turns the top rule, the stage, the 5h/7d limits and the turn cost on and off. The stage only appears with the `full` animation. |
+| show | Turns the top rule, the stage, the 5h/7d limits, the turn cost and the day cost on and off. The stage only appears with the `full` animation. |
 | agents | How many agent lines appear before the `+N agents` summary. |
 
 ## Requirements and limits
 
-- Claude Code with mod support (function hooks). Written and tested on versions 2.1.322 and 2.1.327. This API is in early access and may change between versions.
+- Claude Code with mod support (function hooks). Written and tested on versions 2.1.322, 2.1.327 and 2.1.330. This API is in early access and may change between versions.
 - The bar needs a terminal at least 60 columns wide; below that it does not draw. On a bar wider than 120 columns the stage does not stretch past that.
 - The band above the prompt may take up to half the terminal's height. If the stage does not fit (fewer than 7 free lines) it stays out and the work line comes back; if it only just fits, it is the agent list that shrinks to `+N agents`.
 - The stage in pixels needs a terminal that draws images (the kitty graphics protocol with placeholders, or iTerm2's inline images) and a Claude Code version with the `Image`, `Raster` and `$.ui.blit` pieces of the mod API. Where one of them is missing the bar falls back by itself: to blocks, and from blocks to text.
@@ -189,13 +195,16 @@ agents       3  ● 6  10
 - Repainting the stage between frames costs one to three milliseconds each time (measured outside Claude Code), and only while the scene is moving and the stage is on screen.
 - The spark of each class uses glyphs from the Dingbats block (`✢ ✣ ✤`, `✸ ✹ ✺ ❋`, `✧ ✦ ✪ ❂ ❉`), like Claude Code's own; in a font missing one of them the terminal shows its replacement.
 - The aura fades towards the terminal's background, and the mod only knows whether the theme is light or dark from its name (the `theme` row of `/config`): a theme whose name does not say `light` counts as dark.
-- Per-agent cost is not shown: Claude Code only exposes the session's total cost. Per agent, the bar shows the tokens of its last turn.
+- Each agent's cost, summary and activity come from Claude Code's agent list, checked once a second. On a version that does not carry them, the line shows the task's description and, when it finishes, the tokens of its last turn.
+- While Claude Code waits for you with a dialog on screen (a permission request, a question), it does not draw the band above the prompt: the bar goes away and comes back when you answer. And the permission, notification and conversation-compaction events do not reach a mod (seen on version 2.1.330, on a team account). So the stage has no scene for those moments; what there is is the question's sound, which the mod recognizes by the tool.
+- The limit forecast comes from the readings the bar saw in this session (the last 30 minutes for the 5-hour window, the last 6 hours for the 7-day one) and asks for a minimum of time and of rise: right after the session opens there is no forecast. The percentage is the account's, so other sessions' usage counts in the pace.
+- The tallies count what the bar saw: a session without the plugin loaded is not in them, and the cost is Claude Code's estimate (on a subscription it is not a charge). Each session writes only its own record, at the end of every turn, and that is when it rereads the others' (at most once a minute): while this session is idle, the day's cost on the bar does not follow what the others spend. A record idle for three days goes into the all-time total and leaves the store.
 - The effort appears from the first model request after the plugin loads; until then the bar shows `effort`, already clickable.
 - The model picker uses the aliases `fable`, `opus`, `sonnet` and `haiku`; a model your account does not have is refused by `/model` itself, and the bar says so.
 - Agent lines are only clickable in the terminal; in the desktop app they stay as text. It is Claude Code that switches the view, and only in answer to a click or a key of yours: it may refuse (an agent that already left the task list, a teammate in a pane of its own), and the bar shows the reason.
 - The focus ring only follows what opens and closes while the bar holds the keyboard (`ctrl+x tab`). On version 2.1.327 a click on a button presses it without giving the bar the keyboard, so nothing changes for mouse users.
 - The phases of a request come from the pieces of the model's response, which the bar passes on exactly as they came. It only looks at what kind each piece is (thinking, text, the start of a call) and at the name of the tool being called: it neither keeps nor shows the text.
-- The plugin accesses neither the network nor files. It reads the session's usage, the agent list and the theme (the `theme` row of `/config`, and its changes), keeps its state in the session and its settings in the plugin's own store (a JSON file in Claude Code's configuration folder), and reads three environment variables (`LC_ALL`, `LC_MESSAGES`, `LANG`) to pick the first language. The stage's scene lives in memory only and starts over with each session or `/reload-plugins`.
+- The plugin accesses neither the network nor files. It reads the session's usage, the agent list, the theme (the `theme` row of `/config`, and its changes), the session's id and the operating system; keeps its state in the session and, in the plugin's own store (a JSON file in Claude Code's configuration folder), the settings and the tallies (one record per session, with counts and cost per day: no text of the conversation); reads three environment variables (`LC_ALL`, `LC_MESSAGES`, `LANG`) to pick the first language; and plays its sounds through Claude Code itself. The stage's scene lives in memory only and starts over with each session or `/reload-plugins`.
 - The stage is decoration: an error in it becomes an empty scene and one notice line; it never gets in the way of a tool or takes the bar down.
 - The `⚙` icon is drawn as text in most terminals; in a terminal that shows it as a wide emoji, the first line may lose a column at the right.
 
@@ -209,9 +218,10 @@ claude --plugin-dir .        # runs a session with the plugin loaded from this f
 
 The hooks module and what it imports, in `hooks/`:
 
-- `register.tsx`: the events, the state, the animation clock and the drawing of the bar.
+- `register.tsx`: the events, the state, the animation clock and the assembly of what the bar draws. `bar.tsx`: the assembled bar (the rule, the header with its buttons, the lines), pure. `stage-draw.tsx`: from the scene to the stage element of one draw. `engine-calls.ts`: what the bar asks of the engine without touching its own state (the error notice, the theme, the saved settings, the focus ring, the view switch).
 - `lines.ts`: the lines of the bar (header, cost, work, limits, agents), pure. `bar-rows.tsx`: the rows of buttons under the header (the model or effort picker, and the one that says whose transcript is on screen).
 - `phase.ts`: what each piece of a model request says about its phase (thinking, writing, putting a call together). `focus.ts`: which button the focus ring lands on when something opens in the bar.
+- `pace.ts`: the pace of a limit window and the forecast of when it fills. `stats.ts`: the tallies of a session, of the day and of all time, pure; `ledger.ts`: their record in the plugin's store. `sound.ts`: the sounds, from the tune to the WAV.
 - `effects.ts`: the text animations (spark, comet, rule pulse, emerging name, burst, shimmer).
 - `format.ts`, `parts.ts`, `agents.ts`: text formats, line parts, and the agent lines reconciled with the engine's list.
 - `sim.ts`: the stage simulation, pure: the state and the functions that give the next state.
@@ -230,7 +240,7 @@ The hooks module and what it imports, in `hooks/`:
 
 The code comments and the test names are in Portuguese, the language the project was born in.
 
-The tests (`*.test.ts`, 530 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene, the power of each class, the aura and the form of each avatar, the PNG encoder and the fit to blocks, and the bar mounted on each surface, in text, in blocks, in pixels and in vector: the phases of a request piece by piece, an agent's transcript on screen and the focus ring included. The test kit does not hand a test the request to move the focus ring (`$.ui.focus`): the ring actually moving is checked in a real Claude Code (`claude --plugin-dir .`, `ctrl+x tab`).
+The tests (`*.test.ts`, 627 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene, the power of each class, the aura and the form of each avatar, the PNG encoder and the fit to blocks, and the bar mounted on each surface, in text, in blocks, in pixels and in vector: the phases of a request piece by piece, an agent's transcript on screen and the focus ring included. The test kit does not hand a test the request to move the focus ring (`$.ui.focus`): the ring actually moving is checked in a real Claude Code (`claude --plugin-dir .`, `ctrl+x tab`).
 
 The GIFs of the two READMEs come out of the same functions that draw the bar, outside Claude Code (needs `bun` and Pillow). The make-believe turn has the large stage, in blocks, as most terminals show it, and the mascot switches avatar at each stretch: Clawd as Fable max and then Pikachu (Opus), Mario (Sonnet) and Kratos (Opus), each one first at `high`, in the base drawing, and then at `max`, transformed; `scripts/demo-frames.ts` still gives a turn with a single model and effort. The power table is the same in both languages:
 

@@ -1,6 +1,6 @@
 import { noise } from './effects'
-import { KINDS, KIND_PAINT, tintOf } from './palette'
-import type { Kind } from './palette'
+import { KINDS, KIND_PAINT, cracked, tintOf } from './palette'
+import type { Kind, Tile } from './palette'
 import { CLAWD, MINI } from './sprites'
 import type { StatusAgentState as AgentState } from '../types'
 
@@ -46,8 +46,8 @@ export type Worker = {
   shout: number
 }
 
-/** Um tijolo na esteira, numa célula. */
-export type Brick = { kind: Kind; x: number }
+/** Um tijolo na esteira, numa célula: a letra da família dele, em maiúscula se rachou. */
+export type Brick = { kind: Tile; x: number }
 /** Uma faísca: posição e velocidade em subpixels, quadros de vida e a tinta. */
 export type Spark = { x: number; y: number; vx: number; vy: number; life: number; paint: string }
 
@@ -67,6 +67,8 @@ export type Sim = {
   /** Quadros que o tijolo mais novo do mosaico ainda fica aceso. */
   flash: number
   sparks: readonly Spark[]
+  /** Um andar acabou de fechar: no próximo quadro sobem fogos sobre o mosaico. */
+  isTopping: boolean
 }
 
 /** As medidas do palco para uma largura de barra. */
@@ -121,8 +123,10 @@ const FAIL = 7 // quadros que um ajudante que falhou fica em cena
 const POOF = 3 // quadros da nuvem em que ele some
 const FINALE = 18 // quadros da comemoração do fim de um turno que trabalhou: pulos e confete
 const SHORT_FINALE = 7 // quadros da de um turno curto: um pulinho, sem confete
-const PARTY_FROM = 3 // com menos ferramentas que isso no turno, não há confete
+/** Com menos ferramentas que isso no turno, não há confete (nem fanfarra). */
+export const PARTY_FROM = 3
 const FLASH = 2
+const TOPPING_SPARKS = 18 // os fogos de um andar que fecha
 const GRAVITY = 0.35 // subpixels por quadro²
 const POOF_SPARKS = 10
 const CONFETTI = 30
@@ -132,7 +136,7 @@ const BODY_Y = 4 // a meia altura de um bicho em pé, em sublinhas
 /** A sublinha onde pés e tijolos se apoiam, bem em cima da linha do chão. */
 export const FLOOR_Y = 6
 
-export const EMPTY_SIM: Sim = { tick: 0, isOn: false, finale: 0, work: 0, workers: [], belt: [], wall: '', flash: 0, sparks: [] }
+export const EMPTY_SIM: Sim = { tick: 0, isOn: false, finale: 0, work: 0, workers: [], belt: [], wall: '', flash: 0, sparks: [], isTopping: false }
 
 const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n))
 const artOf = (w: Worker) => (w.id === MAIN ? CLAWD : MINI)
@@ -165,7 +169,7 @@ export const partyAge = (sim: Sim): number | null => (sim.finale > 0 && sim.work
 /** Algo se mexe em cena: sem isso, um quadro novo desenharia a mesma coisa. Fora de cena, nada conta. */
 export const isAnimating = (sim: Sim) =>
   hasScene(sim) &&
-  (sim.finale > 0 || sim.flash > 0 || sim.belt.length > 0 || sim.sparks.length > 0 ||
+  (sim.finale > 0 || sim.flash > 0 || sim.belt.length > 0 || sim.sparks.length > 0 || sim.isTopping ||
     sim.workers.some(w => w.shout > 0 || w.queue.length > 0 || !(w.act === 'sleep' || (w.act === 'idle' && !w.isAsleep))))
 
 const patch = (sim: Sim, id: string, change: (w: Worker) => Worker): Sim => ({ ...sim, workers: sim.workers.map(w => (w.id === id ? change(w) : w)) })
@@ -223,6 +227,32 @@ export const enqueue = (sim: Sim, id: string, kind: Kind, tool: string): Sim => 
 /** Uma ferramenta terminou. */
 export const settle = (sim: Sim, id: string): Sim =>
   patch(sim, id, w => ({ ...w, busy: Math.max(0, w.busy - 1), tool: w.busy <= 1 ? null : w.tool }))
+
+// A última letra `kind` de uma fila de tijolos trocada pela do tijolo rachado; `null` quando não há nenhuma inteira.
+const crackLast = (tiles: string, kind: Kind): string | null => {
+  const at = tiles.lastIndexOf(kind)
+  return at < 0 ? null : tiles.slice(0, at) + cracked(kind) + tiles.slice(at + 1)
+}
+
+/**
+ * Uma ferramenta de `id` terminou em erro: o tijolo dela racha. Os tijolos não têm nome, então racha
+ * o mais novo da família que ainda está inteiro, procurado de onde ele entra para onde ele vai: a
+ * pilha e a cabeça de quem chamou, a esteira (o mais atrasado) e, por fim, o mosaico.
+ */
+export const crack = (sim: Sim, id: string, kind: Kind): Sim => {
+  const w = sim.workers.find(x => x.id === id)
+  const queue = w ? crackLast(w.queue, kind) : null
+  if (queue !== null) return patch(sim, id, x => ({ ...x, queue }))
+  const load = w ? crackLast(w.load, kind) : null
+  if (load !== null) return patch(sim, id, x => ({ ...x, load }))
+  const rolling = sim.belt.reduce((best, b, i) => (b.kind === kind && (best < 0 || b.x < (sim.belt[best]?.x ?? Infinity)) ? i : best), -1)
+  if (rolling >= 0) return { ...sim, belt: sim.belt.map((b, i) => (i === rolling ? { ...b, kind: cracked(kind) } : b)) }
+  const wall = crackLast(sim.wall, kind)
+  return wall === null ? sim : { ...sim, wall }
+}
+
+/** Um andar fechou (a sessão juntou mais uma leva de tijolos): no próximo quadro sobem fogos sobre o mosaico. */
+export const top = (sim: Sim): Sim => (sim.isTopping ? sim : { ...sim, isTopping: true })
 
 /**
  * Um pedido ao modelo começou (`true`) ou terminou. São contados: dois ao mesmo tempo só acabam quando
@@ -306,7 +336,7 @@ export const syncHelpers = (sim: Sim, agents: readonly { id: string; state: Agen
 export const wallFront = (wall: string, geo: Geo) => geo.wallRight - BRICK * Math.ceil(wall.length / WALL_ROWS)
 
 /** O que um quadro fez de um bicho: como ele ficou (`null` se saiu de cena), os tijolos que pôs na esteira, as faíscas que soltou. */
-type Moved = { worker: Worker | null; bricks: readonly Kind[]; sparks: readonly Spark[] }
+type Moved = { worker: Worker | null; bricks: readonly Tile[]; sparks: readonly Spark[] }
 
 // Um quadro de um bicho: anda, pega, carrega, entrega, espera, comemora ou some.
 const advance = (w: Worker, slot: number, sim: Sim, geo: Geo): Moved => {
@@ -316,7 +346,7 @@ const advance = (w: Worker, slot: number, sim: Sim, geo: Geo): Moved => {
   const homeX = isMain ? geo.home : clamp(geo.home + (HELPER_HOMES[slot % HELPER_HOMES.length] ?? 0), geo.pick, dropX)
   const cap = Math.floor(art.headWidth / HEAD_PER_BRICK) * LOAD_LAYERS
   const pace = (isCarrying: boolean) => ((isMain ? MAIN_PACE : HELPER_PACE)[isCarrying ? 0 : 1] ?? 3) + (w.queue.length >= HURRY_AT ? HURRY : 0)
-  const keep = (change: Partial<Worker> = {}, bricks: readonly Kind[] = [], sparks: readonly Spark[] = []): Moved =>
+  const keep = (change: Partial<Worker> = {}, bricks: readonly Tile[] = [], sparks: readonly Spark[] = []): Moved =>
     ({ worker: { ...w, t: w.t + 1, ...change }, bricks, sparks })
   const to = (act: Act, change: Partial<Worker> = {}): Moved => ({ worker: { ...w, ...change, act, t: 0 }, bricks: [], sparks: [] })
   const walk = (target: number, speed: number, then: Act): Moved => {
@@ -346,7 +376,7 @@ const advance = (w: Worker, slot: number, sim: Sim, geo: Geo): Moved => {
     case 'haul':
       return walk(dropX, pace(true), 'drop')
     case 'drop':
-      if (w.load) return keep({ load: w.load.slice(0, -1) }, [w.load.slice(-1) as Kind])
+      if (w.load) return keep({ load: w.load.slice(0, -1) }, [w.load.slice(-1)])
       return to(w.queue ? 'fetch' : 'home')
     case 'cheer':
       if (isMain) return sim.finale > 1 ? keep() : to('idle')
@@ -357,6 +387,17 @@ const advance = (w: Worker, slot: number, sim: Sim, geo: Geo): Moved => {
       if (w.t === 0) return keep({}, [], poof(w, sim.tick))
       return w.t >= POOF ? { worker: null, bricks: [], sparks: [] } : keep()
   }
+}
+
+// Os fogos de um andar que fecha: sobem do topo do mosaico, ao longo dele, nas cores dos tijolos.
+const toppingSparks = (wall: string, geo: Geo, tick: number): Spark[] => {
+  const from = Math.max(0, wallFront(wall, geo)) * 2
+  const span = Math.max(BRICK * 2, geo.wallRight * 2 - from)
+  return Array.from({ length: TOPPING_SPARKS }, (_, i) => ({
+    x: from + noise(i, tick + 7) * span, y: FLOOR_Y - WALL_ROWS,
+    vx: (noise(i, tick + 8) - 0.5) * 3, vy: -(0.5 + noise(i, tick + 9) * 0.9),
+    life: 7 + Math.floor(noise(i, tick + 10) * 6), paint: KIND_PAINT[KINDS[i % KINDS.length] ?? 'o'],
+  }))
 }
 
 /** Puro: um quadro da cena. Os bichos andam, a esteira corre, o mosaico cresce, as faíscas caem. */
@@ -388,7 +429,8 @@ export const step = (sim: Sim, geo: Geo): Sim => {
     belt: settled.belt,
     wall,
     flash: settled.wall.length > sim.wall.length ? FLASH : Math.max(0, sim.flash - 1),
-    sparks: [...flying, ...moved.flatMap(m => m.sparks)].slice(-SPARKS_MAX),
+    sparks: [...flying, ...moved.flatMap(m => m.sparks), ...(sim.isTopping ? toppingSparks(wall, geo, sim.tick) : [])].slice(-SPARKS_MAX),
+    isTopping: false,
   }
 }
 
@@ -397,7 +439,7 @@ export const step = (sim: Sim, geo: Geo): Sim => {
  * guardar nada que peça quadros nem crescer. Fica vazia, lembrando só se o turno está rodando.
  */
 export const blank = (sim: Sim): Sim =>
-  sim.workers.length || sim.belt.length || sim.sparks.length || sim.wall || sim.finale || sim.flash ? { ...EMPTY_SIM, isOn: sim.isOn } : sim
+  sim.workers.length || sim.belt.length || sim.sparks.length || sim.wall || sim.finale || sim.flash || sim.isTopping ? { ...EMPTY_SIM, isOn: sim.isOn } : sim
 
 /** A cena saiu de vista: o que estava na esteira encaixa no mosaico e as faíscas somem. */
 export const fold = (sim: Sim): Sim =>

@@ -4,7 +4,7 @@ import { eyesOf } from './aura'
 import { DEMO_CAST, DEMO_FRAMES, applyDemo } from './demo'
 import { SPINNER } from './effects'
 import { cols } from './format'
-import { KIND_PAINT, tintOf } from './palette'
+import { CRACKED_PAINT, KIND_PAINT, cracked, isCracked, kindOfTile, tilePaint, tintOf } from './palette'
 import { partsWidth } from './parts'
 import type { Part } from './parts'
 import { power, sparkAt } from './power'
@@ -363,3 +363,22 @@ describe('o poder de cada um', () => {
   })
 })
 
+describe('a falha no palco de texto', () => {
+  test('o tijolo de uma chamada que falhou tem a cor da família, apagada', () => {
+    expect([cracked('b'), isCracked('B'), isCracked('b'), kindOfTile('B'), kindOfTile('?')]).toEqual(['B', true, false, 'b', 'o'])
+    expect(tilePaint('b')).toBe(KIND_PAINT.b)
+    expect(tilePaint('B')).toBe(CRACKED_PAINT.b)
+    for (const kind of Object.keys(KIND_PAINT) as (keyof typeof KIND_PAINT)[]) expect(CRACKED_PAINT[kind]).not.toBe(KIND_PAINT[kind])
+    const paints = paintsOf(scene({ wall: 'rB' }))
+    expect(paints.has(KIND_PAINT.r)).toBe(true)
+    expect(paints.has(CRACKED_PAINT.b)).toBe(true)
+    expect(paints.has(KIND_PAINT.b)).toBe(false)
+  })
+
+  test('rachado, ele aparece assim na pilha, na cabeça e na esteira também', () => {
+    const paints = (over: Partial<Sim>) => paintsOf(scene(over))
+    expect(paints({ workers: [worker(MAIN, 40, { queue: 'E' })] }).has(CRACKED_PAINT.e)).toBe(true)
+    expect(paints({ workers: [worker(MAIN, 40, { act: 'haul', load: 'W' })] }).has(CRACKED_PAINT.w)).toBe(true)
+    expect(paints({ belt: [{ kind: 'S', x: 60 }] }).has(CRACKED_PAINT.s)).toBe(true)
+  })
+})

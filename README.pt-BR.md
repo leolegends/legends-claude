@@ -14,11 +14,11 @@ A barra ocupa a largura toda do terminal. Num terminal estreito, modelo, custo e
 | --- | --- |
 | Régua | A linha de cima. Com trabalho em curso, um pulso `━` nasce no centro e corre para as duas pontas: mais largo e mais rápido quanto maior o effort. |
 | Cabeçalho | Modelo e effort do último pedido, **clicáveis** (veja Uso). A faísca é a da classe do modelo (`✢` Haiku, `✻` Sonnet, `❋` Opus, `❂` Fable; veja O poder): pulsa enquanto o turno roda e fica apagada quando está ocioso. Custo e limites encostam à direita na mesma linha quando cabem. |
-| Custo | Total da sessão (o mesmo que `/cost` soma, subagentes incluídos) e quanto foi gasto desde o último prompt. Duas casas decimais (`$1.75`). O total acende com `▲` por um instante sempre que cresce. |
-| Limites | Janelas de 5 horas e 7 dias, com quanto falta para zerar. Só aparece em contas que reportam limite. |
+| Custo | Total da sessão (o mesmo que `/cost` soma, subagentes incluídos) e quanto foi gasto desde o último prompt. Duas casas decimais (`$1.75`). O total acende com `▲` por um instante sempre que cresce. Quando outra sessão também gastou hoje (ou esta vem de ontem), vem ainda o custo do dia, somado entre as sessões: `hoje $9.80`. |
+| Limites | Janelas de 5 horas e 7 dias, com quanto falta para zerar. Quando, no ritmo dos últimos minutos, uma janela enche antes de zerar, a barra diz em quanto tempo (`enche em ~40m`): em âmbar, e em vermelho com menos de um quarto de hora. Só aparece em contas que reportam limite. |
 | Palco | Quatro linhas de cena (oito no tamanho grande), enquanto há um turno ou um agente rodando: em pixels de verdade, em blocos de terminal, em vetor ou em texto, o que a tela conseguir mostrar. Veja abaixo. |
-| Trabalho | Com o palco desligado: um cometa de faíscas `✳✶✻·····`, tempo decorrido, quantas ferramentas foram chamadas e a última delas. Com o palco ligado, essas informações ficam no placar do canto dele. |
-| Agentes | Uma linha por subagente, teammate ou agente de workflow: o nome surge de um punhado de faíscas que assentam letra a letra; depois, a faísca da classe do modelo dele pulsando (na cor do ajudante dele no palco), brilho no nome e um cometa próprio, cada um fora de fase do vizinho; tempo, ferramentas e a última chamada. Ao terminar vira `✓` com um estouro de faíscas que rareia, duração e tokens (ou `✗` se falhou) e some depois de 8 segundos. Por padrão no máximo 6 linhas (3, 6 ou 10 na aba de ajustes); o resto vira `+N agentes`. No terminal, um clique na linha põe a transcrição do agente na tela (veja Uso). |
+| Trabalho | Com o palco desligado: um cometa de faíscas `✳✶✻·····`, tempo decorrido, quantas ferramentas foram chamadas, quantas falharam e a última delas. Com o palco ligado, essas informações ficam no placar do canto dele. |
+| Agentes | Uma linha por subagente, teammate ou agente de workflow: o nome surge de um punhado de faíscas que assentam letra a letra; depois, a faísca da classe do modelo dele pulsando (na cor do ajudante dele no palco), brilho no nome e um cometa próprio, cada um fora de fase do vizinho; o que ele faz agora (o resumo que o Claude Code guarda dele; antes de haver um, a descrição da tarefa); um minigráfico da atividade dele (`▂▁▅█`), tempo, ferramentas, falhas, quanto já custou e a última chamada. Ao terminar vira `✓` com um estouro de faíscas que rareia, duração, tokens e custo (ou `✗` se falhou) e some depois de 8 segundos. Um agente chamado por outro agente fica logo abaixo dele, recuado com `└`. Por padrão no máximo 6 linhas (3, 6 ou 10 na aba de ajustes); o resto vira `+N agentes`. No terminal, um clique na linha põe a transcrição do agente na tela (veja Uso). |
 
 ## O palco
 
@@ -27,9 +27,11 @@ O palco não é um desenho em loop: ele reage ao que está acontecendo de verdad
 - **O mascote** é o do logo do Claude Code (`▐▛███▜▌` / `▝▜█████▛▘` / `▘▘ ▝▝`), ponto a ponto. Ele entra pela esquerda quando o turno começa e espera no meio da pista.
 - **Pensando, escrevendo ou esperando.** O sinal sobre a cabeça acompanha o que o pedido ao modelo faz, trecho a trecho da resposta. Enquanto o modelo pensa, a faísca da classe dele pulsa e os olhos vão de um lado para o outro. Quando a resposta começa a sair, a faísca dá lugar a três pontinhos, um aceso de cada vez (`·●·`). Quando ele monta a chamada de uma ferramenta, aparece o nome dela com um cursor piscando (`Bash▁`). Enquanto a ferramenta roda, o nome ganha reticências (`Bash···`) e ele sobe e desce as garras. Um ajudante mostra as fases do agente dele do mesmo jeito. O sinal só aparece com o bicho parado: andando ou carregando tijolos, não há nenhum.
 - **Cada ferramenta é um tijolo.** Uma chamada de ferramenta vira um tijolo na pilha da esquerda, na cor da família dela. O mascote vai buscar, leva na cabeça (até seis por viagem; com a pilha grande ele aperta o passo), põe na esteira, e a esteira leva até a **parede** que cresce à direita, em fiadas alternadas. O tijolo recém-chegado acende. A parede fica de um turno para o outro: é o retrato do que a sessão fez.
+- **O que falhou racha.** Uma chamada que termina em erro (um teste que quebrou, um comando que saiu com erro, uma edição que não casou) ou é recusada racha o tijolo dela: ele segue para a parede na cor da família, apagada, e, onde há detalhe, com a rachadura desenhada. A parede passa a mostrar quanto do trabalho foi retrabalho.
+- **Andares.** A cada cem tijolos a sessão fecha um andar: sobem fogos sobre a parede. `/legends-claude stats` conta quantos já foram.
 - **Ajudantes.** Quando o Claude dispara um subagente, o mascote para, grita `!`, e um ajudante menor brota atrás dele numa nuvem de faíscas, na cor do agente (a mesma da faísca dele na lista). O ajudante carrega os tijolos das ferramentas do próprio agente. Agente à espera: o ajudante senta e dorme (`z`). Agente terminado: ele pula, ganha `✓` e some em faíscas; se falhou, apaga e leva `✗`. Até seis ajudantes em cena.
 - **O fim.** Quando o turno termina com uma resposta, o mascote comemora: com três ferramentas ou mais, pulos e confete nas cores dos tijolos; num turno curto, só um pulinho. Um turno interrompido ou que acabou em erro não tem festa: a cena se recolhe.
-- **O placar** no canto de cima à direita mostra o tempo do turno, quantas ferramentas ele chamou e a última delas. Onde o palco é uma imagem não há lugar para texto: o placar é a linha de trabalho, logo abaixo dele.
+- **O placar** no canto de cima à direita mostra o tempo do turno, quantas ferramentas ele chamou, quantas falharam e a última delas. Onde o palco é uma imagem não há lugar para texto: o placar é a linha de trabalho, logo abaixo dele.
 
 As cores dos tijolos:
 
@@ -88,6 +90,7 @@ Quem é o mascote no palco se escolhe na aba de ajustes (`⚙`), na linha `masco
 | Kratos | Pele de cinza, a faixa vermelha sobre o olho, barba, ombreira dourada e saiote de couro. | **Fogo**: labaredas laranja de pontas vermelhas, amarelas rente ao corpo, com brasas subindo. | Entra em **fúria**: a faixa e os olhos acendem, a pele pega o calor do fogo e os punhos ardem. |
 | Elsa | Trança loira sobre o ombro, sombra lilás nos olhos, vestido azul de gelo até o chão, mangas e capa transparentes. | **Gelo**: o azul de uma noite de inverno, com cristais de pontas claras em volta e flocos de neve caindo. | Vira o **quinto espírito**: de cabelo solto e vestido branco, com mangas lilases e losangos de gelo. |
 
+- **A barra também pode escolher.** `por modelo` põe em cena o avatar da classe do modelo: Pikachu em Haiku, Mario em Sonnet, Kratos em Opus e Elsa em Fable; trocou o modelo, troca o mascote. `por sessão` tira um avatar colorido do id da sessão: o mesmo a sessão inteira, e quase sempre outro na sessão ao lado, o que ajuda a distinguir janelas. Nos dois casos a aba diz quem está em cena.
 - **Dois desenhos por avatar colorido, e por forma com poder.** O fino (36×20 pontos) aparece onde há detalhe: em pixels, em vetor e em blocos no tamanho `grande`. Em blocos no tamanho `normal` e no palco de texto vai uma versão de baixa resolução (18×5), bem mais simples: é o que cabe em blocos de quadrante com duas cores por célula.
 - **Tudo o que o Clawd faz, eles fazem.** Piscam, olham para os lados quando pensam, levantam os braços para carregar e comemorar, andam, sentam para dormir, apagam quando falham.
 - **A aura é do personagem, não da classe.** Num avatar colorido as tintas da aura (e dos riscos, das fagulhas e dos jatos) são as do elemento dele, em qualquer modelo. É uma aura mais viva que o clarão de uma classe, com três camadas onde há detalhe: o coração, mais claro, rente ao corpo; o miolo; e as pontas e beiradas. O effort segue dando o tamanho dela, e a classe, o resto: a faísca, a faixa de brilho, as pupilas acesas de Opus para cima, o voo de Fable e os fogos. A faixa de brilho é mais leve sobre um avatar colorido, para ele seguir aparecendo por baixo dela.
@@ -151,18 +154,20 @@ Para remover: `claude plugin uninstall legends-claude`.
 - **Pelo teclado.** `ctrl+x tab` leva o foco para a barra: `Tab` ou as setas andam pelos botões (as linhas de agente incluídas) e `Enter` aperta. O anel de foco acompanha o que abre: num seletor ele já cai na opção em vigor (o modelo da sessão, o effort do último pedido), e na aba de ajustes, no idioma; ao fechar, volta ao botão que abriu. `Esc`, ou começar a digitar, devolve o foco ao prompt.
 - `▾` no canto da barra esconde; `◂ status` traz de volta. `/legends-claude` alterna entre escondido e visível.
 - `/legends-claude demo` mostra o palco em ação, com a sessão parada. `/legends-claude demo fable max` mostra com outro modelo e effort, sem trocar os da sessão.
+- `/legends-claude stats` mostra as contas: os tijolos (cada ferramenta chamada é um), os andares, as falhas e os turnos desta sessão; o custo de hoje somado entre as sessões; o total de sempre; e os recordes (o turno mais longo, o que mais chamou ferramentas, mais agentes de uma vez). O texto aparece na conversa só para você: não vai para o modelo.
 - **`⚙` abre a aba de ajustes** na própria barra (ou `/legends-claude ajustes`; `settings` também serve). Cada mudança vale na hora e fica salva para as próximas sessões:
 
 ```
 ⚙ ajustes                                          ▶ demonstração   restaurar padrão   ✕
 idioma       ● Português  English
 cor          ● Claude  Azul  Verde  Roxo  Rosa  Ciano  Âmbar  Mono
-mascote      ● Clawd  Pikachu  Mario  Kratos  Elsa
+mascote      ● Clawd  Pikachu  Mario  Kratos  Elsa  por modelo  por sessão
+som          ● mudo  baixo  alto
 animação     ● completa  suave  parada
 velocidade   lenta  ● normal  rápida
 resolução    ● automática  blocos  clássica    em uso: blocos
 tamanho      ● normal  grande
-mostrar      ☑ régua  ☑ palco  ☑ limites  ☑ custo do turno
+mostrar      ☑ régua  ☑ palco  ☑ limites  ☑ custo do turno  ☑ custo do dia
 agentes      3  ● 6  10
 ```
 
@@ -170,17 +175,18 @@ agentes      3  ● 6  10
 | --- | --- |
 | idioma | Português ou inglês: muda na hora todos os textos da barra, os avisos e a descrição do comando. Sem uma escolha salva, uma instalação nova segue o idioma do sistema (`LC_ALL`, `LC_MESSAGES`, `LANG`): português se ele disser `pt`, senão inglês. "Restaurar padrão" não mexe no idioma. |
 | cor | A cor de destaque: o mascote, a faísca, o modelo, o cometa, o pulso da régua, o custo aceso. Cada opção já aparece na própria cor. `Claude` e `Mono` seguem o tema claro/escuro do Claude Code. |
-| mascote | Quem é o mascote no palco. `Clawd` é o de sempre, na cor de destaque. `Pikachu`, `Mario`, `Kratos` e `Elsa` são avatares coloridos, com cores próprias (a cor de destaque segue valendo no resto da barra): em pixels, em vetor e em blocos no tamanho grande aparecem no desenho fino; em blocos no tamanho normal e no palco de texto, numa versão de baixa resolução. Cada avatar colorido tem a aura do seu elemento (raio, estrela, fogo, gelo) e se transforma com o effort alto (Raichu, Super Mario, Kratos em fúria, o quinto espírito); o brilho, os olhos acesos e o voo seguem a classe do modelo. Os ajudantes seguem sendo os pequenos Clawds. |
+| mascote | Quem é o mascote no palco. `Clawd` é o de sempre, na cor de destaque. `Pikachu`, `Mario`, `Kratos` e `Elsa` são avatares coloridos, com cores próprias (a cor de destaque segue valendo no resto da barra): em pixels, em vetor e em blocos no tamanho grande aparecem no desenho fino; em blocos no tamanho normal e no palco de texto, numa versão de baixa resolução. Cada avatar colorido tem a aura do seu elemento (raio, estrela, fogo, gelo) e se transforma com o effort alto (Raichu, Super Mario, Kratos em fúria, o quinto espírito); o brilho, os olhos acesos e o voo seguem a classe do modelo. `por modelo` e `por sessão` deixam a escolha com a barra (veja [Mascotes](#mascotes-clawd-pikachu-mario-kratos-e-elsa)). Os ajudantes seguem sendo os pequenos Clawds. |
+| som | Os sons da barra, de oito bits, feitos pelo próprio mod (não há arquivo de áudio): a fanfarra de um turno que trabalhou, um plim num turno curto, um ajudante que nasce, uma falha (um turno que acabou em erro, um agente que falhou), um andar que fecha, e duas batidas quando o Claude te faz uma pergunta ou espera a aprovação de um plano. `mudo` é o padrão; escolher um volume toca uma amostra. Só toca no macOS: nos outros sistemas a aba avisa. |
 | animação | `completa` é tudo, palco incluído; `suave` deixa só a faísca pulsando e o cometa (sem palco, pulso na régua, nome surgindo, brilho nem estouro); `parada` não mexe nada e só atualiza o tempo uma vez por segundo. |
 | velocidade | A duração de um quadro: 200, 125 ou 80 ms. É também o ritmo do palco. Sem efeito com a animação parada. |
 | resolução | Em que o palco é desenhado. `automática` é o melhor que a tela oferece: pixels de verdade num terminal que desenha imagens, blocos de terminal nos outros, vetor no app desktop. `blocos` mantém os blocos mesmo onde há pixels. `clássica` é o palco de texto. Ao lado das opções, a aba diz o que está em uso nesta tela. |
 | tamanho | `normal` é o palco de quatro linhas; `grande` dobra o palco (veja [Resolução](#resolução-pixels-blocos-vetor-ou-texto)). Só vale fora do palco de texto, e onde a barra tem espaço. |
-| mostrar | Liga e desliga a régua de cima, o palco, os limites de 5h/7d e o custo do turno. O palco só aparece com a animação `completa`. |
+| mostrar | Liga e desliga a régua de cima, o palco, os limites de 5h/7d, o custo do turno e o custo do dia. O palco só aparece com a animação `completa`. |
 | agentes | Quantas linhas de agente aparecem antes do resumo `+N agentes`. |
 
 ## Requisitos e limites
 
-- Claude Code com suporte a mods (function hooks). Escrito e testado nas versões 2.1.322 e 2.1.327. Essa API está em acesso antecipado e pode mudar entre versões.
+- Claude Code com suporte a mods (function hooks). Escrito e testado nas versões 2.1.322, 2.1.327 e 2.1.330. Essa API está em acesso antecipado e pode mudar entre versões.
 - A barra precisa de pelo menos 60 colunas de terminal; abaixo disso ela não desenha. Numa barra com mais de 120 colunas o palco não estica além disso.
 - A faixa acima do prompt pode ocupar até metade da altura do terminal. Se o palco não couber (menos de 7 linhas livres) ele não entra e a linha de trabalho volta; se couber justo, é a lista de agentes que encolhe para `+N agentes`.
 - O palco em pixels precisa de um terminal que desenhe imagens (o protocolo gráfico do kitty com placeholders, ou as imagens embutidas do iTerm2) e de uma versão do Claude Code com as peças `Image`, `Raster` e `$.ui.blit` da API de mods. Onde falta alguma delas a barra recua sozinha: para blocos, e de blocos para texto.
@@ -189,13 +195,16 @@ agentes      3  ● 6  10
 - Repintar o palco entre os quadros custa de um a três milissegundos por vez (medido fora do Claude Code), e só enquanto a cena se mexe e o palco está à vista.
 - A faísca de cada classe usa glifos do bloco Dingbats (`✢ ✣ ✤`, `✸ ✹ ✺ ❋`, `✧ ✦ ✪ ❂ ❉`), como a do próprio Claude Code; numa fonte sem algum deles o terminal mostra o substituto dele.
 - A aura esmaece para o fundo do terminal, e o mod só sabe se o tema é claro ou escuro pelo nome dele (a linha `theme` do `/config`): um tema cujo nome não diz `light` vale como escuro.
-- O custo por agente não aparece: o Claude Code só expõe o custo total da sessão. Por agente, a barra mostra os tokens do último turno.
+- O custo, o resumo e a atividade de cada agente vêm da lista de agentes do Claude Code, conferida uma vez por segundo. Numa versão que não os traz, a linha mostra a descrição da tarefa e, ao terminar, os tokens do último turno.
+- Enquanto o Claude Code espera por você com um diálogo na tela (um pedido de permissão, uma pergunta), ele não desenha a faixa acima do prompt: a barra some e volta quando você responde. E os avisos de permissão, de notificação e de compactação da conversa não chegam a um mod (visto na versão 2.1.330, numa conta de equipe). Por isso o palco não tem cena para esses momentos; o que há é o som da pergunta, que o mod reconhece pela ferramenta.
+- A previsão do limite sai das leituras que a barra viu nesta sessão (os últimos 30 minutos na janela de 5 horas, as últimas 6 horas na de 7 dias) e pede um mínimo de tempo e de subida: logo que a sessão abre não há previsão. O percentual é o da conta, então o uso de outras sessões entra no ritmo.
+- As contas contam o que a barra viu: uma sessão sem o plugin carregado não entra, e o custo é a estimativa do Claude Code (numa assinatura não é cobrança). Cada sessão grava só o registro dela, ao fim de cada turno, e é aí que relê os das outras (no máximo uma vez por minuto): com esta sessão parada, o custo do dia na barra não acompanha o que as outras gastam. Um registro parado há três dias entra no total de sempre e sai do store.
 - O effort aparece a partir do primeiro pedido ao modelo depois que o plugin carrega; antes disso a barra mostra `effort`, já clicável.
 - O seletor de modelo usa os apelidos `fable`, `opus`, `sonnet` e `haiku`; um modelo que a sua conta não tem é recusado pelo próprio `/model`, e a barra avisa.
 - As linhas de agente só são clicáveis no terminal; no app desktop seguem como texto. Quem troca a vista é o Claude Code, e só em resposta a um clique ou a uma tecla sua: ele pode recusar (um agente que já saiu da lista de tarefas, um teammate num painel próprio), e a barra mostra o motivo.
 - O anel de foco só acompanha o que abre e fecha com o teclado na barra (`ctrl+x tab`). Na versão 2.1.327 um clique num botão o aperta sem dar o teclado a ela, então para quem usa o mouse nada muda.
 - As fases do pedido saem dos trechos da resposta do modelo, que a barra repassa adiante como vieram. Ela só olha de que tipo cada trecho é (raciocínio, texto, começo de uma chamada) e o nome da ferramenta chamada: não guarda nem mostra o texto.
-- O plugin não acessa rede nem arquivos. Ele lê o uso da sessão, a lista de agentes e o tema (a linha `theme` do `/config`, e a troca dela), guarda o estado na sessão e os ajustes no store do próprio plugin (um JSON na pasta de configuração do Claude Code), e lê três variáveis de ambiente (`LC_ALL`, `LC_MESSAGES`, `LANG`) para escolher o primeiro idioma. A cena do palco vive só na memória e recomeça a cada sessão ou `/reload-plugins`.
+- O plugin não acessa rede nem arquivos. Ele lê o uso da sessão, a lista de agentes, o tema (a linha `theme` do `/config`, e a troca dela), o id da sessão e o sistema operacional; guarda o estado na sessão e, no store do próprio plugin (um JSON na pasta de configuração do Claude Code), os ajustes e as contas (um registro por sessão, com contagens e custo por dia: nenhum texto da conversa); lê três variáveis de ambiente (`LC_ALL`, `LC_MESSAGES`, `LANG`) para escolher o primeiro idioma; e toca os sons pelo próprio Claude Code. A cena do palco vive só na memória e recomeça a cada sessão ou `/reload-plugins`.
 - O palco é enfeite: um erro nele vira uma cena vazia e uma linha de aviso, nunca atrapalha uma ferramenta nem derruba a barra.
 - O ícone `⚙` é desenhado como texto na maioria dos terminais; num terminal que o mostre como emoji largo, a primeira linha pode perder uma coluna à direita.
 
@@ -209,9 +218,10 @@ claude --plugin-dir .        # roda uma sessão com o plugin carregado desta pas
 
 O módulo de hooks e o que ele importa, em `hooks/`:
 
-- `register.tsx`: os eventos, o estado, o relógio da animação e o desenho da barra.
+- `register.tsx`: os eventos, o estado, o relógio da animação e a montagem do que a barra desenha. `bar.tsx`: a barra montada (a régua, o cabeçalho com os botões, as linhas), pura. `stage-draw.tsx`: da cena ao elemento do palco de um desenho. `engine-calls.ts`: o que a barra pede ao engine sem mexer no estado dela (o aviso de erro, o tema, os ajustes salvos, o anel de foco, a troca da vista).
 - `lines.ts`: as linhas da barra (cabeçalho, custo, trabalho, limites, agentes), puras. `bar-rows.tsx`: as linhas de botões sob o cabeçalho (o seletor de modelo ou de effort, e a que diz de qual agente é a transcrição na tela).
 - `phase.ts`: o que cada trecho de um pedido ao modelo diz sobre a fase dele (pensa, escreve, monta uma chamada). `focus.ts`: em que botão o anel de foco cai quando algo abre na barra.
+- `pace.ts`: o ritmo de uma janela de limite e a previsão de quando ela enche. `stats.ts`: as contas de uma sessão, do dia e de sempre, puras; `ledger.ts`: o registro delas no store do plugin. `sound.ts`: os sons, da melodia ao WAV.
 - `effects.ts`: as animações de texto (faísca, cometa, pulso da régua, nome surgindo, estouro, brilho).
 - `format.ts`, `parts.ts`, `agents.ts`: formatos de texto, trechos de linha, e as linhas de agente conferidas com a lista do engine.
 - `sim.ts`: a simulação do palco, pura: o estado e as funções que dão o estado seguinte.
@@ -230,7 +240,7 @@ O módulo de hooks e o que ele importa, em `hooks/`:
 
 Os comentários do código e os nomes dos testes estão em português, a língua em que o projeto nasceu.
 
-Os testes (`*.test.ts`, 530 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena, o poder de cada classe, a aura e a forma de cada avatar, o codificador de PNG e o ajuste em blocos, e a barra montada em cada superfície, em texto, em blocos, em pixels e em vetor: as fases de um pedido trecho a trecho, a transcrição de um agente na tela e o anel de foco incluídos. O kit de testes não entrega a um teste o pedido de mover o anel de foco (`$.ui.focus`): o anel andando de fato se confere num Claude Code de verdade (`claude --plugin-dir .`, `ctrl+x tab`).
+Os testes (`*.test.ts`, 627 ao todo) cobrem as funções puras, a simulação quadro a quadro, o desenho da cena, o poder de cada classe, a aura e a forma de cada avatar, o codificador de PNG e o ajuste em blocos, e a barra montada em cada superfície, em texto, em blocos, em pixels e em vetor: as fases de um pedido trecho a trecho, a transcrição de um agente na tela e o anel de foco incluídos. O kit de testes não entrega a um teste o pedido de mover o anel de foco (`$.ui.focus`): o anel andando de fato se confere num Claude Code de verdade (`claude --plugin-dir .`, `ctrl+x tab`).
 
 Os GIFs dos dois READMEs saem das mesmas funções que desenham a barra, fora do Claude Code (precisa de `bun` e de Pillow). O turno de mentira tem o palco grande, em blocos, como a maioria dos terminais o mostra, e o mascote troca de avatar a cada trecho: o Clawd em Fable max e, depois, Pikachu (Opus), Mario (Sonnet) e Kratos (Opus), cada um primeiro em `high`, no desenho de base, e depois em `max`, transformado; `scripts/demo-frames.ts` segue dando um turno com um modelo e um effort só. A tabela de poderes é a mesma nos dois idiomas:
 

@@ -6,7 +6,7 @@ import type { Shape } from './canvas'
 import { rgbOf } from './color'
 import { CELL_H, CELL_W, hdScene } from './hd'
 import type { Part } from './parts'
-import { KIND_PAINT } from './palette'
+import { CRACKED_PAINT, KIND_PAINT } from './palette'
 import { EMPTY_SIM, MAIN, geometry } from './sim'
 import type { Geo, Sim, Worker } from './sim'
 import { SPINNER } from './effects'
@@ -365,5 +365,20 @@ describe('os sinais de um pedido em curso, fora do palco de texto', () => {
     const size = (change: Partial<Worker>) => (stageSvg(sceneOf(change, 9)) ?? '').length
     expect(size(writing)).toBeGreaterThan(size({}))
     expect(size(drafting('Bash'))).toBeGreaterThan(size({}))
+  })
+})
+
+describe('a falha no palco em pixels e em blocos', () => {
+  const draw = (sim: Sim, trace: 'pixels' | 'blocks') => hdScene({ prev: sim, cur: sim, alpha: 0, geo, hud: [], trace })
+
+  test('um tijolo rachado sai na cor apagada da família e, onde há detalhe, com a rachadura por cima', () => {
+    const tones = (wall: string, trace: 'pixels' | 'blocks') => new Set(draw(still([], { wall }), trace).shapes.map(s => s.rgb))
+    const whole = tones('b', 'pixels')
+    const broken = tones('B', 'pixels')
+    expect(broken.has(rgbOf(CRACKED_PAINT.b))).toBe(true)
+    expect(broken.has(rgbOf(KIND_PAINT.b))).toBe(false)
+    expect(broken.size).toBe(whole.size + 1) // o relevo de sempre, mais o tom da rachadura
+    // em blocos, no tamanho de sempre, é só a cor
+    expect([...tones('B', 'blocks')]).toEqual([rgbOf(CRACKED_PAINT.b)])
   })
 })

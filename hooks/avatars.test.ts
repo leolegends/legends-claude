@@ -44,7 +44,8 @@ const newInkOf = (art: Art): string | undefined => {
 describe('os avatares do mascote', () => {
   test('há um desenho para cada avatar dos ajustes, e o padrão é o Clawd', () => {
     for (const { id } of AVATARS) expect(AVATAR_ART[id]).toBeDefined()
-    expect(artOf(DEFAULT_SETTINGS.avatar)).toBe(CLAWD)
+    expect(DEFAULT_SETTINGS.avatar).toBe('clawd')
+    expect(artOf('clawd')).toBe(CLAWD)
     expect(artOf(undefined)).toBe(CLAWD)
   })
 

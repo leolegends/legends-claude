@@ -1,13 +1,17 @@
 import { LANGUAGES } from './i18n'
 import type { ToggleKey } from './i18n'
+import { hashOf } from './palette'
+import type { Tier } from './power'
 import type {
   StatusAccent as Accent,
   StatusAvatar as Avatar,
   StatusLanguage as Language,
+  StatusMascot as Mascot,
   StatusMotion as Motion,
   StatusResolution as Resolution,
   StatusSettings as Settings,
   StatusSize as Size,
+  StatusSound as Sound,
   StatusSpeed as Speed,
 } from '../types'
 
@@ -55,17 +59,42 @@ export const AVATARS: readonly { id: Avatar; label: string }[] = [
   { id: 'elsa', label: 'Elsa' },
 ]
 
+// As opções de mascote em que quem escolhe o avatar é a barra: o da classe do modelo, ou o da sessão.
+// Os nomes delas mudam com o idioma: vêm de i18n.ts.
+export const AUTO_MASCOTS: readonly { id: Exclude<Mascot, Avatar> }[] = [{ id: 'modelo' }, { id: 'sessao' }]
+const MASCOT_IDS: readonly Mascot[] = [...AVATARS.map(a => a.id), ...AUTO_MASCOTS.map(a => a.id)]
+
+// O avatar de cada classe de modelo, do mais leve ao mais forte: o Pikachu, pequeno e rápido, é o de
+// Haiku; o Mario, que faz de tudo, o de Sonnet; o Kratos, o de Opus; e a Elsa, que veio de um conto de
+// fadas, o de Fable.
+const TIER_AVATAR: Record<Tier, Avatar> = { 0: 'pikachu', 1: 'mario', 2: 'kratos', 3: 'elsa' }
+// Os avatares que uma sessão pode tirar: os coloridos. O Clawd é o de quem não escolheu nenhum.
+const SESSION_AVATARS = AVATARS.filter(a => a.id !== 'clawd').map(a => a.id)
+
+/**
+ * Puro: o avatar que vai para o palco. Um avatar fixo é ele mesmo; `modelo` é o da classe do modelo
+ * (`tier`); `sessao` sai do id da sessão (`seed`): o mesmo a sessão inteira, sem sorteio.
+ */
+export const mascotOf = (choice: Mascot, tier: Tier, seed: string): Avatar =>
+  choice === 'modelo' ? (TIER_AVATAR[tier] ?? 'clawd')
+  : choice === 'sessao' ? (SESSION_AVATARS[hashOf(seed) % SESSION_AVATARS.length] ?? 'clawd')
+  : choice
+
+// O som da barra: nenhum (o padrão), baixo ou alto.
+export const SOUNDS: readonly { id: Sound }[] = [{ id: 'mudo' }, { id: 'baixo' }, { id: 'alto' }]
+
 export const AGENT_LIMITS = [3, 6, 10] as const
 
 // O idioma do padrão é o português, em que a barra nasceu. Numa instalação nova quem decide é o idioma
 // do sistema (veja `sanitize` e quem a chama); "restaurar padrão" não mexe no idioma.
 export const DEFAULT_SETTINGS: Settings = {
   language: 'pt', accent: 'claude', motion: 'completa', speed: 'normal',
-  showRule: true, showStage: true, resolution: 'auto', size: 'normal', avatar: 'clawd', showLimits: true, showTurnCost: true, maxAgents: 6,
+  showRule: true, showStage: true, resolution: 'auto', size: 'normal', avatar: 'clawd', sound: 'mudo',
+  showLimits: true, showTurnCost: true, showDayCost: true, maxAgents: 6,
 }
 
 /** Os interruptores da linha "mostrar", na ordem em que aparecem. */
-export const TOGGLES: readonly ToggleKey[] = ['showRule', 'showStage', 'showLimits', 'showTurnCost']
+export const TOGGLES: readonly ToggleKey[] = ['showRule', 'showStage', 'showLimits', 'showTurnCost', 'showDayCost']
 
 const oneOf = <T extends string | number>(ids: readonly T[], v: unknown, fallback: T): T =>
   ids.includes(v as T) ? (v as T) : fallback
@@ -87,9 +116,11 @@ export const sanitize = (raw: unknown, language: Language = DEFAULT_SETTINGS.lan
     showStage: flag(r.showStage, d.showStage),
     resolution: oneOf(idsOf(RESOLUTIONS), r.resolution, d.resolution),
     size: oneOf(idsOf(SIZES), r.size, d.size),
-    avatar: oneOf(idsOf(AVATARS), r.avatar, d.avatar),
+    avatar: oneOf(MASCOT_IDS, r.avatar, d.avatar),
+    sound: oneOf(idsOf(SOUNDS), r.sound, d.sound),
     showLimits: flag(r.showLimits, d.showLimits),
     showTurnCost: flag(r.showTurnCost, d.showTurnCost),
+    showDayCost: flag(r.showDayCost, d.showDayCost),
     maxAgents: oneOf(AGENT_LIMITS, r.maxAgents, d.maxAgents),
   }
 }

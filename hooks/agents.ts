@@ -7,6 +7,8 @@ import type { StatusAgent as Agent, StatusAgentState as AgentState } from '../ty
 
 export const LINGER_MS = 8_000 // um agente terminado fica esse tempo na barra
 const STALE_MS = 600_000 // um agente fora da lista do engine e mudo por esse tempo é dado como perdido
+const SAMPLES_MAX = 16 // as leituras de tokens que a linha guarda: as que o engine dá
+const LABEL_MAX = 120
 
 const isLive = (a: Agent) => a.state === 'running' || a.state === 'waiting'
 export const isExpired = (a: Agent, now: number) => a.endedAt !== undefined && now - a.endedAt > LINGER_MS
@@ -18,6 +20,21 @@ const STATE_OF: Record<AgentInfo['status'], AgentState> = {
 const newAgent = (id: string, now: number): Agent => ({
   id, type: '', description: '', model: null, state: 'running', startedAt: now, seenAt: now, tools: 0, lastTool: null, // tipo ainda desconhecido
 })
+
+// O que a lista do engine sabe de um agente além do estado dele: quanto ele gastou, o resumo do que
+// faz agora (quando não é só a descrição da tarefa), as leituras de tokens e quem o chamou. Cada campo
+// só entra quando a lista o traz: uma versão do Claude Code que não o dá deixa a linha como era.
+const extrasOf = (info: AgentInfo, description: string): Partial<Agent> => {
+  const usd = info.cost?.usd
+  const label = clean(info.label, LABEL_MAX)
+  const samples = Array.isArray(info.tokenSamples) ? info.tokenSamples.filter(n => Number.isFinite(n)).slice(-SAMPLES_MAX) : []
+  return {
+    ...(typeof usd === 'number' && Number.isFinite(usd) && { costUsd: usd }),
+    ...(label && label !== description && { label }),
+    ...(samples.length > 0 && { samples }),
+    ...(typeof info.parentId === 'string' && info.parentId && { parentId: info.parentId }),
+  }
+}
 
 // Puro: aplica `fn` ao agente `id`, criando a linha quando ainda não existe.
 export const upsert = (rows: readonly Agent[], id: string, now: number, fn: (a: Agent) => Agent): Agent[] =>
@@ -32,18 +49,25 @@ export const reconcileRows = (rows: readonly Agent[], listed: readonly AgentInfo
     .filter(a => !isLive(a) || byId.has(a.id) || now - a.seenAt <= STALE_MS)
     .map(a => {
       const info = byId.get(a.id)
-      if (!info || !isLive(a)) return a
+      if (!info) return a
+      const description = a.description || clean(info.description, 120)
+      // Quem já terminou segue na barra por uns segundos: o custo e os tokens finais dele ainda chegam.
+      const known = { ...a, ...extrasOf(info, description) }
+      if (!isLive(a)) return known
       const state = STATE_OF[info.status]
       return {
-        ...a,
+        ...known,
         state,
         type: a.type || clean(info.type, 40),
-        description: a.description || clean(info.description, 120),
+        description,
         ...(!isLive({ ...a, state }) && { endedAt: now }),
       }
     })
   const adopted = listed
     .filter(i => (i.status === 'running' || i.status === 'pending') && !rows.some(a => a.id === i.id))
-    .map(i => ({ ...newAgent(i.id, now), type: clean(i.type, 40), description: clean(i.description, 120) }))
+    .map(i => {
+      const description = clean(i.description, 120)
+      return { ...newAgent(i.id, now), type: clean(i.type, 40), description, ...extrasOf(i, description) }
+    })
   return [...kept, ...adopted]
 }
