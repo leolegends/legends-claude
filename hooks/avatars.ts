@@ -1,5 +1,7 @@
-import { CLAWD, FINE_X } from './sprites'
-import type { Art, Detail, Patch } from './sprites'
+import { BODY_LEFT, INK, REACH_LEFT, WHITE, framed, patch, strideOf } from './avatar-kit'
+import { ELSA } from './elsa'
+import { CLAWD } from './sprites'
+import type { Art, Detail } from './sprites'
 import type { StatusAvatar as Avatar } from '../types'
 
 // Os avatares do mascote: quem ele é no palco. O de sempre é o Clawd, de uma cor só (a de destaque dos
@@ -11,26 +13,9 @@ import type { StatusAvatar as Avatar } from '../types'
 // subpixel, é o que aparece onde há detalhe: em pixels, em vetor e em blocos no tamanho grande.
 //
 // O poder também é de cada um. A aura de um avatar colorido tem as tintas do elemento dele (`element`),
-// não as da classe do modelo: raio, estrela, fogo. E com a aura forte ele se transforma (`form`): outro
-// desenho, com a mesma largura e a mesma cabeça, declarado antes do desenho de base que aponta para ele.
-
-const WIDTH = CLAWD.width
-const FINE_WIDTH = WIDTH * FINE_X
-const BODY_LEFT = 8 // onde o corpo do desenho fino começa, em pontos: ele ocupa os 20 do meio
-const REACH_LEFT = 4 // e onde começa um remendo que passa do corpo (os braços para cima)
-
-// Linhas de um desenho fino postas a partir de `left`, completadas com vazio até a largura dele.
-const framed = (rows: readonly string[], left: number, fill = '.'): string[] =>
-  rows.map(row => `${fill.repeat(left)}${row}${fill.repeat(Math.max(0, FINE_WIDTH - left - row.length))}`)
-
-const patch = (at: number, rows: readonly string[], left = BODY_LEFT): Patch => ({ at, rows: framed(rows, left) })
-
-// As pernas do outro passo: o pé esquerdo sobe uma linha. `foot` é a marca dele.
-const strideOf = (foot: string, thigh = foot): Patch =>
-  patch(17, [`...${thigh}${foot.repeat(4)}`, `..${foot.repeat(6)}`, '..______'])
-
-const INK = '#26262B' // as pupilas: escuras nos dois temas, sobre a pele ou o pelo
-const WHITE = '#FFFFFF'
+// não as da classe do modelo: raio, estrela, fogo, gelo. E com a aura forte ele se transforma (`form`):
+// outro desenho, com a mesma largura e a mesma cabeça, declarado antes do desenho de base que aponta
+// para ele. Os desenhos da Elsa ficam em elsa.ts; o que todos usam para se desenhar, em avatar-kit.ts.
 
 // ── O rato elétrico amarelo ───────────────────────────────────────────────────────────────────────
 
@@ -422,7 +407,7 @@ const KRATOS: Art = {
 }
 
 /** O desenho de cada avatar do mascote. */
-export const AVATAR_ART: Record<Avatar, Art> = { clawd: CLAWD, pikachu: PIKACHU, mario: MARIO, kratos: KRATOS }
+export const AVATAR_ART: Record<Avatar, Art> = { clawd: CLAWD, pikachu: PIKACHU, mario: MARIO, kratos: KRATOS, elsa: ELSA }
 
 /** O desenho do mascote para um avatar; o Clawd para o que não se conhece. */
 export const artOf = (avatar: Avatar | undefined): Art => (avatar ? (AVATAR_ART[avatar] ?? CLAWD) : CLAWD)

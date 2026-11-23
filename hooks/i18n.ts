@@ -1,6 +1,7 @@
 import type { Backend } from './stage'
 import type {
   StatusAccent as Accent,
+  StatusAvatar as Avatar,
   StatusLanguage as Language,
   StatusMotion as Motion,
   StatusResolution as Resolution,
@@ -91,6 +92,8 @@ export type Strings = {
   /** Em que o palco sai: o nome de cada saída, para o "em uso" dos ajustes. */
   backends: Record<Backend, string>
   toggles: Record<ToggleKey, string>
+  /** A dedicatória de um mascote, para os que têm uma: aparece ao lado da linha deles nos ajustes quando ele é o escolhido. */
+  tributes: Partial<Record<Avatar, string>>
 }
 
 const PT: Strings = {
@@ -148,6 +151,7 @@ const PT: Strings = {
   sizes: { normal: 'normal', grande: 'grande' },
   backends: { image: 'pixels', raster: 'blocos', svg: 'vetor', text: 'texto' },
   toggles: { showRule: 'régua', showStage: 'palco', showLimits: 'limites', showTurnCost: 'custo do turno' },
+  tributes: { elsa: 'em homenagem à minha filha' },
 }
 
 const EN: Strings = {
@@ -205,6 +209,7 @@ const EN: Strings = {
   sizes: { normal: 'normal', grande: 'large' },
   backends: { image: 'pixels', raster: 'blocks', svg: 'vector', text: 'text' },
   toggles: { showRule: 'rule', showStage: 'stage', showLimits: 'limits', showTurnCost: 'turn cost' },
+  tributes: { elsa: 'in honor of my daughter' },
 }
 
 const BY_LANGUAGE: Record<Language, Strings> = { pt: PT, en: EN }

@@ -36,6 +36,7 @@ export type PanelProps = {
 export const SettingsPanel = ({ el, settings: s, strings: t, accent, inUse, isCramped, onChange, onReset, onDemo, onClose }: PanelProps): RenderElement[] => {
   const { Box, Button, Text } = el
   const label = (text: string) => <Text dimColor>{text.padEnd(LABEL_WIDTH)}</Text>
+  const tribute = t.tributes[s.avatar] // a dedicatória do mascote escolhido, se ele tem uma
 
   // Uma opção: marcada com ● na cor de destaque quando é a atual; `color` pinta o próprio rótulo (a paleta).
   const option = (key: string, text: string, isCurrent: boolean, onPress: () => void, color?: string) => [
@@ -69,6 +70,7 @@ export const SettingsPanel = ({ el, settings: s, strings: t, accent, inUse, isCr
     <Box key="set-avatar">
       {label(t.panel.avatar)}
       {AVATARS.flatMap(a => option(`set-avatar-${a.id}`, a.label, s.avatar === a.id, () => onChange({ avatar: a.id })))}
+      {tribute ? <Text dimColor>{`  ${tribute}`}</Text> : null}
     </Box>,
     <Box key="set-motion">
       {label(t.panel.motion)}

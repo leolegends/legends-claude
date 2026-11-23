@@ -283,8 +283,8 @@ describe('os fogos da festa', () => {
   })
 })
 
-describe('a aura de um avatar: fogo, raio e estrela', () => {
-  const ELEMENTS: readonly Element[] = ['fire', 'volt', 'star']
+describe('a aura de um avatar: fogo, raio, estrela e gelo', () => {
+  const ELEMENTS: readonly Element[] = ['fire', 'volt', 'star', 'frost']
   const TICKS = Array.from({ length: 60 }, (_, tick) => tick)
   // Quanto de verde uma cor tem para o vermelho dela: perto de 0 é vermelho, perto de 1 é amarelo (ou branco).
   const yellowness = (hex: string) => (channels(hex)[1] ?? 0) / Math.max(1, channels(hex)[0] ?? 0)
@@ -422,9 +422,9 @@ describe('a aura de um avatar: fogo, raio e estrela', () => {
     expect(strike.every(dot => dot.paint !== 'text' && isWarm(dot.paint))).toBe(true)
   })
 
-  test('fogo e estrela seguem a regra da classe para os raios: só de Opus para cima, com a aura bem forte, na cor do texto', () => {
+  test('fogo, estrela e gelo seguem a regra da classe para os raios: só de Opus para cima, com a aura bem forte, na cor do texto', () => {
     const hasBolt = (p: Power, strength: number, element: Element) => TICKS.some(tick => sparksOf(p, figure(strength, { element }), at(tick)).some(([, paint]) => paint === 'text'))
-    for (const element of ['fire', 'star'] as const) {
+    for (const element of ['fire', 'star', 'frost'] as const) {
       expect(hasBolt(power(1, 4), 5, element)).toBe(false)
       expect(hasBolt(power(2, 4), 3, element)).toBe(false)
       expect(hasBolt(power(2, 4), 4, element)).toBe(true)
@@ -432,7 +432,8 @@ describe('a aura de um avatar: fogo, raio e estrela', () => {
   })
 
   test('num tema claro as tintas do elemento esmaecem para o branco, e o raio amarelo escurece', () => {
-    for (const element of ELEMENTS) {
+    // (o gelo tem a regra dele para o tema claro: está em frost.test.ts)
+    for (const element of ['fire', 'volt', 'star'] as const) {
       const dark = auraAt(power(2, 4), 4, at(5), { element })
       const light = auraAt(power(2, 4), 4, at(5, true), { element })
       expect([...light.keys()]).toEqual([...dark.keys()])
@@ -452,6 +453,7 @@ describe('os estalos do avatar de raio', () => {
     for (const tick of BEATS) {
       expect(arcsAt(5, tick, 'fire')).toEqual([])
       expect(arcsAt(5, tick, 'star')).toEqual([])
+      expect(arcsAt(5, tick, 'frost')).toEqual([])
       expect(arcsOf(figure(5), tick)).toEqual([])
       expect(arcsAt(0, tick)).toEqual([])
     }

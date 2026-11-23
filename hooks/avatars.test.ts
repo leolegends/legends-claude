@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { AVATAR_ART, artOf } from './avatars'
+import { fitCells } from './blocks'
+import { bitmapShapes, rasterize } from './canvas'
 import { blend, mix, rgbOf } from './color'
 import { backdropRgb, hdScene } from './hd'
 import { EYE, isInk } from './pixels'
@@ -118,7 +120,7 @@ describe('a forma com poder', () => {
 
   test('todo avatar colorido tem um elemento de aura só dele e uma forma com poder, do mesmo elemento; o Clawd não tem nem um nem outro', () => {
     for (const [, art] of COLORED) {
-      expect(['fire', 'volt', 'star'].includes(art.element ?? '')).toBe(true)
+      expect(['fire', 'volt', 'star', 'frost'].includes(art.element ?? '')).toBe(true)
       expect(art.form).toBeDefined()
       expect(art.form?.element).toBe(art.element)
       expect(art.form?.form).toBeUndefined() // a forma não se transforma de novo
@@ -245,9 +247,135 @@ describe('o avatar no palco', () => {
   })
 })
 
+describe('a Elsa', () => {
+  const elsa = AVATAR_ART.elsa
+  const forms = [elsa, elsa.form ?? elsa]
+  const inked = (row: string | undefined) => [...(row ?? '')].map(isInk)
+  // Uma linha inteira: da primeira marca com tinta à última, nenhum vão.
+  const isSolid = (row: string | undefined) => {
+    const marks = inked(row)
+    return marks.includes(true) && marks.slice(marks.indexOf(true), marks.lastIndexOf(true) + 1).every(Boolean)
+  }
+
+  test('é de gelo, e a forma com poder dela também', () => {
+    expect(elsa.element).toBe('frost')
+    expect(elsa.form?.element).toBe('frost')
+  })
+
+  test('o vestido vai até o chão: no lugar das pernas a barra dele é inteira, nos dois passos, no desenho comum e no fino', () => {
+    for (const art of forms)
+      for (const step of [0, 1] as const) {
+        expect(isSolid(drawing(art, { ...STAND, step }).at(-1))).toBe(true)
+        expect(isSolid(detailDrawing(art, { ...STAND, step })?.at(-1))).toBe(true)
+      }
+    // os outros têm duas pernas: há um vão entre elas
+    expect(isSolid(drawing(AVATAR_ART.mario, STAND).at(-1))).toBe(false)
+    expect(isSolid(detailDrawing(AVATAR_ART.mario, STAND)?.at(-1))).toBe(false)
+  })
+
+  test('a barra do vestido é a parte mais larga do desenho fino: ele abre até o chão', () => {
+    const widthOf = (row: string | undefined) => inked(row).filter(Boolean).length
+    for (const art of forms) {
+      const rows = detailDrawing(art, STAND) ?? []
+      expect(widthOf(rows.at(-1))).toBe(Math.max(...rows.map(widthOf)))
+    }
+  })
+
+  test('com poder solta o cabelo: a trança de um lado só dá lugar ao cabelo dos dois lados, e o vestido azul, ao branco', () => {
+    const base = detailDrawing(elsa, STAND) ?? []
+    const form = detailDrawing(elsa.form ?? elsa, STAND) ?? []
+    // o cabelo abaixo do rosto: de quantos lados do meio do desenho ele aparece
+    const hairSides = (rows: readonly string[]) => new Set(rows.slice(10, 15).flatMap(row => [...row].flatMap((mark, x) => (mark === 'H' || mark === 'h' ? [x < row.length / 2 ? 'esquerda' : 'direita'] : [])))).size
+    expect(hairSides(base)).toBe(1)
+    expect(hairSides(form)).toBe(2)
+    const dress = (art: Art) => art.paints?.[drawing(art, STAND)[3]?.[8] ?? ''] ?? ''
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(dress(elsa).slice(i, i + 2), 16))
+    expect((b ?? 0) > (g ?? 0) && (g ?? 0) > (r ?? 0)).toBe(true) // azul
+    expect([1, 3, 5].every(i => parseInt(dress(elsa.form ?? elsa).slice(i, i + 2), 16) > 225)).toBe(true) // branco
+  })
+
+  // O desenho fino como o palco de blocos o mostra no tamanho grande: cada célula do terminal, dois
+  // pontos por quatro, com as duas tintas que o ajuste escolhe. `lit` é a luz das pupilas, de Opus para cima.
+  const POINT = 4 // os pixels de um ponto do desenho fino
+  const EYE_ROW = 1 // a linha de células dos olhos: as linhas 4 a 7 do desenho
+  const blocksOf = (art: Art, stance: Stance, lit?: string) => {
+    const rows = detailDrawing(art, stance) ?? []
+    const inkOf = (mark: string) => (isInk(mark) ? { rgb: rgbOf(lit !== undefined && mark === art.pupil ? lit : (art.paints?.[mark] ?? '#000000')) } : null)
+    const frame = rasterize(bitmapShapes(rows, { left: 0, top: 0, cellW: POINT, cellH: POINT }, inkOf), art.width * FINE_X * POINT, rows.length * POINT)
+    return fitCells(frame, art.width, rows.length / FINE_Y, backdropRgb(false))
+  }
+  // As colunas das células da linha dos olhos que mostram uma tinta.
+  const eyeCells = (art: Art, stance: Stance, paint: string, lit?: string) =>
+    blocksOf(art, stance, lit).flatMap((cell, i) => (Math.floor(i / art.width) === EYE_ROW && (cell.fg === rgbOf(paint) || cell.bg === rgbOf(paint)) ? [i % art.width] : []))
+  const LIGHTS = [undefined, '#FFF1B8', '#FFFFFF'] // sem luz, a de Opus e a de Fable
+
+  test('em blocos, no tamanho grande, os olhos azuis aparecem dos dois lados do rosto em qualquer pose, com as pupilas acesas ou não', () => {
+    const blue = elsa.paints?.i ?? ''
+    expect(blue).toMatch(HEX)
+    for (const art of forms)
+      for (const eyes of LOOKS)
+        for (const lit of LIGHTS) {
+          const columns = eyeCells(art, { ...STAND, eyes }, blue, lit)
+          expect(columns.some(x => x < art.width / 2)).toBe(true)
+          expect(columns.some(x => x >= art.width / 2)).toBe(true)
+        }
+  })
+
+  test('em blocos, a luz das pupilas aparece nas duas células dos olhos quando ela olha para a frente; fechados ou de lado, os olhos não acendem', () => {
+    for (const art of forms)
+      for (const lit of ['#FFF1B8', '#FFFFFF']) {
+        expect(eyeCells(art, STAND, lit, lit).length).toBe(2)
+        for (const eyes of ['closed', 'left', 'right'] as const) {
+          const rows = detailDrawing(art, { ...STAND, eyes }) ?? []
+          expect(rows.join('').includes(art.pupil ?? '?')).toBe(false)
+        }
+      }
+  })
+
+  test('de braços para cima, as mãos ficam ao lado da cabeça e os braços abaixados saem: na base fica o vão; de cabelo solto, é ele que aparece atrás', () => {
+    const LOWERED = [[9, 12], [24, 27]] as const // as colunas dos braços abaixados, dos dois lados
+    const RAISED = [[5, 8], [28, 31]] as const // e as das mãos erguidas
+    const cut = (rows: readonly string[], y: number, spans: readonly (readonly [number, number])[]) => spans.map(([from, to]) => rows[y]?.slice(from, to))
+    const [base, spirit] = forms.map(art => detailDrawing(art, { ...STAND, isArmsUp: true }) ?? [])
+    if (!base || !spirit) throw new Error('faltou um desenho')
+    for (const rows of [base, spirit]) for (const y of [4, 5]) expect(cut(rows, y, RAISED)).toEqual(['SSS', 'SSS'])
+    for (const y of [12, 13, 14, 15]) expect(cut(base, y, LOWERED)).toEqual(['...', '...'])
+    for (const y of [12, 13]) expect(cut(spirit, y, LOWERED)).toEqual(['HHH', 'HHH'])
+    expect(cut(spirit, 15, LOWERED)).toEqual(['...', '...'])
+    // abaixados, os braços estão lá: a manga e a mão
+    for (const art of forms) {
+      const rows = detailDrawing(art, STAND) ?? []
+      for (const y of [12, 13, 14, 15]) for (const marks of cut(rows, y, LOWERED)) expect([...(marks ?? '')].every(isInk)).toBe(true)
+    }
+  })
+
+  test('no outro passo a barra do vestido e as pontas da capa vão um ponto para o lado; o resto do desenho não muda', () => {
+    for (const art of forms) {
+      const still = detailDrawing(art, STAND) ?? []
+      const moved = detailDrawing(art, { ...STAND, step: 1 }) ?? []
+      expect(moved.slice(0, 18)).toEqual(still.slice(0, 18))
+      for (const y of [18, 19]) expect(moved[y]).toBe(`${(still[y] ?? '').slice(1)}.`)
+    }
+  })
+
+  test('no palco, a aura dela é de gelo: o azul da noite em volta e, com a aura forte, flocos de neve brancos', () => {
+    const geo = geometry(100)
+    if (!geo) throw new Error('o palco de teste não coube')
+    const sim: Sim = { ...EMPTY_SIM, isOn: true, tick: 3, workers: [{ id: MAIN, x: 30, act: 'idle', t: 0, load: '', queue: '', busy: 0, tool: null, thinking: 0, phase: 'think', draft: null, isAsleep: false, shout: 0 }] }
+    const colors = (level: number) => new Set(hdScene({ prev: sim, cur: sim, alpha: 0, geo, hud: [], trace: 'pixels', avatar: 'elsa', powers: new Map([[MAIN, power(2, level)]]) }).shapes.map(s => s.rgb))
+    const NIGHT_BLUE = 0x5568e0
+    const SNOW = rgbOf(mix('#EAF8FF', '#FFFFFF', 0.5))
+    expect(colors(0).has(NIGHT_BLUE)).toBe(false)
+    expect(colors(2).has(NIGHT_BLUE)).toBe(true)
+    expect(colors(2).has(SNOW)).toBe(false)
+    expect(colors(4).has(SNOW)).toBe(true)
+  })
+})
+
 describe('o avatar nos ajustes', () => {
   test('um avatar conhecido é guardado; um desconhecido volta ao Clawd', () => {
     expect(sanitize({ avatar: 'kratos' }).avatar).toBe('kratos')
+    expect(sanitize({ avatar: 'elsa' }).avatar).toBe('elsa')
     expect(sanitize({ avatar: 'sonic' }).avatar).toBe('clawd')
     expect(sanitize(undefined).avatar).toBe('clawd')
   })

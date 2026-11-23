@@ -1,7 +1,7 @@
 import {
   BURSTS, BURST_LIFE, BURST_PAINTS, BURST_RAYS, BURST_THIN_AT, EDGE_FADE,
   FIREWORKS_TIER, HEART_DEPTH, INK, JET_SHARE, MOTES_FROM, MOTE_LIFE, MOTE_STAGGER, REACH, RISE, STREAK_FROM, STREAK_ROWS, STREAK_TIER,
-  arcsOf, columnTops, flareOf, isPainted, sparkOf, stormOf, strikes,
+  arcsOf, columnTops, flareOf, isPainted, isSnow, sparkOf, stormOf, strikes,
 } from './aura'
 import type { Band, Element } from './aura'
 import { box } from './canvas'
@@ -52,6 +52,10 @@ const MOTE_FADE = 2 // quadros finais em que uma fagulha apaga
 const MOTE_SIZE = 0.75 // no traço fino, o lado de uma fagulha, em subpixels
 const STAR_ARM = 0.9 // no traço fino, o braço de uma estrelinha (a fagulha do avatar de estrela), em subpixels
 const STAR_THIN = 0.3 // e a grossura dele
+const FLAKE_ARM = 1 // no traço fino, o braço de um floco de neve (a fagulha do avatar de gelo), em subpixels: meia sublinha, para o floco pousado não passar da linha dos pés
+const FLAKE_THIN = 0.3 // a grossura dele
+const FLAKE_TIP = 0.6 // e a que fração do braço fica a ponta de cada diagonal
+const FLAKE_TIPS = [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const
 const BOLT_CORE = 0.5 // no traço fino, a largura do raio, em subpixels
 const BOLT_GLOW = 0.35 // e a opacidade do clarão em volta dele
 const STREAK_HEIGHT = 0.4 // no traço fino, a altura de um risco, em sublinhas
@@ -62,7 +66,7 @@ const BURST_FADE = 0.7 // quanto um fogo apaga até o fim
 // Uma medida na grade de meia célula: o traço que cabe em blocos.
 const snap = (px: number, step: number) => Math.round(px / step) * step
 // As tintas da aura de um bicho neste instante: as do elemento dele, ou a cor da classe.
-const flareAt = (body: Body, light: Light) => flareOf(body.power, light.time, body.element)
+const flareAt = (body: Body, light: Light) => flareOf(body.power, light.time, body.element, light.isLight)
 const widthOf = (rows: Bitmap) => rows.reduce((n, row) => Math.max(n, row.length), 0)
 // A posição de um subpixel do desenho na cena, em subpixels: as ondas e o furta-cor andam por ela.
 const worldOf = (body: Body, sub: number) => body.left / body.unit.u + sub
@@ -127,9 +131,22 @@ const twinkleShapes = (cx: number, cy: number, { u, v }: Unit, rgb: number, a: n
   return [box(cx - arm, cy - thin / 2, arm * 2, thin, rgb, a), box(cx - thin / 2, cy - Math.min(arm, v), thin, Math.min(arm, v) * 2, rgb, a)]
 }
 
+// Um floco de neve com o meio em (`cx`, `cy`): os dois traços de uma estrelinha e uma ponta em cada diagonal.
+const flakeShapes = (cx: number, cy: number, { u, v }: Unit, rgb: number, a: number): Shape[] => {
+  const arm = u * FLAKE_ARM
+  const tall = Math.min(arm, v) // como na estrelinha: o braço de pé mede o mesmo que o deitado, em pixels
+  const thin = Math.max(1, u * FLAKE_THIN)
+  return [
+    box(cx - arm, cy - thin / 2, arm * 2, thin, rgb, a),
+    box(cx - thin / 2, cy - tall, thin, tall * 2, rgb, a),
+    ...FLAKE_TIPS.map(([dx, dy]) => box(cx + dx * arm * FLAKE_TIP - thin / 2, cy + dy * tall * FLAKE_TIP - thin / 2, thin, thin, rgb, a)),
+  ]
+}
+
 /**
  * As fagulhas que sobem pelos lados do bicho: a tinta da aura dele, puxada para longe do fundo. As do
- * avatar de estrela, no traço fino, são estrelinhas.
+ * avatar de estrela, no traço fino, são estrelinhas. As do avatar de gelo são flocos de neve: caem em
+ * vez de subir, pousam logo acima da linha dos pés e derretem ali.
  */
 export const moteShapes = (body: Body, light: Light): Shape[] => {
   const { rows, left, feet, unit, unit: { u, v }, strength } = body
@@ -147,11 +164,13 @@ export const moteShapes = (body: Body, light: Light): Shape[] => {
     const sway = Math.sin((age + k) * 1.1)
     const sub = (isRight ? width + spread : -1 - spread) + (light.isFine ? sway : Math.round(sway))
     const x = left + sub * u
-    const y = feet - (1 + (light.isFine ? age : Math.floor(age))) * v
+    const walked = light.isFine ? age : Math.floor(age) // as sublinhas que ela já andou
+    const y = feet - (isSnow(body.element) ? Math.max(1, MOTE_LIFE - walked) : 1 + walked) * v
     const rgb = rgbOf(sparkOf(paint(Math.floor(worldOf(body, sub))), light.isLight))
     const fade = light.isFine ? Math.min(1, (MOTE_LIFE - age) / MOTE_FADE) : 1
     if (!light.isFine) return [box(snap(x, light.grain.x), snap(y, light.grain.y), light.grain.x, light.grain.y, rgb)]
     if (body.element === 'star') return twinkleShapes(x + u / 2, y + v / 2, unit, rgb, fade)
+    if (isSnow(body.element)) return flakeShapes(x + u / 2, y + v / 2, unit, rgb, fade)
     return [box(x + (u - side) / 2, y + (v - side) / 2, side, side, rgb, fade)]
   })
 }

@@ -7,7 +7,7 @@
 // `pixels` é o que um terminal que desenha imagens mostra (kitty, Ghostty, iTerm2) e, em vetor, o app
 // desktop; `blocos`, o que os outros terminais mostram. O modelo (`fable`, `opus`, `sonnet`, `haiku`; o
 // padrão é `fable`) e o effort (`low` a `max`; o padrão é `high`) dão a aparência do mascote; o avatar
-// (`clawd`, `pikachu`, `mario`, `kratos`; o padrão é `clawd`), quem ele é. Com o effort `escada`, ele
+// (`clawd`, `pikachu`, `mario`, `kratos`, `elsa`; o padrão é `clawd`), quem ele é. Com o effort `escada`, ele
 // sobe de `low` a `max` ao longo da demonstração, um degrau de cada vez, e o placar diz em qual está:
 // é como se vê a aura crescer e o avatar se transformar.
 //
