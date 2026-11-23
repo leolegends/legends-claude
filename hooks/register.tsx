@@ -2,34 +2,42 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
 import { LINGER_MS, isExpired, reconcileRows, upsert } from './agents'
-import { DEMO_CAST, DEMO_FRAMES, applyDemo } from './demo'
-import { PickerRow, ViewRow } from './bar-rows'
+import { Bar, HiddenBar } from './bar'
+import { DEMO_CAST, DEMO_FRAMES, DEMO_SOUNDS, applyDemo } from './demo'
+import { PickerRow } from './bar-rows'
 import { BURST_FRAMES, ruleParts } from './effects'
+import { SETTINGS_KEY, follow, isLightName, loadSettings, openBooks, readTheme, report, viewAgent } from './engine-calls'
 import { landingKey } from './focus'
 import type { Opened, Standing } from './focus'
 import { clean, cols, prettyModel, shortTool } from './format'
-import { hdScene } from './hd'
 import type { Zoom } from './hd'
-import { localeLanguage, stringsOf } from './i18n'
+import { stringsOf } from './i18n'
 import type { Strings } from './i18n'
-import { BUTTONS_WIDTH, EFFORTS, STAGE_SLOT, cardLines, fromUsage, hudParts, viewParts } from './lines'
-import { askAgain, askPixels, canRepaint, dropStage, resetPainter, watchStage } from './painter'
+import { closeLedger, dayCost, ledgerReport, saveLedger, tally } from './ledger'
+import { EFFORTS, STAGE_SLOT, cardLines, fromUsage, hudParts, viewParts } from './lines'
+import { paced } from './pace'
+import { dropStage, recheckPixels, resetPainter } from './painter'
 import type { Host } from './painter'
-import { kindOf } from './palette'
-import { TAIL_GAP, lineWidth } from './parts'
-import type { Line, Part, Switch } from './parts'
+import { isQuestion, kindOf } from './palette'
+import type { Kind } from './palette'
+import type { Part, Switch } from './parts'
 import { THINKING, hear } from './phase'
-import { TIER_NAMES, energyOf, lookOf, powerOf } from './power'
+import { PLAIN, TIER_NAMES, energyOf, lookOf, powerOf } from './power'
 import type { Power } from './power'
-import { SCENE_ROWS, sceneRows } from './scene'
+import { SCENE_ROWS } from './scene'
 import { SettingsPanel } from './settings-panel'
-import { EMPTY_SIM, MAIN, begin, blank, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, settle, shift, step, syncHelpers, think } from './sim'
-import type { Geo, Sim } from './sim'
-import { DEFAULT_SETTINGS, FULL_EFFECTS, accentColor, effectsOf, sanitize } from './settings'
+import { EMPTY_SIM, MAIN, PARTY_FROM, begin, blank, crack, enqueue, finish, fold, geometry, halt, hasScene, isAnimating, settle, shift, step, syncHelpers, think, top } from './sim'
+import type { Sim } from './sim'
+import { DEFAULT_SETTINGS, FULL_EFFECTS, accentColor, effectsOf, mascotOf, sanitize } from './settings'
 import type { Effects } from './settings'
-import { alphaOf, backendOf, zoomOf } from './stage'
-import type { Abilities, Backend, Pixels } from './stage'
-import { offeredBy, probeNode, stageNode } from './stage-node'
+import { playCue } from './sound'
+import type { Cue } from './sound'
+import { backendOf, zoomOf } from './stage'
+import type { Abilities, Pixels } from './stage'
+import { drawStage } from './stage-draw'
+import { offeredBy } from './stage-node'
+import { countFail, countHelpers, countTool, countTurn } from './stats'
+import type { SessionStats } from './stats'
 import type {
   StatusAgent as Agent,
   StatusAgentState as AgentState,
@@ -52,7 +60,6 @@ const picker = atom({ plugin: 'legends-claude', key: 'picker' } as const, null a
 const settings = atom({ plugin: 'legends-claude', key: 'settings' } as const, DEFAULT_SETTINGS)
 // O que o terminal respondeu sobre desenhar imagens; quem pergunta e grava a resposta é o pintor (painter.ts).
 const pixels = atom({ plugin: 'legends-claude', key: 'pixels' } as const, 'unknown' as Pixels)
-const SETTINGS_KEY = 'settings' // a chave no $.store: os ajustes valem para todas as sessões
 
 const COMMAND = 'legends-claude'
 const MIN_COLUMNS = 60 // mais estreito que isso a barra cobriria a conversa: não desenha
@@ -62,6 +69,7 @@ const RECONCILE_MS = 1_000 // a lista de agentes do engine é conferida no máxi
 const FRAME_WRAP = 1_000_000
 const FLASH_MS = 1_500 // quanto tempo o custo fica aceso depois de crescer
 const HEAL_AFTER_MS = 5_000 // um turno em curso com a faixa dizendo "parada" por esse tempo: o fim dele não foi avisado
+const STATS_ARGS = /^\s*(stats|estat\S*|statistics)\s*$/i // "stats", "estatísticas", "statistics"
 const STAGE_MIN_ROWS = SCENE_ROWS + 3 // a régua, o cabeçalho, o palco e ao menos uma linha de folga: menos que isso, sem palco
 const VIEW_GAP = 2 // colunas entre o nome do agente em vista e o botão que volta à conversa principal
 // Os apelidos que o /model aceita: cada um aponta sempre para a versão mais nova da família.
@@ -94,14 +102,11 @@ let demoLook: Power | null = null // o poder que a demonstração em curso mostr
 let isLightTheme = false // o tema do Claude Code é claro: a aura do palco esmaece para branco
 let isTurnOn = false // um turno principal está em curso, pelos eventos de início e de fim dele
 let quietSince: number | null = null // desde quando a faixa diz "parada" com um turno em curso
-const reported = new Set<string>()
-
-// Um erro de fundo aparece uma vez por origem, numa linha discreta: nunca é engolido, nunca vira enxurrada.
-const report = ($: EngineInterface, where: string, err: unknown) => {
-  if (reported.has(where)) return
-  reported.add(where)
-  $.ui.log(`legends-claude: ${where}: ${clean(err instanceof Error ? err.message : String(err), 200)}`)
-}
+let volume: Settings['sound'] = DEFAULT_SETTINGS.sound // o som em vigor, lido dos ajustes
+let isSilent = false // o Claude Code não tem como tocar som neste sistema (só toca no macOS)
+let sessionSeed = '' // o id da sessão: dele sai o avatar "por sessão"
+// Um som da barra, no volume dos ajustes. É enfeite: se não tocar, vira um aviso, uma vez.
+const cue = ($: EngineInterface, name: Cue, now: number) => void playCue($, name, volume, now).catch(err => report($, 'sound', err))
 
 const stopTicker = () => {
   ticker?.cancel()
@@ -136,18 +141,6 @@ const hostOf = ($: EngineInterface): Host => ({
   guard: (run, fallback) => onStage($, run, fallback),
 })
 
-// O tema é claro quando o nome dele diz ("light", "light-daltonized"); um tema de nome desconhecido vale como escuro.
-const isLightName = (value: unknown) => /light/i.test(String(value ?? ''))
-
-// O tema em vigor, lido da linha dele no /config.
-async function readTheme($: EngineInterface) {
-  try {
-    isLightTheme = isLightName((await $.config.list()).find(row => row.key === 'theme')?.value)
-  } catch (err) {
-    report($, 'theme', err)
-  }
-}
-
 // O poder de cada um em cena: o do loop principal pelo modelo e effort do cabeçalho (ou o que a
 // demonstração pediu), o de cada agente pelos dele, e o do elenco da demonstração.
 const powersOf = (f: Figures, list: readonly Agent[]): Map<string, Power> =>
@@ -177,6 +170,7 @@ const stepScene = ($: EngineInterface, list: readonly Agent[], now: number) =>
     }
     if (demoFrame >= 0) {
       sim = applyDemo(sim, demoFrame)
+      DEMO_SOUNDS.filter(([at]) => at === demoFrame).forEach(([, sound]) => cue($, sound, now))
       demoFrame += 1
     }
     shownSim = syncHelpers(sim, list)
@@ -200,9 +194,22 @@ const endTurn = ($: EngineInterface, isHappy: boolean) => {
   }, undefined)
 }
 
+// As contas da sessão mudaram (stats.ts). Quando os tijolos fecham um andar, sobem fogos sobre a parede.
+const count = ($: EngineInterface, change: (stats: SessionStats) => SessionStats, now: number) => {
+  if (tally(change) <= 0) return
+  onStage($, () => void (sim = top(sim)), undefined)
+  cue($, 'floor', now)
+}
+
+// Lança o custo de agora nas contas da sessão e grava o registro dela: no fim de cada turno, dela ou de um agente.
+const keepBooks = ($: EngineInterface, now: number) =>
+  void read($, figures).then(f => saveLedger($, f.costUsd, now)).catch(err => report($, 'stats', err))
+
 async function reconcile($: EngineInterface, now: number) {
   const listed = await $.agent.list()
-  return update($, agents, rows => reconcileRows(rows, listed, now))
+  const rows = await update($, agents, list => reconcileRows(list, listed, now))
+  tally(stats => countHelpers(stats, rows.filter(a => a.state === 'running').length))
+  return rows
 }
 
 // Tira do card quem terminou há mais de LINGER_MS; fica marcado de novo enquanto restar alguém terminado.
@@ -258,27 +265,27 @@ async function touchAgent($: EngineInterface, id: string, fn: (a: Agent, now: nu
   ensureTicker($)
 }
 
-// Uma chamada de ferramenta: conta para o agente que a fez, ou para o turno principal.
+// Uma chamada de ferramenta: conta para o agente que a fez, ou para o turno principal, e é um tijolo nas contas da sessão.
 async function noteTool($: EngineInterface, agentId: string | undefined, tool: string) {
   try {
     const lastTool = shortTool(tool)
     if (agentId) await touchAgent($, agentId, (a, now) => ({ ...a, tools: a.tools + 1, lastTool, seenAt: now }))
     else await update($, main, m => ({ ...m, tools: m.tools + 1, lastTool }))
+    count($, countTool, await $.clock.now())
   } catch (err) {
     report($, 'tool.call', err)
   }
 }
 
-// O anel de foco da faixa acompanha o que abre e fecha nela: quem navega pelo teclado (ctrl+x tab, Tab
-// ou as setas, Enter) cai na opção em vigor de um seletor recém-aberto e volta ao botão que o abriu
-// quando ele fecha. Sem o teclado na faixa o engine recusa o pedido, e nada muda: a recusa não é um
-// erro. Na versão 2.1.327 um clique num botão o aperta sem dar o teclado à faixa, então é a resposta
-// de sempre para quem usa o mouse; se um clique der o teclado, o anel aparece onde um Enter agiria.
-async function follow($: EngineInterface, requestId: string, key: string) {
+// Uma chamada terminou em erro (ou foi recusada): o tijolo dela racha, e a falha conta para quem a fez.
+async function noteFail($: EngineInterface, agentId: string | undefined, kind: Kind) {
   try {
-    await $.ui.focus({ requestId, key })
+    onStage($, () => void (sim = crack(sim, agentId ?? MAIN, kind)), undefined)
+    if (agentId) await touchAgent($, agentId, a => ({ ...a, fails: (a.fails ?? 0) + 1 }))
+    else await update($, main, m => ({ ...m, fails: (m.fails ?? 0) + 1 }))
+    tally(countFail)
   } catch (err) {
-    report($, 'focus', err)
+    report($, 'tool.fail', err)
   }
 }
 
@@ -297,32 +304,10 @@ async function switchTo($: EngineInterface, command: Switch, value: string, requ
   }
 }
 
-// Um clique na linha de um agente: a transcrição dele vai para a vista principal, como a troca pela
-// lista de tarefas do Claude Code. Sem agente, volta a conversa principal. O engine só troca a vista
-// em resposta a um gesto da pessoa, e diz por que não trocou: o aviso repete o motivo.
-async function viewAgent($: EngineInterface, agentId: string | undefined) {
-  try {
-    const moved = await $.ui.view(agentId === undefined ? {} : { agentId })
-    if (moved?.deny !== undefined) $.ui.toast(strings.viewFailed(clean(moved.deny, 120)))
-  } catch (err) {
-    $.ui.toast(strings.viewFailed(clean(err instanceof Error ? err.message : String(err), 120)))
-  }
-}
-
 // O idioma em vigor: os textos dos avisos e o que o comando mostra no menu (registrar de novo substitui).
 async function speak($: EngineInterface, language: Settings['language']) {
   strings = stringsOf(language)
   await $.command.register({ name: COMMAND, description: strings.commandDescription, argumentHint: strings.argumentHint })
-}
-
-// Os ajustes desta sessão: os salvos, conferidos campo a campo. Quando nenhum idioma foi salvo:
-// quem já tinha ajustes de antes de haver idiomas continua em português, a única língua da barra até
-// então; numa instalação nova, vale o idioma do sistema.
-async function loadSettings($: EngineInterface): Promise<Settings> {
-  const stored = await $.store.get(SETTINGS_KEY)
-  if (stored && typeof stored === 'object') return sanitize(stored)
-  const locales = await Promise.all([$.env.get('LC_ALL'), $.env.get('LC_MESSAGES'), $.env.get('LANG')]).catch(() => [])
-  return sanitize(undefined, localeLanguage(...locales))
 }
 
 // Uma mudança na aba de ajustes: vale na hora nesta sessão e fica salva para as próximas.
@@ -330,6 +315,10 @@ async function applySettings($: EngineInterface, change: (s: Settings) => Settin
   try {
     const next = await update($, settings, s => sanitize(change(s), s.language))
     fx = effectsOf(next)
+    if (next.sound !== volume) {
+      volume = next.sound
+      cue($, 'done', await $.clock.now()) // quem escolhe um volume ouve como ele soa
+    }
     if (stringsOf(next.language) !== strings) await speak($, next.language)
     if (!fx.hasStage) {
       setScene(EMPTY_SIM)
@@ -368,67 +357,6 @@ async function startDemo($: EngineInterface, look = '', isCommand = false): Prom
   return asked ? strings.demoAs(TIER_NAMES[asked.tier], EFFORTS[asked.level] ?? '') : strings.demo
 }
 
-// A pessoa escolheu a resolução automática de novo: se o terminal tinha dito que não desenha imagens
-// (um tmux sem passthrough, já corrigido, por exemplo), pergunta-se outra vez.
-async function recheckPixels($: EngineInterface) {
-  try {
-    askAgain()
-    await update($, pixels, known => (known === 'no' ? 'unknown' : known))
-  } catch (err) {
-    report($, 'pixels', err)
-  }
-}
-
-/** O que um desenho da barra sabe do palco: em que ele sai, as medidas, o placar, o poder de cada um, os ajustes e a hora. */
-type StageInput = {
-  backend: Backend
-  /** O que o terminal respondeu sobre desenhar imagens. */
-  known: Pixels
-  /** O palco está à vista: não com a barra recolhida, nem com a aba de ajustes no lugar das linhas. */
-  isShown: boolean
-  geo: Geo | null
-  zoom: Zoom
-  hud: Part[]
-  powers: ReadonlyMap<string, Power>
-  settings: Settings
-  strings: Strings
-  now: number
-}
-/**
- * O palco de um desenho: em que ele sai nesta tela, o elemento dele (uma imagem, uma grade de blocos,
- * um SVG) ou, sem elemento, as linhas de texto de sempre; e a imagem de sondagem, quando é hora dela.
- */
-type StageDraw = { backend: Backend; node: RenderElement | null; lines: Line[]; probe: RenderElement | null }
-type BandInput = { surface: string; requestId: string }
-
-// O palco deste desenho. No terminal a cena em pixels ou em blocos segue a caminho entre dois quadros,
-// e quem repinta completa o caminho; fora dele (ou sem como repintar) mostra o quadro inteiro. Se a
-// tela não tem como desenhar o elemento, ficam as linhas de texto. Só um palco à vista é repintado: o
-// que não está na tela recusaria cada pintura.
-function drawStage($: EngineInterface, e: BandInput, table: object, { backend, known, isShown, geo, zoom, hud, powers, settings: s, strings: t, now }: StageInput): StageDraw {
-  const isTerminal = e.surface === 'terminal'
-  if (!isShown) {
-    if (isTerminal) dropStage()
-    return { backend, node: null, lines: [], probe: null }
-  }
-  const look = { isLight: isLightTheme, accent: accentColor(s), avatar: s.avatar }
-  const alpha = isTerminal && canRepaint() ? alphaOf(now, steppedAt, fx.frameMs) : 1
-  const scene = geo && hasScene(sim) && backend !== 'text'
-    ? onStage($, () => hdScene({ prev: shownSim, cur: sim, alpha, geo, hud, powers, ...look, trace: backend === 'raster' ? 'blocks' : 'pixels', zoom }), null)
-    : null
-  const node = scene ? onStage($, () => stageNode(table, backend, scene, look, t.stageAlt), null) : null
-  if (isTerminal) {
-    if (node && scene && geo && (backend === 'image' || backend === 'raster'))
-      watchStage($, { requestId: e.requestId, backend, columns: scene.columns, rows: scene.rows }, { geo, zoom, hud, powers, look }, hostOf($), now)
-    else dropStage()
-  }
-  // Enquanto não se sabe se o terminal desenha imagens, uma imagem de sondagem vai no canto da barra.
-  const probe = isTerminal && s.resolution === 'auto' && known === 'unknown' && canRepaint() ? probeNode(table) : null
-  if (probe) askPixels($, e.requestId, now, (where, err) => report($, where, err))
-  const lines = node || !geo || !hasScene(sim) ? [] : onStage($, () => sceneRows({ sim, geo, hud, powers, isLight: isLightTheme, avatar: s.avatar }).map(parts => ({ parts })), [])
-  return { backend, node, lines, probe }
-}
-
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     try {
@@ -437,21 +365,26 @@ export const register: Register = on => {
       quietSince = null
       setScene(EMPTY_SIM)
       resetPainter()
+      closeLedger()
       demoFrame = -1
       // Os ajustes salvos valem antes do primeiro desenho; um valor estragado volta ao padrão campo a campo.
       const initial = await loadSettings($).catch(err => (report($, 'settings', err), DEFAULT_SETTINGS))
       const loaded = await update($, settings, () => initial)
       fx = effectsOf(loaded)
+      volume = loaded.sound
       await speak($, loaded.language) // registra o comando, já no idioma dos ajustes
-      await readTheme($)
+      isLightTheme = (await readTheme($)) ?? isLightTheme
       const model = await $.session.model()
       const usage = fromUsage(await $.session.usage())
-      await update($, figures, f => ({ ...f, ...usage, model: model || f.model }))
-      // O que o módulo anterior deixou (o estado sobrevive ao reload) é conferido com o engine.
       const startedAt = await $.clock.now()
+      await update($, figures, f => ({ ...f, ...usage, ...paced(f, usage, startedAt), model: model || f.model }))
+      // O que o módulo anterior deixou (o estado sobrevive ao reload) é conferido com o engine.
       const list = await reconcile($, startedAt)
       if (hasWork(list, startedAt)) ensureTicker($)
       else if (list.length) $.clock.after(LINGER_MS, () => void purge($))
+      const facts = await openBooks($, startedAt, usage.costUsd)
+      sessionSeed = facts.seed
+      isSilent = facts.isSilent
     } catch (err) {
       report($, 'session.start', err)
     }
@@ -463,6 +396,12 @@ export const register: Register = on => {
       await update($, isHidden, () => false)
       await update($, picker, () => 'settings')
       return { text: strings.opened }
+    }
+    if (STATS_ARGS.test(e.args)) {
+      // As contas são para a pessoa: o texto aparece na conversa e não vai para o modelo.
+      const now = await $.clock.now()
+      const text = await ledgerReport($, (await read($, figures)).costUsd, now, strings.stats).catch(err => (report($, 'stats', err), null))
+      return { text: text ?? strings.statsOff, isTextDisplayOnly: true }
     }
     const demo = /^\s*demo\S*(\s.*)?$/i.exec(e.args) // "demo", "demonstração", "demonstration"; o resto é a aparência pedida
     if (demo) return { text: await startDemo($, demo[1], true) }
@@ -477,7 +416,7 @@ export const register: Register = on => {
         // Um agente que volta a rodar (acordado por uma mensagem) recomeça a contagem.
         await touchAgent($, e.agentId, (a, now) => ({
           ...a, state: 'running', seenAt: now, endedAt: undefined, tokens: undefined,
-          ...(a.endedAt !== undefined && { startedAt: now, tools: 0, lastTool: null }),
+          ...(a.endedAt !== undefined && { startedAt: now, tools: 0, lastTool: null, fails: 0 }),
         }))
       } else {
         isBandWorking = true
@@ -491,7 +430,7 @@ export const register: Register = on => {
         }, undefined)
         const now = await $.clock.now()
         const costAtStart = (await read($, figures)).costUsd ?? 0
-        await update($, main, () => ({ startedAt: now, tools: 0, lastTool: null, costAtStart }))
+        await update($, main, () => ({ startedAt: now, tools: 0, lastTool: null, costAtStart, fails: 0 }))
         ensureTicker($)
       }
     } catch (err) {
@@ -543,7 +482,9 @@ export const register: Register = on => {
         const model = result.model
         await touchAgent($, result.agentId, (a, now) => ({
           ...a, type: clean(e.subagentType, 40) || a.type, description: clean(e.description, 120), model, seenAt: now,
+          ...(e.parentAgentId && { parentId: e.parentAgentId }), // um agente de agente: a linha dele recua sob a de quem o chamou
         }))
+        cue($, 'spawn', await $.clock.now())
       }
     } catch (err) {
       report($, 'agent.spawn', err)
@@ -551,17 +492,25 @@ export const register: Register = on => {
     return result
   })
 
-  // Cada chamada de ferramenta conta na barra e vira um tijolo no palco, de quem a fez.
+  // Cada chamada de ferramenta conta na barra e vira um tijolo no palco, de quem a fez. Se termina em
+  // erro (ou é recusada), o tijolo racha.
   on('tool.call', async ($, e, next) => {
     const who = e.agentId ?? MAIN
     const tool = String(e.tool)
+    const kind = kindOf(tool)
     void noteTool($, e.agentId, tool) // sem esperar: a chamada não fica atrás da barra
     onStage($, () => {
-      if (fx.hasStage && demoFrame < 0 && (who !== MAIN || sim.isOn)) sim = enqueue(sim, who, kindOf(tool), shortTool(tool))
+      if (fx.hasStage && demoFrame < 0 && (who !== MAIN || sim.isOn)) sim = enqueue(sim, who, kind, shortTool(tool))
     }, undefined)
+    // Uma pergunta à pessoa (ou um plano à espera da aprovação dela) para o turno até ela responder: soa.
+    if (isQuestion(tool)) void $.clock.now().then(now => cue($, 'ask', now)).catch(err => report($, 'sound', err))
+    let hasFailed = true // até a resposta dizer que não: uma chamada que estoura também falhou
     try {
-      return await next(e) // o tempo da ferramenta não conta no orçamento deste hook
+      const result = await next(e) // o tempo da ferramenta não conta no orçamento deste hook
+      hasFailed = result?.isError === true || result?.deny !== undefined
+      return result
     } finally {
+      if (hasFailed) void noteFail($, e.agentId, kind)
       onStage($, () => void (sim = settle(sim, who)), undefined)
     }
   })
@@ -577,10 +526,21 @@ export const register: Register = on => {
           const u = e.usage
           const tokens = u ? u.input_tokens + u.output_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens : undefined
           await touchAgent($, e.agentId, (a, now) => ({ ...a, state, endedAt: now, seenAt: now, tokens }))
+          const now = await $.clock.now()
+          if (e.reason === 'error' && !e.isAborted) cue($, 'fail', now) // um agente interrompido pela pessoa não precisa de aviso
+          keepBooks($, now)
         } else {
+          const isHappy = e.reason === 'answer' && !e.isAborted // só uma resposta de verdade merece festa
           isBandWorking = false
-          endTurn($, e.reason === 'answer' && !e.isAborted) // só uma resposta de verdade merece festa
+          endTurn($, isHappy)
           ensureTicker($) // os próximos quadros veem que o trabalho acabou, redesenham e param
+          const m = await read($, main)
+          const now = await $.clock.now()
+          if (m.startedAt > 0) tally(stats => countTurn(stats, now - m.startedAt, m.tools))
+          // A fanfarra é do tamanho do trabalho, como a festa do palco; um erro soa, uma interrupção não.
+          if (isHappy) cue($, m.tools >= PARTY_FROM ? 'party' : 'done', now)
+          else if (e.reason === 'error') cue($, 'fail', now)
+          keepBooks($, now)
         }
       } catch (err) {
         report($, 'turn.complete', err)
@@ -592,8 +552,9 @@ export const register: Register = on => {
     try {
       const usage = fromUsage(e)
       const hasCostMoved = e.changed.includes('cost')
-      const now = hasCostMoved ? await $.clock.now() : undefined
-      await update($, figures, f => ({ ...f, ...usage, ...(now !== undefined && { costMovedAt: now }) }))
+      const now = await $.clock.now()
+      // Cada janela de limite leva as leituras recentes dela: de onde sai a previsão de quando enche.
+      await update($, figures, f => ({ ...f, ...usage, ...paced(f, usage, now), ...(hasCostMoved && { costMovedAt: now }) }))
       // Fora de um turno ninguém redesenha sozinho: um quadro a mais apaga o destaque do custo.
       if (hasCostMoved) $.clock.after(FLASH_MS + 50, () => void update($, frame, f => (f + 1) % FRAME_WRAP).catch(err => report($, 'flash', err)))
     } catch (err) {
@@ -620,6 +581,7 @@ export const register: Register = on => {
     }
     const table = $.ui.resolve(e)
     const { Box, Button, Text } = table
+    const el = { Box, Button, Text } as never
     // O que os plugins abaixo desenharam aqui fica, acima do card.
     const below = await next(e).catch(() => null)
     const withBelow = (ours: RenderElement): RenderElement => (below ? <Box flexDirection="column">{below}{ours}</Box> : ours)
@@ -631,11 +593,7 @@ export const register: Register = on => {
 
     if (await read($, isHidden)) {
       if (isTerminal) dropStage()
-      return withBelow(
-        <Box justifyContent="flex-end" paddingRight={HIDDEN_RIGHT_PAD}>
-          <Button key="show" label={MARKS.show} dimColor onPress={() => setHidden(false)} />
-        </Box>,
-      )
+      return withBelow(HiddenBar({ el, label: MARKS.show, rightPad: HIDDEN_RIGHT_PAD, onShow: () => void setHidden(false) }))
     }
 
     const list = await read($, agents)
@@ -667,7 +625,14 @@ export const register: Register = on => {
     const energy = demoFrame >= 0 && demoLook ? demoLook.level : energyOf(f.effort)
     const open = await read($, picker)
     const isShown = !e.props.isCollapsed && open !== 'settings' // a aba de ajustes toma o lugar das linhas, palco incluído
-    const draw = drawStage($, e, table, { backend, known, isShown, geo, zoom, hud, powers, settings: s, strings: t, now })
+    // A cor de destaque dos ajustes entra aqui, no desenho: as linhas falam 'claude', a barra pinta com a escolhida.
+    const accent = accentColor(s)
+    // Quem é o mascote: o avatar dos ajustes, ou o que a barra tira para a classe do modelo ou para a sessão.
+    const mascot = mascotOf(s.avatar, (powers.get(MAIN) ?? PLAIN).tier, sessionSeed)
+    const draw = drawStage($, e, table, {
+      backend, known, isShown, isAuto: s.resolution === 'auto', geo, zoom, hud, powers, alt: t.stageAlt, now,
+      look: { isLight: isLightTheme, accent, avatar: mascot },
+    }, { prev: shownSim, cur: sim, steppedAt, frameMs: fx.frameMs, host: hostOf($) })
     // Um palco de imagem ou de vetor não leva texto: o placar volta para a linha de trabalho, abaixo dele.
     const hasStageHud = !draw.node || draw.backend === 'raster'
     const hasWorkRow = !hasStageHud && e.props.isWorking && m.startedAt > 0
@@ -679,7 +644,7 @@ export const register: Register = on => {
     const viewedId = e.props.view?.agentId
     const lines = cardLines({
       figures: f, main: m, agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s,
-      stage: draw.node ? [STAGE_SLOT] : draw.lines, hasStageHud, agentRows, viewedId,
+      stage: draw.node ? [STAGE_SLOT] : draw.lines, hasStageHud, agentRows, viewedId, dayUsd: dayCost(f.costUsd, now),
     })
     const current = f.model ? prettyModel(f.model).toLowerCase() : ''
     // O que está em vigor: decide em que opção o anel de foco cai quando um seletor ou a aba abre.
@@ -694,39 +659,6 @@ export const register: Register = on => {
       await update($, picker, () => null)
       await follow($, e.requestId, opener)
     }
-    // A cor de destaque dos ajustes entra aqui, no desenho: as linhas falam 'claude', a barra pinta com a escolhida.
-    const accent = accentColor(s)
-    const paint = (color: string | undefined) => (color === 'claude' ? accent : color)
-    const run = (q: Part) => <Text color={paint(q.color)} backgroundColor={paint(q.bg)} dimColor={q.dim} bold={q.bold} underline={q.underline}>{q.text}</Text>
-    const gap = (l: Line, room: number) =>
-      ' '.repeat(Math.max(l.tail?.length ? TAIL_GAP : 0, room - lineWidth(l) + (l.tail?.length ? TAIL_GAP : 0)))
-    // Uma linha é um Text só, cortado na borda da barra; o trecho da direita encosta na borda.
-    const row = (l: Line, room: number) => (
-      <Text wrap="truncate-end">
-        {l.parts.map(run)}
-        {gap(l, room)}
-        {(l.tail ?? []).map(run)}
-      </Text>
-    )
-    // A linha de um agente, no terminal, é um botão do tamanho dela: um clique põe a transcrição dele
-    // na tela; outro, na linha de quem já está em vista, volta à conversa principal.
-    const agentRow = (l: Line, id: string) => (
-      <Button key={`agent-${id}`} plain onPress={() => void viewAgent($, id === viewedId ? undefined : id)}>
-        {row(l, width)}
-      </Button>
-    )
-    const el = { Box, Button, Text } as never
-    // Com a transcrição de um agente na tela: de quem ela é, e a volta à conversa principal.
-    const viewRow = viewedId === undefined ? null : ViewRow({
-      el, who: viewParts(list.find(a => a.id === viewedId), width - VIEW_GAP - cols(t.backToMain), t).map(run),
-      gap: VIEW_GAP, back: t.backToMain, onBack: () => void viewAgent($, undefined),
-    })
-    const [first = { parts: [] }, ...rest] = lines
-    // Na primeira linha, modelo e effort são botões: um clique abre o seletor logo abaixo.
-    const headParts = first.parts.map(q => {
-      const action = q.action
-      return action ? <Button key={action} plain onPress={() => void toggle(action)}>{run(q)}</Button> : run(q)
-    })
     // O seletor aberto por um clique no modelo ou no effort: uma linha de opções, a em vigor marcada.
     const pickerRow = open === 'model' || open === 'effort' ? PickerRow({
       el, label: open === 'model' ? t.pickModel : t.pickEffort, accent, marks: MARKS,
@@ -736,41 +668,30 @@ export const register: Register = on => {
       onPick: value => void switchTo($, open, value, e.requestId),
       onClose: () => void close(open),
     }) : null
+    // A aba de ajustes, quando aberta, toma o lugar das linhas.
+    const panel = open !== 'settings' ? null : SettingsPanel({
+      el, settings: s, strings: t, accent, inUse: t.backends[draw.backend], isCramped: s.size === 'grande' && zoom === 1, mascot, isSilent,
+      onChange: patch => {
+        // escolher "automática" de novo é pedir para conferir outra vez se o terminal desenha imagens
+        if (patch.resolution === 'auto') void recheckPixels($).catch(err => report($, 'pixels', err))
+        void applySettings($, cur => ({ ...cur, ...patch }))
+      },
+      onReset: () => void applySettings($, cur => ({ ...DEFAULT_SETTINGS, language: cur.language })), // o idioma não é aparência: fica
+      // a demonstração, quando começa, fecha a aba: o anel volta ao ⚙, como no ✕
+      onDemo: () => void startDemo($).then(text => (text === strings.demo ? void follow($, e.requestId, 'settings') : $.ui.toast(text))),
+      onClose: () => void close('settings'),
+    })
 
-    return withBelow(
-      <Box paddingRight={BAR_RIGHT_PAD}>
-        <Box width={width} flexDirection="column">
-          {s.showRule ? <Text key="rule" wrap="truncate-end">{ruleParts(width, fr, isActive && shown.isFull, energy).map(run)}</Text> : null}
-          <Box key="head">
-            {headParts}
-            <Text wrap="truncate-end">
-              {gap(first, width - BUTTONS_WIDTH - (draw.probe ? 1 : 0))}
-              {(first.tail ?? []).map(run)}
-            </Text>
-            <Button key="settings" label={MARKS.settings} plain dimColor={open !== 'settings'} hover={{ color: accent }} onPress={() => void toggle('settings')} />
-            <Button key="hide" label={MARKS.hide} plain dimColor hover={{ color: accent }} onPress={() => setHidden(true)} />
-            {draw.probe}
-          </Box>
-          {open === 'settings'
-            ? SettingsPanel({
-                el, settings: s, strings: t, accent, inUse: t.backends[draw.backend], isCramped: s.size === 'grande' && zoom === 1,
-                onChange: patch => {
-                  // escolher "automática" de novo é pedir para conferir outra vez se o terminal desenha imagens
-                  if (patch.resolution === 'auto') void recheckPixels($)
-                  void applySettings($, cur => ({ ...cur, ...patch }))
-                },
-                onReset: () => void applySettings($, cur => ({ ...DEFAULT_SETTINGS, language: cur.language })), // o idioma não é aparência: fica
-                // a demonstração, quando começa, fecha a aba: o anel volta ao ⚙, como no ✕
-                onDemo: () => void startDemo($).then(text => (text === strings.demo ? void follow($, e.requestId, 'settings') : $.ui.toast(text))),
-                onClose: () => void close('settings'),
-              })
-            : [
-                ...(viewRow ? [viewRow] : []),
-                ...(pickerRow ? [pickerRow] : []),
-                ...rest.map(l => (l === STAGE_SLOT && draw.node ? draw.node : l.agentId !== undefined && isTerminal ? agentRow(l, l.agentId) : row(l, width))),
-              ]}
-        </Box>
-      </Box>,
-    )
+    return withBelow(Bar({
+      el, width, rightPad: BAR_RIGHT_PAD, accent, lines, stage: draw.node, probe: draw.probe, canView: isTerminal, viewedId, panel, marks: MARKS,
+      rule: s.showRule ? ruleParts(width, fr, isActive && shown.isFull, energy) : null,
+      isSettingsOpen: open === 'settings',
+      // Com a transcrição de um agente na tela: de quem ela é, e a volta à conversa principal.
+      viewed: viewedId === undefined ? null : { who: viewParts(list.find(a => a.id === viewedId), width - VIEW_GAP - cols(t.backToMain), t), gap: VIEW_GAP, back: t.backToMain },
+      above: pickerRow ? [pickerRow] : [],
+      onToggle: kind => void toggle(kind),
+      onHide: () => void setHidden(true),
+      onView: agentId => void viewAgent($, agentId, strings),
+    }))
   })
 }

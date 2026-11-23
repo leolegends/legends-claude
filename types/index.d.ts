@@ -17,8 +17,16 @@ export type StatusSpeed = 'lenta' | 'normal' | 'rapida'
 export type StatusResolution = 'auto' | 'blocos' | 'classica'
 /** O tamanho do palco: o de sempre (quatro linhas) ou o dobro, onde os blocos de terminal mostram mais detalhe. */
 export type StatusSize = 'normal' | 'grande'
-/** Quem é o mascote no palco: o Clawd de sempre (na cor de destaque) ou um avatar colorido. */
+/** Um desenho do mascote no palco: o Clawd de sempre (na cor de destaque) ou um avatar colorido. */
 export type StatusAvatar = 'clawd' | 'pikachu' | 'mario' | 'kratos' | 'elsa'
+/**
+ * Quem é o mascote no palco, como os ajustes guardam: um avatar fixo, ou um que a barra escolhe:
+ * `modelo` é o avatar da classe do modelo (muda quando o modelo muda); `sessao`, um avatar colorido
+ * que sai do id da sessão (o mesmo a sessão inteira, e quase sempre outro na sessão ao lado).
+ */
+export type StatusMascot = StatusAvatar | 'modelo' | 'sessao'
+/** O som da barra: nenhum, baixo ou alto. Só toca onde o Claude Code tem como tocar (no macOS). */
+export type StatusSound = 'mudo' | 'baixo' | 'alto'
 
 /** Os ajustes da aba ⚙: guardados no store do plugin, valem para todas as sessões. */
 export type StatusSettings = {
@@ -33,15 +41,24 @@ export type StatusSettings = {
   resolution: StatusResolution
   /** O tamanho do palco; `grande` só vale fora do palco de texto, e onde a barra tem largura e altura para ele. */
   size: StatusSize
-  /** O avatar do mascote no palco. */
-  avatar: StatusAvatar
+  /** Quem é o mascote no palco: um avatar fixo, o da classe do modelo ou o da sessão. */
+  avatar: StatusMascot
+  /** Os sons da barra: o fim do turno, um ajudante que nasce, um pedido que espera pela pessoa. */
+  sound: StatusSound
   showLimits: boolean
   showTurnCost: boolean
+  /** O custo de hoje, somado entre as sessões: só aparece quando difere do da sessão. */
+  showDayCost: boolean
   maxAgents: 3 | 6 | 10
 }
 
-/** Uma janela de limite de uso (5 horas, 7 dias): quanto já foi e quando zera. */
-export type StatusLimit = { pct: number; resetsAt?: string }
+/** Uma leitura de uma janela de limite: quando foi vista e em quanto estava. */
+export type StatusLimitSample = { at: number; pct: number }
+/**
+ * Uma janela de limite de uso (5 horas, 7 dias): quanto já foi e quando zera. `trail` são as leituras
+ * recentes dela, da mais antiga à mais nova: de onde sai o ritmo, e a previsão de quando ela enche.
+ */
+export type StatusLimit = { pct: number; resetsAt?: string; trail?: StatusLimitSample[] }
 
 /** O que o card mostra da sessão: modelo, effort, custo e limites. */
 export type StatusFigures = {
@@ -61,6 +78,8 @@ export type StatusMain = {
   lastTool: string | null
   /** Custo da sessão quando o turno começou; `null` enquanto nenhum turno começou. */
   costAtStart: number | null
+  /** Quantas ferramentas do turno terminaram em erro (ou foram recusadas). */
+  fails?: number
 }
 
 /** Onde um agente está: rodando, esperando (entre turnos), terminado ou falho. */
@@ -83,6 +102,16 @@ export type StatusAgent = {
   lastTool: string | null
   /** Tokens do último turno do agente, somados (entrada, saída e cache). */
   tokens?: number
+  /** Quantas ferramentas dele terminaram em erro (ou foram recusadas). */
+  fails?: number
+  /** O que o agente gastou até agora, pela lista do engine; ausente onde ela não diz. */
+  costUsd?: number
+  /** O que ele faz agora: o resumo de progresso que o engine guarda dele; ausente enquanto não há um. */
+  label?: string
+  /** As últimas leituras de tokens dele, da mais antiga à mais nova: de onde sai o gráfico de atividade. */
+  samples?: number[]
+  /** O agente que o chamou; ausente quando foi a conversa principal. */
+  parentId?: string
 }
 
 declare module 'claude-code' {

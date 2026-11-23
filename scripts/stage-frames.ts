@@ -24,8 +24,8 @@ import type { Frame } from '../hooks/canvas'
 import { DEMO_CAST, DEMO_FRAMES, applyDemo } from '../hooks/demo'
 import { CELL_H, CELL_W, hdScene } from '../hooks/hd'
 import type { HdScene } from '../hooks/hd'
-import { EFFORTS, powerOf } from '../hooks/power'
-import { sanitize } from '../hooks/settings'
+import { EFFORTS, powerOf, tierOf } from '../hooks/power'
+import { mascotOf, sanitize } from '../hooks/settings'
 import { EMPTY_SIM, MAIN, geometry, step, syncHelpers } from '../hooks/sim'
 import type { Sim } from '../hooks/sim'
 import { rasterCells } from '../hooks/stage'
@@ -38,7 +38,8 @@ const IS_LIGHT = theme === 'claro'
 const IS_BLOCKS = mode === 'blocos'
 const FRAME_MS = 125
 const PAINTS = 2 // pinturas por quadro da simulação: o GIF sai a 16 quadros por segundo
-const AVATAR = sanitize({ avatar: avatarArg }).avatar
+// o avatar pedido; `modelo` é o da classe do modelo do turno de mentira, e `sessao` sai de um id fixo
+const AVATAR = mascotOf(sanitize({ avatar: avatarArg }).avatar, tierOf(model), 'stage-frames')
 const LOOK = { isLight: IS_LIGHT, accent: 'claude', avatar: AVATAR }
 const BLOCK_FIRST = 0x2580
 const BLOCK_LAST = 0x259f

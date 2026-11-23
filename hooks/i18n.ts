@@ -1,11 +1,14 @@
+import { fmtCount } from './format'
 import type { Backend } from './stage'
 import type {
   StatusAccent as Accent,
   StatusAvatar as Avatar,
   StatusLanguage as Language,
+  StatusMascot as Mascot,
   StatusMotion as Motion,
   StatusResolution as Resolution,
   StatusSize as Size,
+  StatusSound as Sound,
   StatusSpeed as Speed,
 } from '../types'
 
@@ -19,7 +22,7 @@ export const LANGUAGES: readonly { id: Language; label: string }[] = [
 ]
 
 /** Os interruptores da aba de ajustes: as chaves dos ajustes que ligam e desligam algo. */
-export type ToggleKey = 'showRule' | 'showStage' | 'showLimits' | 'showTurnCost'
+export type ToggleKey = 'showRule' | 'showStage' | 'showLimits' | 'showTurnCost' | 'showDayCost'
 
 /** Todo texto que a barra mostra, num idioma. */
 export type Strings = {
@@ -34,6 +37,12 @@ export type Strings = {
   agent: string
   more: (count: number) => string
   tools: (count: number) => string
+  /** Quantas ferramentas terminaram em erro. */
+  fails: (count: number) => string
+  /** O que vem antes do custo de hoje, somado entre as sessões. */
+  today: string
+  /** A previsão de quando uma janela de limite enche, no ritmo de agora ("~40m"). */
+  fullIn: (eta: string) => string
   // Os seletores de modelo e effort, o comando e os avisos.
   pickModel: string
   pickEffort: string
@@ -51,6 +60,25 @@ export type Strings = {
   opened: string
   commandDescription: string
   argumentHint: string
+  // O relatório do comando de estatísticas: um rótulo por linha e as contas de cada uma.
+  /** Sem o registro da sessão não há o que relatar. */
+  statsOff: string
+  stats: {
+    title: string
+    session: string
+    today: string
+    /** O rótulo do total de sempre: desde que dia se conta. */
+    since: (day: string) => string
+    records: string
+    bricks: (count: number) => string
+    floors: (count: number) => string
+    fails: (count: number) => string
+    turns: (count: number) => string
+    sessions: (count: number) => string
+    longest: (span: string) => string
+    mostTools: (count: number) => string
+    mostHelpers: (count: number) => string
+  }
   // A demonstração do palco.
   demo: string
   /** A demonstração pedida com outro modelo ou effort: diz com qual aparência ela roda. */
@@ -80,6 +108,11 @@ export type Strings = {
     noRoom: string
     /** O rótulo da linha que escolhe quem é o mascote no palco. */
     avatar: string
+    /** Ao lado das opções de mascote, quando quem escolhe é a barra: quem está em cena agora. */
+    playing: (name: string) => string
+    sound: string
+    /** Ao lado das opções de som, num sistema em que o Claude Code não tem como tocar. */
+    macOnly: string
     show: string
     agents: string
     stillSpeed: string
@@ -89,6 +122,9 @@ export type Strings = {
   speeds: Record<Speed, string>
   resolutions: Record<Resolution, string>
   sizes: Record<Size, string>
+  sounds: Record<Sound, string>
+  /** As opções de mascote em que quem escolhe é a barra: o da classe do modelo, o da sessão. */
+  mascots: Record<Exclude<Mascot, Avatar>, string>
   /** Em que o palco sai: o nome de cada saída, para o "em uso" dos ajustes. */
   backends: Record<Backend, string>
   toggles: Record<ToggleKey, string>
@@ -106,6 +142,9 @@ const PT: Strings = {
   agent: 'agente',
   more: count => `+${count} ${count === 1 ? 'agente' : 'agentes'}`,
   tools: count => `${count} ${count === 1 ? 'tool' : 'tools'}`,
+  fails: count => `${count} ${count === 1 ? 'falha' : 'falhas'}`,
+  today: 'hoje ',
+  fullIn: eta => `enche em ${eta}`,
   pickModel: 'modelo ',
   pickEffort: 'effort ',
   switchFailed: (what, why) => `Não deu para trocar ${what}: ${why}`,
@@ -117,8 +156,24 @@ const PT: Strings = {
   shown: 'Barra de status visível.',
   tooNarrow: columns => `Barra de status visível; ela desenha quando o terminal tiver pelo menos ${columns} colunas.`,
   opened: 'Ajustes abertos na barra.',
-  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre os ajustes, "demo" mostra o palco em ação (com outro modelo e effort: "demo opus max")',
-  argumentHint: '[ajustes|demo [modelo] [effort]]',
+  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre os ajustes, "stats" mostra as contas da sessão, do dia e de sempre, "demo" mostra o palco em ação (com outro modelo e effort: "demo opus max")',
+  argumentHint: '[ajustes|stats|demo [modelo] [effort]]',
+  statsOff: 'Sem estatísticas nesta sessão: a barra não conseguiu abrir o registro dela.',
+  stats: {
+    title: 'estatísticas', // o Claude Code já põe o nome do plugin na frente do que o comando diz
+    session: 'esta sessão',
+    today: 'hoje',
+    since: day => `desde ${day}`,
+    records: 'recordes',
+    bricks: count => `${fmtCount(count, '.')} ${count === 1 ? 'tijolo' : 'tijolos'}`,
+    floors: count => `${fmtCount(count, '.')} ${count === 1 ? 'andar' : 'andares'}`,
+    fails: count => `${fmtCount(count, '.')} ${count === 1 ? 'falha' : 'falhas'}`,
+    turns: count => `${fmtCount(count, '.')} ${count === 1 ? 'turno' : 'turnos'}`,
+    sessions: count => `${fmtCount(count, '.')} ${count === 1 ? 'sessão' : 'sessões'}`,
+    longest: span => `turno mais longo ${span}`,
+    mostTools: count => `${fmtCount(count, '.')} ${count === 1 ? 'tool' : 'tools'} num turno`,
+    mostHelpers: count => `${count} ${count === 1 ? 'agente' : 'agentes'} de uma vez`,
+  },
   demo: 'Demonstração do palco em cena.',
   demoAs: (model, effort) => `Demonstração do palco em cena, como ${model} · ${effort}.`,
   demoUnknown: words => `Não entendi "${words}". Depois de "demo" vai um modelo (haiku, sonnet, opus, fable), um effort (low, medium, high, xhigh, max), ou os dois.`,
@@ -140,6 +195,9 @@ const PT: Strings = {
     size: 'tamanho',
     noRoom: '(sem efeito agora: a barra não tem espaço, ou a resolução é a clássica)',
     avatar: 'mascote',
+    playing: name => `em cena: ${name}`,
+    sound: 'som',
+    macOnly: '(só toca no macOS)',
     show: 'mostrar',
     agents: 'agentes',
     stillSpeed: '(sem efeito com animação parada)',
@@ -149,8 +207,10 @@ const PT: Strings = {
   speeds: { lenta: 'lenta', normal: 'normal', rapida: 'rápida' },
   resolutions: { auto: 'automática', blocos: 'blocos', classica: 'clássica' },
   sizes: { normal: 'normal', grande: 'grande' },
+  sounds: { mudo: 'mudo', baixo: 'baixo', alto: 'alto' },
+  mascots: { modelo: 'por modelo', sessao: 'por sessão' },
   backends: { image: 'pixels', raster: 'blocos', svg: 'vetor', text: 'texto' },
-  toggles: { showRule: 'régua', showStage: 'palco', showLimits: 'limites', showTurnCost: 'custo do turno' },
+  toggles: { showRule: 'régua', showStage: 'palco', showLimits: 'limites', showTurnCost: 'custo do turno', showDayCost: 'custo do dia' },
   tributes: { elsa: 'em homenagem à minha filha' },
 }
 
@@ -164,6 +224,9 @@ const EN: Strings = {
   agent: 'agent',
   more: count => `+${count} ${count === 1 ? 'agent' : 'agents'}`,
   tools: count => `${count} ${count === 1 ? 'tool' : 'tools'}`,
+  fails: count => `${count} failed`,
+  today: 'today ',
+  fullIn: eta => `full in ${eta}`,
   pickModel: 'model ',
   pickEffort: 'effort ',
   switchFailed: (what, why) => `Could not switch ${what}: ${why}`,
@@ -175,8 +238,24 @@ const EN: Strings = {
   shown: 'Status bar visible.',
   tooNarrow: columns => `Status bar visible; it draws once the terminal is at least ${columns} columns wide.`,
   opened: 'Settings opened in the bar.',
-  commandDescription: 'Shows or hides the status bar; "settings" opens the settings, "demo" plays the stage (as another model and effort: "demo opus max")',
-  argumentHint: '[settings|demo [model] [effort]]',
+  commandDescription: 'Shows or hides the status bar; "settings" opens the settings, "stats" shows the tallies of the session, the day and all time, "demo" plays the stage (as another model and effort: "demo opus max")',
+  argumentHint: '[settings|stats|demo [model] [effort]]',
+  statsOff: 'No stats in this session: the bar could not open its record.',
+  stats: {
+    title: 'stats',
+    session: 'this session',
+    today: 'today',
+    since: day => `since ${day}`,
+    records: 'records',
+    bricks: count => `${fmtCount(count, ',')} ${count === 1 ? 'brick' : 'bricks'}`,
+    floors: count => `${fmtCount(count, ',')} ${count === 1 ? 'floor' : 'floors'}`,
+    fails: count => `${fmtCount(count, ',')} failed`,
+    turns: count => `${fmtCount(count, ',')} ${count === 1 ? 'turn' : 'turns'}`,
+    sessions: count => `${fmtCount(count, ',')} ${count === 1 ? 'session' : 'sessions'}`,
+    longest: span => `longest turn ${span}`,
+    mostTools: count => `${fmtCount(count, ',')} ${count === 1 ? 'tool' : 'tools'} in one turn`,
+    mostHelpers: count => `${count} ${count === 1 ? 'agent' : 'agents'} at once`,
+  },
   demo: 'Stage demo playing.',
   demoAs: (model, effort) => `Stage demo playing, as ${model} · ${effort}.`,
   demoUnknown: words => `Could not make sense of "${words}". After "demo" goes a model (haiku, sonnet, opus, fable), an effort (low, medium, high, xhigh, max), or both.`,
@@ -198,6 +277,9 @@ const EN: Strings = {
     size: 'size',
     noRoom: '(no effect right now: the bar has no room, or the resolution is classic)',
     avatar: 'mascot',
+    playing: name => `on stage: ${name}`,
+    sound: 'sound',
+    macOnly: '(only plays on macOS)',
     show: 'show',
     agents: 'agents',
     stillSpeed: '(no effect while the animation is still)',
@@ -207,8 +289,10 @@ const EN: Strings = {
   speeds: { lenta: 'slow', normal: 'normal', rapida: 'fast' },
   resolutions: { auto: 'auto', blocos: 'blocks', classica: 'classic' },
   sizes: { normal: 'normal', grande: 'large' },
+  sounds: { mudo: 'off', baixo: 'low', alto: 'loud' },
+  mascots: { modelo: 'by model', sessao: 'by session' },
   backends: { image: 'pixels', raster: 'blocks', svg: 'vector', text: 'text' },
-  toggles: { showRule: 'rule', showStage: 'stage', showLimits: 'limits', showTurnCost: 'turn cost' },
+  toggles: { showRule: 'rule', showStage: 'stage', showLimits: 'limits', showTurnCost: 'turn cost', showDayCost: 'day cost' },
   tributes: { elsa: 'in honor of my daughter' },
 }
 

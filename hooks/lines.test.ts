@@ -2,12 +2,12 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { reconcileRows, upsert } from './agents'
 import { SPINNER, burst, noise, reveal, ruleParts, shimmer, spin, trail } from './effects'
-import { clean, fit, fmtCost, fmtSpan, fmtTokens, prettyModel, shortTool } from './format'
+import { clean, fit, fmtCost, fmtCount, fmtSoon, fmtSpan, fmtSpark, fmtTokens, prettyModel, shortTool } from './format'
 import { stringsOf } from './i18n'
-import { agentLine, cardLines, hudParts, sortAgents, viewParts } from './lines'
+import { agentLine, cardLines, hudParts, nestAgents, sortAgents, viewParts } from './lines'
 import { lineWidth, merge, partsWidth } from './parts'
 
-import { DEFAULT_SETTINGS, effectsOf, sanitize } from './settings'
+import { DEFAULT_SETTINGS, effectsOf, mascotOf, sanitize } from './settings'
 import type { Line } from './parts'
 import type { StatusAgent } from '../types'
 
@@ -478,3 +478,159 @@ describe('idiomas', () => {
     expect(hudParts(MAIN, NOW).map(p => p.text).join('')).toBe('1m12s · 14 tools · Bash')
   })
 })
+
+describe('formatos novos', () => {
+  test('um prazo aproximado: minutos, horas e dias', () => {
+    expect([30_000, 40 * 60_000, 65 * 60_000, 27 * 3_600_000, Number.NaN, -5].map(fmtSoon)).toEqual(['<1m', '~40m', '~1h05m', '~1d3h', '<1m', '<1m'])
+  })
+
+  test('uma contagem com os milhares agrupados no separador do idioma', () => {
+    expect([fmtCount(12_403, '.'), fmtCount(12_403, ','), fmtCount(999, '.'), fmtCount(Number.NaN, '.'), fmtCount(-3, '.')]).toEqual(['12.403', '12,403', '999', '0', '0'])
+  })
+
+  test('o gráfico de atividade: cada barra é a subida entre duas leituras, a mais alta é a maior do trecho', () => {
+    expect(fmtSpark([0, 10, 10, 50, 130], 8)).toBe('▂▁▅█')
+    expect(fmtSpark([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 4)).toBe('████') // só as últimas, na largura pedida
+    expect(fmtSpark([100, 90, 190], 8)).toBe('▁█') // uma leitura que cai (a conversa compactou) não vira barra negativa
+  })
+
+  test('sem leituras que bastem, ou sem subida nenhuma, não há gráfico', () => {
+    expect([fmtSpark([], 8), fmtSpark([5, 9], 8), fmtSpark([7, 7, 7, 7], 8)]).toEqual(['', '', ''])
+  })
+})
+
+describe('as ferramentas que falharam', () => {
+  const hud = (over: object) => hudParts({ ...MAIN, ...over }, NOW)
+
+  test('as falhas do turno entram no placar, em vermelho, antes da última ferramenta', () => {
+    expect(hud({ fails: 2 }).map(p => p.text).join('')).toBe('1m12s · 14 tools · 2 falhas · Bash')
+    expect(hud({ fails: 2 }).find(p => p.text === '2 falhas')).toMatchObject({ color: 'error' })
+    expect(hud({ fails: 1 }).map(p => p.text).join('')).toContain('1 falha ·')
+    expect(hud({ fails: 0 }).map(p => p.text).join('')).toBe('1m12s · 14 tools · Bash')
+  })
+
+  test('com o palco desligado, a linha de trabalho diz o mesmo', () => {
+    const line = (over: object) => text(card({ isWorking: true, main: { ...MAIN, ...over }, settings: { ...DEFAULT_SETTINGS, showStage: false } })[1] as Line)
+    expect(line({})).toBe('✻······· 1m12s · 14 tools · Bash')
+    expect(line({ fails: 3 })).toBe('✻······· 1m12s · 14 tools · 3 falhas · Bash')
+  })
+})
+
+describe('a previsão do limite e o custo do dia', () => {
+  const MIN = 60_000
+  const resetsAt = new Date(NOW + 130 * MIN).toISOString()
+  const limits = (trail: { at: number; pct: number }[], pct: number, over: object = {}) =>
+    right(card({ figures: { ...FIGURES, fiveHour: { pct, resetsAt, trail } }, max: 160, ...over })[0])
+
+  test('no ritmo de agora a janela enche antes de zerar: a barra diz em quanto tempo', () => {
+    // de 40% a 60% em 10 minutos: mais 20 minutos para os 40 pontos que faltam
+    expect(limits([{ at: NOW - 10 * MIN, pct: 40 }], 60)).toContain('5h ▰▰▰▱▱ 60% ↻2h10m enche em ~20m')
+    expect(limits([{ at: NOW - 10 * MIN, pct: 40 }], 60, { settings: { ...DEFAULT_SETTINGS, language: 'en' } })).toContain('full in ~20m')
+  })
+
+  test('com menos de um quarto de hora, o aviso é vermelho; com mais, âmbar', () => {
+    const forecast = (from: number) => card({ figures: { ...FIGURES, fiveHour: { pct: 80, resetsAt, trail: [{ at: NOW - 10 * MIN, pct: from }] } }, max: 160 })[0]?.tail?.find(p => /enche/.test(p.text))
+    expect(forecast(40)).toMatchObject({ text: ' enche em ~5m', color: 'error' })
+    expect(forecast(74)).toMatchObject({ text: ' enche em ~33m', color: 'warning' })
+  })
+
+  test('sem ritmo que avise (uso lento, ou leituras de menos), a linha é a de sempre', () => {
+    expect(limits([{ at: NOW - 10 * MIN, pct: 59 }], 60)).not.toContain('enche')
+    expect(limits([], 60)).toContain('5h ▰▰▰▱▱ 60% ↻2h10m')
+    expect(limits([], 60)).not.toContain('enche')
+  })
+
+  test('o custo de hoje, somado entre as sessões, aparece quando difere do da sessão', () => {
+    expect(right(card({ dayUsd: 9.8 })[0])).toBe('$1.50 sessão · turno +$0.25 · hoje $9.80')
+    expect(right(card({ dayUsd: 1.5 })[0])).toBe('$1.50 sessão · turno +$0.25') // só esta sessão gastou hoje: seria repetir
+    expect(right(card({ dayUsd: 0.4 })[0])).toContain('hoje $0.40') // uma sessão que vem de ontem
+    expect(right(card({})[0])).not.toContain('hoje')
+    expect(right(card({ dayUsd: 9.8, settings: { ...DEFAULT_SETTINGS, showDayCost: false } })[0])).not.toContain('hoje')
+    expect(right(card({ dayUsd: 9.8, settings: { ...DEFAULT_SETTINGS, language: 'en' } })[0])).toContain('today $9.80')
+  })
+})
+
+describe('a linha de um agente com o que o engine sabe dele', () => {
+  const tail = (over: Partial<StatusAgent>, max = 120) => (agentLine(agent(over), NOW, 0, 0, max).tail ?? []).map(p => p.text).join('')
+
+  test('rodando: o gráfico de atividade, o tempo, as ferramentas, as falhas, o custo e a última ferramenta', () => {
+    expect(tail({ samples: [0, 10, 10, 50, 130], costUsd: 0.12, fails: 1 })).toBe('▂▁▅█ 12s · 4 tools · 1 falha · $0.12 · Grep')
+    expect(tail({})).toBe('12s · 4 tools · Grep') // sem nada disso, a linha de sempre
+    expect(tail({ costUsd: 0.001 })).toBe('12s · 4 tools · Grep') // um custo que arredonda para zero não aparece
+  })
+
+  test('terminado: o tempo, os tokens e quanto custou', () => {
+    expect(tail({ state: 'done', endedAt: NOW, tokens: 12_400, costUsd: 0.31 })).toBe('12s · 12.4k tok · $0.31')
+    expect(tail({ state: 'done', endedAt: NOW, costUsd: 0.31 })).toBe('12s · $0.31')
+  })
+
+  test('o que se lê depois do nome é o que ele faz agora; sem resumo, a descrição da tarefa', () => {
+    const line = agentLine(agent({ label: 'lendo os testes do player' }), NOW, 100, 0, 120)
+    expect(text(line)).toContain('lendo os testes do player')
+    expect(text(line)).not.toContain('buscar rotas HLS')
+    expect(text(agentLine(agent(), NOW, 100, 0, 120))).toContain('buscar rotas HLS')
+  })
+
+  test('numa barra apertada o gráfico sai antes da descrição', () => {
+    const samples = [0, 10, 10, 50, 130]
+    expect(text(agentLine(agent({ samples }), NOW, 100, 0, 120))).toContain('▂▁▅█')
+    const tight = text(agentLine(agent({ samples }), NOW, 100, 0, 50))
+    expect(tight).not.toContain('▂▁▅█')
+    expect(tight).toContain('buscar')
+  })
+
+  test('um agente de agente fica logo abaixo de quem o chamou, recuado', () => {
+    const list = [
+      agent({ id: 'neto', parentId: 'filho', startedAt: NOW - 1_000 }),
+      agent({ id: 'outro', startedAt: NOW - 9_000 }),
+      agent({ id: 'filho', parentId: 'pai', startedAt: NOW - 5_000 }),
+      agent({ id: 'pai', startedAt: NOW - 20_000 }),
+    ]
+    expect(nestAgents(list).map(n => [n.agent.id, n.depth])).toEqual([['pai', 0], ['filho', 1], ['neto', 2], ['outro', 0]])
+    // o recuo de cada linha: nada na raiz, `└` sob quem chamou, e mais duas colunas a cada nível
+    const indents = card({ agents: list, max: 140 }).slice(1).map(l => /^ *(└ )?/.exec(left(l))?.[0])
+    expect(indents).toEqual(['', '└ ', '  └ ', ''])
+  })
+
+  test('quem foi chamado por um agente que já saiu da barra fica na raiz, e um laço não some com ninguém', () => {
+    expect(nestAgents([agent({ id: 'a', parentId: 'sumiu' })]).map(n => [n.agent.id, n.depth])).toEqual([['a', 0]])
+    const loop = nestAgents([agent({ id: 'a', parentId: 'b' }), agent({ id: 'b', parentId: 'a' })])
+    expect(loop.map(n => n.agent.id).sort()).toEqual(['a', 'b'])
+  })
+
+  test('a conferência com a lista do engine traz o custo, o resumo, as leituras e quem o chamou', () => {
+    const info = (over: object) => ({ id: 'a1', status: 'running', type: 'Explore', description: 'buscar rotas HLS', ...over }) as never
+    const [row] = reconcileRows([agent()], [info({ cost: { usd: 0.42 }, label: 'lendo\no player', tokenSamples: [1, 2, Number.NaN, 4], parentId: 'p1' })], NOW)
+    expect(row).toMatchObject({ costUsd: 0.42, label: 'lendo o player', samples: [1, 2, 4], parentId: 'p1' })
+    // um resumo igual à descrição não é notícia; e o que a lista não traz não entra
+    const [plain] = reconcileRows([agent()], [info({ label: 'buscar rotas HLS' })], NOW)
+    expect([plain?.label, plain?.costUsd, plain?.samples, plain?.parentId]).toEqual([undefined, undefined, undefined, undefined])
+    // quem já terminou ainda recebe o custo final
+    const [ended] = reconcileRows([agent({ state: 'done', endedAt: NOW - 1_000 })], [info({ status: 'completed', cost: { usd: 0.9 } })], NOW)
+    expect(ended).toMatchObject({ state: 'done', costUsd: 0.9 })
+    // e um agente adotado da lista já nasce com o que ela sabe
+    const [adopted] = reconcileRows([], [info({ id: 'novo', cost: { usd: 0.05 }, parentId: 'a1' })], NOW)
+    expect(adopted).toMatchObject({ id: 'novo', costUsd: 0.05, parentId: 'a1' })
+  })
+})
+
+describe('os ajustes novos', () => {
+  test('o som nasce mudo, o custo do dia ligado, e um valor estranho volta ao padrão', () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({ sound: 'mudo', showDayCost: true, avatar: 'clawd' })
+    expect(sanitize({ sound: 'alto', showDayCost: false })).toMatchObject({ sound: 'alto', showDayCost: false })
+    expect(sanitize({ sound: 'ensurdecedor', showDayCost: 'sim' })).toMatchObject({ sound: 'mudo', showDayCost: true })
+  })
+
+  test('o mascote pode ser um avatar fixo, o da classe do modelo ou o da sessão', () => {
+    expect(['elsa', 'modelo', 'sessao', 'godzilla'].map(avatar => sanitize({ avatar }).avatar)).toEqual(['elsa', 'modelo', 'sessao', 'clawd'])
+    expect(mascotOf('kratos', 0, 'x')).toBe('kratos')
+    expect(([0, 1, 2, 3] as const).map(tier => mascotOf('modelo', tier, 'x'))).toEqual(['pikachu', 'mario', 'kratos', 'elsa'])
+  })
+
+  test('o avatar da sessão sai do id dela: o mesmo a sessão inteira, colorido, e sessões diferentes tiram avatares diferentes', () => {
+    expect(mascotOf('sessao', 0, 'sessao-a')).toBe(mascotOf('sessao', 3, 'sessao-a'))
+    const drawn = new Set(Array.from({ length: 40 }, (_, i) => mascotOf('sessao', 1, `sessao-${i}`)))
+    expect([...drawn].sort()).toEqual(['elsa', 'kratos', 'mario', 'pikachu'])
+  })
+})
+

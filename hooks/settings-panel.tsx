@@ -3,9 +3,9 @@ import type { EngineInterface, RenderElement } from 'claude-code'
 import { languageKey } from './focus'
 import { LANGUAGES } from './i18n'
 import type { Strings } from './i18n'
-import { ACCENTS, AGENT_LIMITS, AVATARS, MOTIONS, RESOLUTIONS, SIZES, SPEEDS, TOGGLES } from './settings'
+import { ACCENTS, AGENT_LIMITS, AUTO_MASCOTS, AVATARS, MOTIONS, RESOLUTIONS, SIZES, SOUNDS, SPEEDS, TOGGLES } from './settings'
 import { VERSION } from './version'
-import type { StatusSettings as Settings } from '../types'
+import type { StatusAvatar as Avatar, StatusSettings as Settings } from '../types'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -25,6 +25,10 @@ export type PanelProps = {
   inUse: string
   /** O tamanho grande foi pedido e a barra não tem como mostrá-lo agora: um aviso ao lado das opções. */
   isCramped: boolean
+  /** O avatar que está em cena: o escolhido, ou o que a barra tirou para o modelo ou para a sessão. */
+  mascot: Avatar
+  /** O Claude Code não tem como tocar som neste sistema (só toca no macOS): um aviso ao lado das opções de som. */
+  isSilent: boolean
   onChange: (patch: Partial<Settings>) => void
   onReset: () => void
   /** Roda a demonstração do palco. */
@@ -33,10 +37,12 @@ export type PanelProps = {
 }
 
 /** A aba de ajustes: uma linha por grupo, cada opção um botão; a escolhida vem marcada com ●. */
-export const SettingsPanel = ({ el, settings: s, strings: t, accent, inUse, isCramped, onChange, onReset, onDemo, onClose }: PanelProps): RenderElement[] => {
+export const SettingsPanel = ({ el, settings: s, strings: t, accent, inUse, isCramped, mascot, isSilent, onChange, onReset, onDemo, onClose }: PanelProps): RenderElement[] => {
   const { Box, Button, Text } = el
   const label = (text: string) => <Text dimColor>{text.padEnd(LABEL_WIDTH)}</Text>
-  const tribute = t.tributes[s.avatar] // a dedicatória do mascote escolhido, se ele tem uma
+  const tribute = t.tributes[mascot] // a dedicatória do mascote em cena, se ele tem uma
+  // Quando quem escolhe o avatar é a barra, a aba diz quem está em cena agora.
+  const playing = s.avatar === mascot ? null : t.panel.playing(AVATARS.find(a => a.id === mascot)?.label ?? mascot)
 
   // Uma opção: marcada com ● na cor de destaque quando é a atual; `color` pinta o próprio rótulo (a paleta).
   const option = (key: string, text: string, isCurrent: boolean, onPress: () => void, color?: string) => [
@@ -70,7 +76,14 @@ export const SettingsPanel = ({ el, settings: s, strings: t, accent, inUse, isCr
     <Box key="set-avatar">
       {label(t.panel.avatar)}
       {AVATARS.flatMap(a => option(`set-avatar-${a.id}`, a.label, s.avatar === a.id, () => onChange({ avatar: a.id })))}
+      {AUTO_MASCOTS.flatMap(a => option(`set-avatar-${a.id}`, t.mascots[a.id], s.avatar === a.id, () => onChange({ avatar: a.id })))}
+      {playing ? <Text dimColor>{`  ${playing}`}</Text> : null}
       {tribute ? <Text dimColor>{`  ${tribute}`}</Text> : null}
+    </Box>,
+    <Box key="set-sound">
+      {label(t.panel.sound)}
+      {SOUNDS.flatMap(v => option(`set-sound-${v.id}`, t.sounds[v.id], s.sound === v.id, () => onChange({ sound: v.id })))}
+      {isSilent ? <Text dimColor>{`  ${t.panel.macOnly}`}</Text> : null}
     </Box>,
     <Box key="set-motion">
       {label(t.panel.motion)}

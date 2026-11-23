@@ -623,7 +623,7 @@ const find = (ui: { find: (q: { type: string; text: RegExp }) => Promise<unknown
 test('o idioma é a primeira linha da aba de ajustes; trocar muda a barra inteira na hora e fica salvo', async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   const { saved, registered } = await startSession($, on)
-  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|demo [modelo] [effort]]' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|stats|demo [modelo] [effort]]' })
   const ui = await $.ui.mount(band('terminal'))
   await ui.press({ key: 'settings' })
   for (const text of [/^ajustes$/, /^● Português$/, /^English$/, /^Azul$/, /^● completa$/, /^☑ palco$/, / sessão$/]) expect(await find(ui, text)).toBeDefined()
@@ -634,13 +634,13 @@ test('o idioma é a primeira linha da aba de ajustes; trocar muda a barra inteir
   for (const text of [/^ajustes$/, /^Azul$/, /^☑ palco$/, / sessão$/]) expect(await find(ui, text)).toBeUndefined()
   expect(saved.at(-1)).toMatchObject({ language: 'en' })
   // o comando foi registrado de novo, com a descrição e a dica em inglês
-  expect(registered.at(-1)).toMatchObject({ argumentHint: '[settings|demo [model] [effort]]' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[settings|stats|demo [model] [effort]]' })
   expect(registered.at(-1)?.description).toMatch(/^Shows or hides the status bar/)
 
   await ui.press({ key: 'set-language-pt' })
   expect(await find(ui, /^ajustes$/)).toBeDefined()
   expect(saved.at(-1)).toMatchObject({ language: 'pt' })
-  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|demo [modelo] [effort]]' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|stats|demo [modelo] [effort]]' })
   await ui.unmount()
 })
 

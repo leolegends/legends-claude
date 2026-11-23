@@ -3,8 +3,7 @@ import { artOf } from './avatars'
 import type { Figure } from './aura'
 import { SPINNER, noise } from './effects'
 import { cols } from './format'
-import { KIND_PAINT } from './palette'
-import type { Kind } from './palette'
+import { tilePaint } from './palette'
 import { partsWidth } from './parts'
 import type { Part } from './parts'
 import { BRICK_CELLS, brick, dotKey, dotsLayer, rasterRow, spriteLayer } from './pixels'
@@ -120,7 +119,7 @@ const actorOf = (w: Worker, sim: Sim, power: Power | undefined, isLight: boolean
   const headCell = Math.round((x + art.headFrom) / 2)
   const perLayer = Math.max(1, Math.floor(art.headWidth / (BRICK_CELLS * 2)))
   const tiles = [...w.load].slice(0, perLayer * LOAD_LAYERS).flatMap((kind, i) =>
-    brick(headCell + (i % perLayer) * BRICK_CELLS, top - 1 - Math.floor(i / perLayer), KIND_PAINT[kind as Kind] ?? KIND_PAINT.o),
+    brick(headCell + (i % perLayer) * BRICK_CELLS, top - 1 - Math.floor(i / perLayer), tilePaint(kind)),
   )
   const labels = markLabels(pose.mark, anchorsOf(x, art.width), sim.tick, power)
   return { layer, tiles, labels, glow, fore }
@@ -136,14 +135,14 @@ export const visibleWall = (wall: string, geo: Geo) => {
 const bricksOf = (sim: Sim, geo: Geo, wall: string): Dot[] => {
   const pile = sim.workers.map(w => w.queue).join('').slice(0, PILE_COLS * PILE_ROWS)
   return [
-    ...[...pile].flatMap((kind, i) => brick(Math.floor(i / PILE_ROWS) * BRICK_CELLS, FLOOR_Y - (i % PILE_ROWS), KIND_PAINT[kind as Kind] ?? KIND_PAINT.o)),
-    ...sim.belt.flatMap(b => brick(Math.round(b.x), FLOOR_Y, KIND_PAINT[b.kind])),
+    ...[...pile].flatMap((kind, i) => brick(Math.floor(i / PILE_ROWS) * BRICK_CELLS, FLOOR_Y - (i % PILE_ROWS), tilePaint(kind))),
+    ...sim.belt.flatMap(b => brick(Math.round(b.x), FLOOR_Y, tilePaint(b.kind))),
     ...[...wall].flatMap((kind, i) =>
       brick(
         // fiadas alternadas, como numa parede: as ímpares começam uma célula antes
         geo.wallRight - 1 - Math.floor(i / WALL_ROWS) * BRICK_CELLS - ((i % WALL_ROWS) % 2),
         FLOOR_Y - (i % WALL_ROWS),
-        sim.flash > 0 && i === wall.length - 1 ? 'text' : (KIND_PAINT[kind as Kind] ?? KIND_PAINT.o), // o recém-chegado acende
+        sim.flash > 0 && i === wall.length - 1 ? 'text' : tilePaint(kind), // o recém-chegado acende
       ),
     ),
   ]

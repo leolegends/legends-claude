@@ -62,6 +62,33 @@ export const fmtEta = (resetsAt: string | undefined, now: number) => {
   return d > 0 ? `${d}d${h}h` : `${h}h${m}m`
 }
 
+// Um prazo aproximado, para uma previsão: "~40m", "~1h05m", "~2d3h"; menos de um minuto é "<1m".
+export const fmtSoon = (ms: number) => {
+  const m = Math.floor(Math.max(0, Number.isFinite(ms) ? ms : 0) / 60_000), h = Math.floor(m / 60), d = Math.floor(h / 24)
+  if (m < 1) return '<1m'
+  return d > 0 ? `~${d}d${h % 24}h` : h > 0 ? `~${h}h${String(m % 60).padStart(2, '0')}m` : `~${m}m`
+}
+
+// Uma contagem com os milhares agrupados por `separator`: 12.403 em português, 12,403 em inglês.
+export const fmtCount = (n: number, separator: string) =>
+  String(Math.max(0, Math.round(Number.isFinite(n) ? n : 0))).replace(/\B(?=(\d{3})+(?!\d))/g, separator)
+
+const SPARK_LEVELS = '▁▂▃▄▅▆▇█'
+const SPARK_MIN = 3 // leituras: com menos que isso não há duas subidas para comparar
+
+/**
+ * O gráfico de atividade de quem tem um contador que só cresce (os tokens de um agente): de leituras
+ * seguidas dele, a subida entre cada duas vira uma barra, da mais antiga à mais nova, até `width`
+ * delas. A mais alta é a maior subida do trecho. Sem leituras que bastem, ou sem subida nenhuma, ''.
+ */
+export const fmtSpark = (samples: readonly number[], width: number): string => {
+  if (samples.length < SPARK_MIN) return ''
+  const rises = samples.slice(1).map((n, i) => Math.max(0, n - (samples[i] ?? n))).slice(-Math.max(1, width))
+  const peak = Math.max(...rises)
+  if (!(peak > 0) || !Number.isFinite(peak)) return ''
+  return rises.map(rise => SPARK_LEVELS[Math.round((rise / peak) * (SPARK_LEVELS.length - 1))] ?? '▁').join('')
+}
+
 // "claude-fable-5-2[1m]" -> "Fable 5.2 (1M)", "claude-opus-4-20250514" -> "Opus 4"; o resto como veio.
 export const prettyModel = (id: string) => {
   const m = /^claude-([a-z]+)-(\d{1,2})(?:-(\d{1,2}))?(?:-\d{8})?(\[1m\])?$/.exec(id)

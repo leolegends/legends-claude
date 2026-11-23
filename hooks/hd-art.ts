@@ -15,6 +15,10 @@ const BLACK = 0x000000
 export const BRICK_SUBS = 4
 const BEVEL_LIGHT = 0.3 // quanto a quina de cima e da esquerda de um tijolo clareia
 const BEVEL_DARK = 0.32 // e quanto a de baixo e da direita escurece
+const CRACK_DARK = 0.6 // quanto a rachadura de um tijolo escurece a cor dele
+// A rachadura de um tijolo, em pontos a partir do canto dele (um tijolo tem 16 pontos por 8): um risco
+// em ziguezague de cima a baixo, um pouco fora do meio, e uma lasca saindo dele.
+const CRACK: readonly (readonly [x: number, y: number])[] = [[9, 0], [9, 1], [8, 2], [7, 3], [8, 4], [9, 5], [9, 6], [8, 7], [6, 3], [10, 5]]
 
 // O lado de um "ponto" dos desenhos miúdos, em pixels: um quarto de subpixel, nunca menos de um pixel.
 const dotOf = ({ u }: Unit) => Math.max(1, Math.round(u / 4))
@@ -23,19 +27,22 @@ const dotOf = ({ u }: Unit) => Math.max(1, Math.round(u / 4))
  * Um tijolo em (`x`, `y`), em pixels: quatro subpixels de largura, uma sublinha de altura. No traço
  * fino ganha relevo: a quina de cima e da esquerda clara, a de baixo e da direita escura.
  */
-export const brickShapes = (x: number, y: number, unit: Unit, rgb: number, isFine: boolean): Shape[] => {
+export const brickShapes = (x: number, y: number, unit: Unit, rgb: number, isFine: boolean, isCracked = false): Shape[] => {
   const w = BRICK_SUBS * unit.u
   const h = unit.v
   if (!isFine) return [box(x, y, w, h, rgb)]
   const edge = dotOf(unit)
   const light = blend(rgb, WHITE, BEVEL_LIGHT)
   const dark = blend(rgb, BLACK, BEVEL_DARK)
+  const crack = blend(rgb, BLACK, CRACK_DARK)
   return [
     box(x, y, w, h, rgb),
     box(x, y, w, edge, light),
     box(x, y, edge, h, light),
     box(x, y + h - edge, w, edge, dark),
     box(x + w - edge, y, edge, h, dark),
+    // um tijolo rachado (o de uma chamada que falhou): a rachadura por cima do relevo
+    ...(isCracked ? CRACK.map(([cx, cy]) => box(x + cx * edge, y + cy * edge, edge, edge, crack)) : []),
   ]
 }
 
