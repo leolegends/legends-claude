@@ -18,7 +18,7 @@ export type StatusResolution = 'auto' | 'blocos' | 'classica'
 /** O tamanho do palco: o de sempre (quatro linhas) ou o dobro, onde os blocos de terminal mostram mais detalhe. */
 export type StatusSize = 'normal' | 'grande'
 /** Quem é o mascote no palco: o Clawd de sempre (na cor de destaque) ou um avatar colorido. */
-export type StatusAvatar = 'clawd' | 'pikachu' | 'mario' | 'kratos'
+export type StatusAvatar = 'clawd' | 'pikachu' | 'mario' | 'kratos' | 'elsa'
 
 /** Os ajustes da aba ⚙: guardados no store do plugin, valem para todas as sessões. */
 export type StatusSettings = {

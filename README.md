@@ -65,7 +65,7 @@ The mascot is not always the same. The **class of the model** decides who it is;
 - **Each helper has the power of its agent**: the model and the effort it runs with. A helper's aura is smaller than the mascot's; asleep or after failing, it has none.
 - **Outside a turn**, when only the helpers are still working, the mascot rests: it keeps the eyes and the sheen of its class, without the energy of the effort.
 - **On a light theme** the aura fades towards white instead of dark; lightning takes the theme's text color.
-- **The colored avatars have an aura of their own.** The class color is the aura of Clawd and of the helpers. Pikachu, Mario and Kratos each have the aura of their element and, when it is strong, they transform: see [Mascots](#mascots-clawd-pikachu-mario-and-kratos).
+- **The colored avatars have an aura of their own.** The class color is the aura of Clawd and of the helpers. Pikachu, Mario, Kratos and Elsa each have the aura of their element and, when it is strong, they transform: see [Mascots](#mascots-clawd-pikachu-mario-kratos-and-elsa).
 - Power is drawing only: it does not change what the stage tells (every tool is still a brick) nor anyone's speed.
 
 To see a combination without switching models: `/legends-claude demo opus max` plays the demo with that look (a model, an effort, or both; a word that is neither is refused with a notice). In the demo, one helper is a Sonnet at `high` and the other a Haiku at `max`.
@@ -74,9 +74,9 @@ How the text stage is drawn: every terminal cell counts as 2×2 "subpixels", dra
 
 The animation only runs while there is something to show (a turn, an agent, the demo, or the scene winding down: a brick on the belt, confetti falling). When idle, the bar does not redraw and costs nothing.
 
-## Mascots: Clawd, Pikachu, Mario and Kratos
+## Mascots: Clawd, Pikachu, Mario, Kratos and Elsa
 
-![The three colored avatars on the stage in pixels, large size, with the effort climbing from low to max: each one's aura grows and, at xhigh, Pikachu becomes Raichu, Mario becomes Super Mario and Kratos flies into a rage](docs/avatars.gif)
+![The four colored avatars on the stage in pixels, large size, with the effort climbing from low to max: each one's aura grows and, at xhigh, Pikachu becomes Raichu, Mario becomes Super Mario, Kratos flies into a rage and Elsa becomes the fifth spirit](docs/avatars.gif)
 
 Who the mascot is on the stage is picked in the settings tab (`⚙`), on the `mascot` row. The change applies right away and is saved.
 
@@ -86,17 +86,21 @@ Who the mascot is on the stage is picked in the settings tab (`⚙`), on the `ma
 | Pikachu | Yellow, with dark-tipped ears, red cheeks and the lightning-bolt tail. | **Lightning**: a blue electric field with a spiky outline and yellow crackles around it. | Becomes **Raichu**: orange, with a white belly, yellow cheeks, brown ears and paws, and the thin tail that ends in a bolt. |
 | Mario | Red cap and shirt, mustache, blue overalls with yellow buttons, white gloves. | **Star**: the whole rainbow, always moving, with little golden stars rising. | Becomes **Super Mario**: with a yellow cape, from the shoulders to the feet. |
 | Kratos | Ash-white skin, the red stripe over the eye, beard, golden pauldron and leather skirt. | **Fire**: orange flames with red tips, yellow next to the body, with embers rising. | Flies into a **rage**: the stripe and the eyes light up, the skin takes the heat of the fire and the fists burn. |
+| Elsa | Blond braid over the shoulder, lilac eyeshadow, ice-blue dress down to the floor, sheer sleeves and cape. | **Ice**: the blue of a winter night, with pale-tipped crystals around it and snowflakes falling. | Becomes the **fifth spirit**: hair down and a white dress, with lilac sleeves and ice diamonds. |
 
 - **Two drawings per colored avatar, and per powered form.** The fine one (36×20 dots) shows wherever there is detail: in pixels, in vector and in `large` blocks. In `normal`-size blocks and on the text stage a low-resolution version (18×5) is used, much simpler: it is what fits in quadrant blocks with two colors per cell.
 - **Everything Clawd does, they do.** They blink, look around while thinking, raise their arms to carry and to celebrate, walk, sit down to sleep, and fade when they fail.
 - **The aura belongs to the character, not to the class.** On a colored avatar the paints of the aura (and of the streaks, the sparks and the jets) are those of its element, on any model. It is a more vivid aura than a class glow, with three layers wherever there is detail: the heart, lighter, next to the body; the core; and the tips and edges. The effort still gives its size, and the class gives the rest: the spark, the sheen, the lit pupils from Opus up, Fable's flight and the fireworks. The sheen is lighter over a colored avatar, so it keeps showing underneath.
 - **The transformation comes with the effort.** The avatar changes form when the aura reaches the strength at which the sparks rise: from `xhigh` up on Sonnet and Opus, already at `high` on Fable, only at `max` on Haiku. Outside a turn, asleep or after failing it goes back to the base drawing.
-- **Lightning is Pikachu's.** The crackles show with any aura, and once it becomes Raichu yellow bolts strike beside it, on any class and more often than those of Opus and Fable. Fire and star follow the class rule for lightning.
+- **Lightning is Pikachu's.** The crackles show with any aura, and once it becomes Raichu yellow bolts strike beside it, on any class and more often than those of Opus and Fable. Fire, star and ice follow the class rule for lightning.
+- **Snow is Elsa's.** The outline of her aura is made of crystals: each tip has its own place and grows or shrinks slowly, instead of waving like the flames or jumping like the electric field. The core is the faintest layer (it is glass: the background shows through) and what shines are the tips and the edges. And what she lets loose are snowflakes: they fall down the sides instead of rising, land above the floor and melt there. On a light theme the tips, the edges and the snowflakes swap the pale cyan and the white for a deeper blue, so they do not vanish into the background. The dress goes down to the floor: in place of legs, its hem and the tips of the cape sway from one step to the next. And her eyes stay blue on any model: from Opus up only the bottom line of each one lights up, and closed or looking sideways they do not light up.
 - **Their colors are their own.** The accent color does not paint a colored avatar; it still applies to the rest of the bar (the spark, the model, the comet, the rule).
 - **The helpers do not change**: they are still the small Clawds, each in its agent's color.
 - The choice is drawing only: all of them have Clawd's width and head, so the stage tells the same story with any of them (where it stops, how many bricks it carries).
 
-Pikachu, Raichu, Mario and Kratos are characters and trademarks of their owners (Nintendo / The Pokémon Company and Sony Interactive Entertainment). The drawings here are fan-made pixel art, with no affiliation with or endorsement by those companies.
+Elsa is here in honor of my daughter: with her as the mascot, the settings tab says so next to the `mascot` row.
+
+Pikachu, Raichu, Mario, Kratos and Elsa are characters and trademarks of their owners (Nintendo / The Pokémon Company, Sony Interactive Entertainment and Disney). The drawings here are fan-made pixel art, with no affiliation with or endorsement by those companies.
 
 ## Resolution: pixels, blocks, vector or text
 
@@ -153,7 +157,7 @@ To remove: `claude plugin uninstall legends-claude`.
 ⚙ settings                                                   ▶ demo   restore defaults   ✕
 language     Português  ● English
 color        ● Claude  Blue  Green  Purple  Pink  Cyan  Amber  Mono
-mascot       ● Clawd  Pikachu  Mario  Kratos
+mascot       ● Clawd  Pikachu  Mario  Kratos  Elsa
 animation    ● full  subtle  still
 speed        slow  ● normal  fast
 resolution   ● auto  blocks  classic    in use: blocks
@@ -166,7 +170,7 @@ agents       3  ● 6  10
 | --- | --- |
 | language | English or Portuguese: switches every text in the bar, the notices and the command's description at once. With no saved choice, a fresh install follows the system language (`LC_ALL`, `LC_MESSAGES`, `LANG`): Portuguese if it says `pt`, English otherwise. "Restore defaults" leaves the language alone. |
 | color | The accent color: the mascot, the spark, the model, the comet, the rule's pulse, the lit-up cost. Each option is already shown in its own color. `Claude` and `Mono` follow Claude Code's light/dark theme. |
-| mascot | Who the mascot is on the stage. `Clawd` is the usual one, in the accent color. `Pikachu`, `Mario` and `Kratos` are colored avatars with their own colors (the accent color still applies to the rest of the bar): in pixels, vector and large blocks they show in the fine drawing; in normal-size blocks and on the text stage, in a low-resolution version. Each colored avatar has the aura of its element (lightning, star, fire) and transforms at a high effort (Raichu, Super Mario, Kratos in a rage); the sheen, the lit eyes and the flight follow the model's class. The helpers are still the small Clawds. |
+| mascot | Who the mascot is on the stage. `Clawd` is the usual one, in the accent color. `Pikachu`, `Mario`, `Kratos` and `Elsa` are colored avatars with their own colors (the accent color still applies to the rest of the bar): in pixels, vector and large blocks they show in the fine drawing; in normal-size blocks and on the text stage, in a low-resolution version. Each colored avatar has the aura of its element (lightning, star, fire, ice) and transforms at a high effort (Raichu, Super Mario, Kratos in a rage, the fifth spirit); the sheen, the lit eyes and the flight follow the model's class. The helpers are still the small Clawds. |
 | animation | `full` is everything, stage included; `subtle` keeps only the pulsing spark and the comet (no stage, rule pulse, emerging name, shimmer or burst); `still` moves nothing and only updates the time once a second. |
 | speed | The duration of a frame: 200, 125 or 80 ms. It is also the pace of the stage. No effect while the animation is still. |
 | resolution | What the stage is drawn in. `auto` is the best the screen offers: real pixels in a terminal that draws images, terminal blocks in the others, vector in the desktop app. `blocks` keeps the blocks even where there are pixels. `classic` is the text stage. Next to the options, the tab says what is in use on this screen. |
@@ -216,9 +220,9 @@ The hooks module and what it imports, in `hooks/`:
 - `canvas.ts`, `png.ts`, `blocks.ts`, `vector.ts`: from the rectangles to a frame of pixels, to a PNG (the mod has no zlib: the encoder is its own), to terminal cells (the block and the two colors that come closest to each cell) and to SVG.
 - `stage.ts`, `stage-node.tsx`, `painter.ts`: which way the stage is drawn on each screen, its element (`Image`, `Raster` or `Svg`), and the clock that repaints it between frames and asks the terminal whether it draws images.
 - `power.ts`: the power of whoever is working: the model's class, the effort's step, the aura's strength and the spark of each class.
-- `aura.ts`: the look of a creature with power, pure: the aura (the class's, or that of an avatar's element: fire, lightning, star), the body's sheen, the eyes, the sparks, the crackles, the lightning, the jets and the fireworks.
+- `aura.ts`: the look of a creature with power, pure: the aura (the class's, or that of an avatar's element: fire, lightning, star, ice), the body's sheen, the eyes, the sparks (and the snowflakes), the crackles, the lightning, the jets and the fireworks.
 - `pixels.ts`, `sprites.ts`, `palette.ts`, `color.ts`: the subpixel renderer (with the glow behind the scene), the creatures' drawings, the colors and the color math.
-- `avatars.ts`: the mascot's colored avatars, as text: each one's palette, the common and the fine drawing, with the stances as patches over it; and, for each one, the element of its aura and its powered form (another drawing, declared before the base one). A new avatar is a new drawing here, an option in `settings.ts` and a name in the `StatusAvatar` type.
+- `avatars.ts`, `elsa.ts`, `avatar-kit.ts`: the mascot's colored avatars, as text: each one's palette, the common and the fine drawing, with the stances as patches over it; and, for each one, the element of its aura and its powered form (another drawing, declared before the base one). Elsa's drawings have a file of their own, and `avatar-kit.ts` has what all of them use to draw themselves. A new avatar is a new drawing (in a file of its own), an entry in `AVATAR_ART`, an option in `settings.ts` and a name in the `StatusAvatar` type.
 - `demo.ts`: the script of the demo.
 - `i18n.ts`: the bar's texts in Portuguese and in English. A new text goes into the `Strings` type and the compiler demands its translation in both.
 - `settings.ts`, `settings-panel.tsx`: the settings and their tab.
@@ -226,7 +230,7 @@ The hooks module and what it imports, in `hooks/`:
 
 The code comments and the test names are in Portuguese, the language the project was born in.
 
-The tests (`*.test.ts`, 502 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene, the power of each class, the aura and the form of each avatar, the PNG encoder and the fit to blocks, and the bar mounted on each surface, in text, in blocks, in pixels and in vector: the phases of a request piece by piece, an agent's transcript on screen and the focus ring included. The test kit does not hand a test the request to move the focus ring (`$.ui.focus`): the ring actually moving is checked in a real Claude Code (`claude --plugin-dir .`, `ctrl+x tab`).
+The tests (`*.test.ts`, 530 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene, the power of each class, the aura and the form of each avatar, the PNG encoder and the fit to blocks, and the bar mounted on each surface, in text, in blocks, in pixels and in vector: the phases of a request piece by piece, an agent's transcript on screen and the focus ring included. The test kit does not hand a test the request to move the focus ring (`$.ui.focus`): the ring actually moving is checked in a real Claude Code (`claude --plugin-dir .`, `ctrl+x tab`).
 
 The GIFs of the two READMEs come out of the same functions that draw the bar, outside Claude Code (needs `bun` and Pillow). The make-believe turn has the large stage, in blocks, as most terminals show it, and the mascot switches avatar at each stretch: Clawd as Fable max and then Pikachu (Opus), Mario (Sonnet) and Kratos (Opus), each one first at `high`, in the base drawing, and then at `max`, transformed; `scripts/demo-frames.ts` still gives a turn with a single model and effort. The power table is the same in both languages:
 
@@ -243,8 +247,8 @@ bun run scripts/stage-frames.ts /tmp/pixels.bin 100 pixels normal fable max
 bun run scripts/stage-frames.ts /tmp/large.bin 112 blocos grande fable max
 python3 scripts/stage-gif.py docs/stage.gif "pixels=/tmp/pixels.bin" "blocos, grande  ·  blocks, large=/tmp/large.bin"
 # the mascots GIF: the last argument of stage-frames.ts is the avatar; with the effort `escada` ("staircase") it climbs from low to max along the demo
-for a in pikachu mario kratos; do bun run scripts/stage-frames.ts /tmp/$a.bin 120 pixels grande opus escada escuro $a; done
-python3 scripts/stage-gif.py docs/avatars.gif "Pikachu → Raichu=/tmp/pikachu.bin" "Mario → Super Mario=/tmp/mario.bin" "Kratos → Fúria Espartana  ·  Spartan Rage=/tmp/kratos.bin"
+for a in pikachu mario kratos elsa; do bun run scripts/stage-frames.ts /tmp/$a.bin 120 pixels grande opus escada escuro $a; done
+python3 scripts/stage-gif.py docs/avatars.gif "Pikachu → Raichu=/tmp/pikachu.bin" "Mario → Super Mario=/tmp/mario.bin" "Kratos → Fúria Espartana  ·  Spartan Rage=/tmp/kratos.bin" "Elsa → Quinto Espírito  ·  Fifth Spirit=/tmp/elsa.bin"
 ```
 
 The documentation has two files that change together: `README.md` (English) and `README.pt-BR.md` (Portuguese).

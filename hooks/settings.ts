@@ -52,6 +52,7 @@ export const AVATARS: readonly { id: Avatar; label: string }[] = [
   { id: 'pikachu', label: 'Pikachu' },
   { id: 'mario', label: 'Mario' },
   { id: 'kratos', label: 'Kratos' },
+  { id: 'elsa', label: 'Elsa' },
 ]
 
 export const AGENT_LIMITS = [3, 6, 10] as const

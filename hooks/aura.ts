@@ -12,10 +12,10 @@ import type { Power } from './power'
 export type Dot = readonly [number | undefined, Paint]
 
 /**
- * O elemento da aura de um avatar: fogo, raio ou estrela. Com ele, as tintas da aura são as do
+ * O elemento da aura de um avatar: fogo, raio, estrela ou gelo. Com ele, as tintas da aura são as do
  * elemento, em qualquer classe de modelo; sem ele, a aura tem a cor da classe.
  */
-export type Element = 'fire' | 'volt' | 'star'
+export type Element = 'fire' | 'volt' | 'star' | 'frost'
 
 /** Um bicho num quadro, como a aura o enxerga. */
 export type Figure = {
@@ -174,15 +174,22 @@ export const HEART_DEPTH = 2
 // As tintas de cada elemento, de dentro para fora. O fogo vai do amarelo ao vermelho. O raio é um campo
 // elétrico azul, quase branco por dentro, e o que ele solta (as faíscas, o raio que cai) é amarelo: num
 // clarão amarelo o rato amarelo sumiria. A estrela dá a volta no arco-íris, mais clara por dentro, e
-// solta estrelinhas de ouro.
+// solta estrelinhas de ouro. O gelo é o azul de uma noite de inverno, com as pontas e as beiradas num
+// ciano claro e o coração quase branco, e solta flocos de neve brancos.
+type Tones = { heart: string; core: string; rim: string }
 const FIRE = { heart: '#FFD75E', core: '#FF8A1F', rim: '#E2371C' } as const
 const VOLT = { heart: '#DDF4FF', core: '#58BFFF', rim: '#2F6FE0', spark: '#FFE45C' } as const
+const FROST = { heart: '#F4FDFF', core: '#5568E0', rim: '#A8ECFF', flake: '#EAF8FF' } as const
+// Num tema claro o ciano claro das pontas e o branco dos flocos sumiriam no fundo: ali são azuis fechados.
+const FROST_DAY = { ...FROST, rim: '#2F9FD0', flake: '#7FC4E6' } as const
 // Quanto cada camada esmaece, de dentro para fora. As de um elemento esmaecem bem menos que o clarão de
 // uma classe, que é só um brilho atrás do bicho: a aura de um avatar é para ser vista. O campo do raio
-// é o mais apagado dos três: quem brilha nele são os estalos.
+// é o mais apagado: quem brilha nele são os estalos. O gelo é vidro, não chama: o miolo deixa o fundo
+// aparecer, e quem brilha são as pontas e as beiradas dos cristais, quase tanto quanto o coração.
 type Fades = readonly [heart: number, core: number, rim: number]
 const VIVID: Fades = [0.06, 0.14, 0.4]
 const FIELD: Fades = [0.1, 0.3, 0.5]
+const GLASS: Fades = [0.06, 0.42, 0.14]
 const SHELL = 2 // quantos subpixels de fora da aura de um elemento são só beirada
 const STAR_PER_COLUMN = 10 // quanto o matiz da estrela anda por subpixel de largura, em graus
 const STAR_PER_TICK = 30 // e por quadro: uma volta inteira a cada doze
@@ -195,13 +202,29 @@ const EMBER_SHARE = 0.5 // a fração das fagulhas do fogo que sobe amarela; as 
 // do subpixel inteiro: no traço fino, as duas meias colunas dele saltam juntas.
 const zap = (x: number, tick: number) => TONGUE_MIN + (1 - TONGUE_MIN) * noise(x, Math.floor(tick)) ** 2
 
+const CRYSTAL_PITCH = 3 // de quantos em quantos subpixels há uma ponta de cristal
+const CRYSTAL_PEAK = 1 // e em qual deles ela fica
+const CRYSTAL_HOLD = 6 // quadros que um cristal leva de uma altura até a seguinte
+
+// As pontas do clarão de gelo: cristais. Cada um tem o seu lugar e a sua altura: sobe reto até a ponta
+// e desce reto do outro lado, e cresce ou encolhe aos poucos até a altura seguinte. Nada ondula nem
+// salta. No traço fino `x` e `tick` vêm com fração: os lados são retos e o crescimento, contínuo.
+const crystal = (x: number, tick: number) => {
+  const k = Math.floor((x - CRYSTAL_PEAK) / CRYSTAL_PITCH + 0.5) // o cristal mais perto desta coluna
+  const slope = 1 - Math.abs(x - (k * CRYSTAL_PITCH + CRYSTAL_PEAK)) / (CRYSTAL_PITCH / 2)
+  const beat = Math.floor(tick / CRYSTAL_HOLD)
+  const from = noise(k, beat)
+  const height = from + (noise(k, beat + 1) - from) * (tick / CRYSTAL_HOLD - beat)
+  return TONGUE_MIN + (1 - TONGUE_MIN) * height * slope
+}
+
 const solid = (paint: Paint) => () => paint
 
 /**
  * A aura de um bicho num quadro: a do elemento dele ou, sem elemento, a da classe (uma tinta só, que
- * esmaece mais nas pontas e beiradas).
+ * esmaece mais nas pontas e beiradas). O tema só muda as tintas do gelo: as outras servem aos dois.
  */
-export const flareOf = (p: Power, tick: number, element?: Element): Flare => {
+export const flareOf = (p: Power, tick: number, element?: Element, isLight = false): Flare => {
   const wave = (x: number) => tongue(x, tick)
   if (!element) {
     const paint = classPaint(p, tick)
@@ -218,17 +241,23 @@ export const flareOf = (p: Power, tick: number, element?: Element): Flare => {
       mote: solid(STAR_MOTE), lick: wave, rimFrom,
     }
   }
-  const tones = element === 'fire' ? FIRE : VOLT
-  const fades = element === 'fire' ? VIVID : FIELD
-  return {
+  // As três camadas de um elemento de tintas fixas.
+  const layers = (tones: Tones, fades: Fades) => ({
     heart: { paint: solid(tones.heart), fade: fades[0] },
     core: { paint: solid(tones.core), fade: fades[1] },
     rim: { paint: solid(tones.rim), fade: fades[2] },
-    mote: element === 'fire' ? x => (noise(x, Math.floor(tick)) < EMBER_SHARE ? FIRE.heart : FIRE.core) : solid(VOLT.spark),
-    lick: element === 'volt' ? x => zap(x, tick) : wave,
     rimFrom,
+  })
+  if (element === 'fire') return { ...layers(FIRE, VIVID), mote: x => (noise(x, Math.floor(tick)) < EMBER_SHARE ? FIRE.heart : FIRE.core), lick: wave }
+  if (element === 'frost') {
+    const tones = isLight ? FROST_DAY : FROST
+    return { ...layers(tones, GLASS), mote: solid(tones.flake), lick: x => crystal(x, tick) }
   }
+  return { ...layers(VOLT, FIELD), mote: solid(VOLT.spark), lick: x => zap(x, tick) }
 }
+
+/** As fagulhas deste elemento caem em vez de subir: são flocos de neve. */
+export const isSnow = (element: Element | undefined): boolean => element === 'frost'
 
 /** O raio de uma aura: a classe a partir da qual cai, a força que pede, de quantos em quantos quadros, e a tinta dele. */
 export type Storm = { tier: number; from: number; every: number; paint: Paint }
@@ -307,7 +336,7 @@ export const glowOf = (p: Power, figure: Figure, mood: Mood): Glow | null => {
   const from = left - reach
   // O clarão para uma sublinha acima do chão: a linha dos pés fica limpa, com as patas à mostra.
   const base = floor - 1
-  const flare = flareOf(p, mood.tick, figure.element)
+  const flare = flareOf(p, mood.tick, figure.element, mood.isLight)
   const rimFrom = flare.rimFrom(reach)
   // Em cada coluna: de que sublinha a que sublinha o clarão vai, e se a coluna é beirada.
   const flames = Array.from({ length: tops.length + reach * 2 }, (_, i) => {
@@ -336,13 +365,14 @@ export const glowOf = (p: Power, figure: Figure, mood: Mood): Glow | null => {
 }
 
 /**
- * O que a aura solta na frente da cena: fagulhas que sobem pelos lados do bicho e, nos poderes mais
- * altos, um raio que cai ao lado dele de tempos em tempos. O avatar de raio ainda estala em volta.
+ * O que a aura solta na frente da cena: fagulhas que sobem pelos lados do bicho (as do avatar de gelo
+ * são flocos de neve, e caem) e, nos poderes mais altos, um raio que cai ao lado dele de tempos em
+ * tempos. O avatar de raio ainda estala em volta.
  */
 export const sparksOf = (p: Power, figure: Figure, mood: Mood): Dot[] => {
   const { bitmap, left, floor, strength, element } = figure
   const { tick, isLight } = mood
-  const paint = flareOf(p, tick, element).mote
+  const paint = flareOf(p, tick, element, isLight).mote
   // Os estalos do avatar de raio vêm com qualquer aura; o resto, só com ela forte.
   const arcs = arcsOf(figure, tick).flat().map(([x, y]): Dot => [dotKey(left + x, y), sparkOf(paint(left + x), isLight)])
   if (strength < MOTES_FROM) return arcs
@@ -357,7 +387,9 @@ export const sparksOf = (p: Power, figure: Figure, mood: Mood): Dot[] => {
     const spread = Math.floor(noise(k * 7 + 1, life) * (reach + 2))
     const sway = Math.round(Math.sin((age + k) * 1.1))
     const x = (isRight ? left + width + spread : left - 1 - spread) + sway
-    return [dotKey(x, floor - 1 - age), sparkOf(paint(x), isLight)]
+    // sobe do chão, uma sublinha por quadro; um floco de neve faz o mesmo caminho de cima para baixo
+    const y = isSnow(element) ? floor - MOTE_LIFE + age : floor - 1 - age
+    return [dotKey(x, y), sparkOf(paint(x), isLight)]
   })]
   if (!strikes(storm, p, strength, tick)) return motes
   // O raio: desce do alto até o chão em ziguezague, de um lado e depois do outro.
@@ -382,7 +414,7 @@ export const streaksOf = (p: Power, figure: Figure, mood: Mood, side: -1 | 1): D
   const { bitmap, left, top, strength } = figure
   if (p.tier < STREAK_TIER || strength < STREAK_FROM) return []
   const width = widthOf(bitmap)
-  const paint = flareOf(p, mood.tick, figure.element).core.paint
+  const paint = flareOf(p, mood.tick, figure.element, mood.isLight).core.paint
   const reach = REACH[strength] ?? 0
   return STREAK_ROWS.flatMap((row, k): Dot[] => {
     if (row >= bitmap.length) return []
@@ -400,7 +432,7 @@ export const streaksOf = (p: Power, figure: Figure, mood: Mood, side: -1 | 1): D
 export const jetsOf = (p: Power, figure: Figure, mood: Mood): Dot[] => {
   const { bitmap, left, floor } = figure
   const under = bitmap[bitmap.length - 1] ?? ''
-  const paint = flareOf(p, mood.tick, figure.element).mote
+  const paint = flareOf(p, mood.tick, figure.element, mood.isLight).mote
   return [...under].flatMap((mark, col): Dot[] =>
     isPainted(mark) && noise(col * 5 + 2, mood.tick) < JET_SHARE ? [[dotKey(left + col, floor), sparkOf(paint(left + col), mood.isLight)]] : [],
   )
