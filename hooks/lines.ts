@@ -1,5 +1,7 @@
 import type { SessionUsage } from 'claude-code'
 
+import { contextLine, fromContext } from './context-line'
+import type { CompactState } from './context-line'
 import { IDLE_GLYPH, burst, reveal, seedOf, shimmer, trail } from './effects'
 import { PENDING, fit, fmtCost, fmtEta, fmtSoon, fmtSpan, fmtSpark, fmtTokens, prettyModel } from './format'
 import { stringsOf } from './i18n'
@@ -52,13 +54,13 @@ const BASE = stringsOf(DEFAULT_SETTINGS.language)
 
 const levelColor = (pct: number) => (pct >= 85 ? 'error' : pct >= 60 ? 'warning' : 'claude')
 
-// Custo e limites, de session.measure ou de $.session.usage().
-export const fromUsage = (u: Pick<SessionUsage, 'rateLimits' | 'cost'>): Pick<Figures, 'costUsd' | 'fiveHour' | 'week'> => {
+// Custo, limites e contexto, de session.measure ou de $.session.usage().
+export const fromUsage = (u: Pick<SessionUsage, 'rateLimits' | 'cost'> & Partial<Pick<SessionUsage, 'context'>>): Pick<Figures, 'costUsd' | 'fiveHour' | 'week' | 'context'> => {
   const find = (kind: string) => {
     const r = u.rateLimits.find(l => l.kind === kind)
     return r ? { pct: r.percentUsed, resetsAt: r.resetsAt } : undefined
   }
-  return { costUsd: u.cost?.usd, fiveHour: find('five_hour'), week: find('seven_day') }
+  return { costUsd: u.cost?.usd, fiveHour: find('five_hour'), week: find('seven_day'), context: fromContext(u.context) }
 }
 
 // "❂ Fable 5.2 · high": a faísca é a da classe do modelo (do pontinho de Haiku ao selo de Fable); pulsa
@@ -277,12 +279,14 @@ export type CardInput = {
   viewedId?: string
   /** O custo de hoje somado entre as sessões; ausente quando a barra não tem como saber. */
   dayUsd?: number
+  /** Onde está o botão de compactar da linha do contexto. */
+  compact?: CompactState
 }
 
-// Puro: as linhas da barra, na largura `max`. Não há linha de contexto: é sobre custo, modelo e quem trabalha.
-// Quando cabe, modelo fica à esquerda e custo e limites encostam à direita da mesma linha; senão, empilham.
+// Puro: as linhas da barra, na largura `max`. Quando cabe, modelo fica à esquerda e custo e limites
+// encostam à direita da mesma linha; senão, empilham. A linha do contexto vem logo abaixo, antes do palco.
 export const cardLines = (input: CardInput): Line[] => {
-  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], hasStageHud = true, agentRows = Infinity, viewedId, dayUsd } = input
+  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], hasStageHud = true, agentRows = Infinity, viewedId, dayUsd, compact = 'idle' } = input
   const fx = effectsOf(s)
   const t = stringsOf(s.language)
   const head = headLine(f, isWorking, fr, fx, t)
@@ -294,8 +298,9 @@ export const cardLines = (input: CardInput): Line[] => {
   const nested = nestAgents(list)
   const shown = nested.slice(0, Math.max(0, Math.min(s.maxAgents, agentRows)))
   const hiddenCount = nested.length - shown.length
+  const context = s.showContext && f.context ? [contextLine(f.context, compact, t)] : []
   return [
-    ...(isOneRow ? [top, ...stage, ...work] : [head, cost, ...stage, ...work, ...(limits ? [limits] : [])]),
+    ...(isOneRow ? [top, ...context, ...stage, ...work] : [head, cost, ...context, ...stage, ...work, ...(limits ? [limits] : [])]),
     ...shown.map(({ agent, depth }, n) => agentLine(agent, now, fr, n, max, fx, t, agent.id === viewedId, depth)),
     ...(hiddenCount > 0 ? [{ parts: [{ text: t.more(hiddenCount), dim: true }] }] : []),
   ]

@@ -6,7 +6,9 @@ import { Bar, HiddenBar } from './bar'
 import { DEMO_CAST, DEMO_FRAMES, DEMO_SOUNDS, applyDemo } from './demo'
 import { PickerRow } from './bar-rows'
 import { BURST_FRAMES, ruleParts } from './effects'
-import { SETTINGS_KEY, follow, isLightName, loadSettings, openBooks, readTheme, report, viewAgent } from './engine-calls'
+import { crossedSuggest } from './context-line'
+import type { CompactState } from './context-line'
+import { SETTINGS_KEY, follow, isLightName, loadSettings, openBooks, readTheme, report, runCompact, viewAgent } from './engine-calls'
 import { landingKey } from './focus'
 import type { Opened, Standing } from './focus'
 import { clean, cols, prettyModel, shortTool } from './format'
@@ -70,6 +72,8 @@ const FRAME_WRAP = 1_000_000
 const FLASH_MS = 1_500 // quanto tempo o custo fica aceso depois de crescer
 const HEAL_AFTER_MS = 5_000 // um turno em curso com a faixa dizendo "parada" por esse tempo: o fim dele não foi avisado
 const STATS_ARGS = /^\s*(stats|estat\S*|statistics)\s*$/i // "stats", "estatísticas", "statistics"
+const COMPACT_ARGS = /^\s*(compact\S*)(\s[\s\S]*)?$/i // "compactar", "compact", com as instruções do resumo depois
+const CONFIRM_MS = 5_000 // quanto tempo o botão de compactar espera o segundo clique
 const STAGE_MIN_ROWS = SCENE_ROWS + 3 // a régua, o cabeçalho, o palco e ao menos uma linha de folga: menos que isso, sem palco
 const VIEW_GAP = 2 // colunas entre o nome do agente em vista e o botão que volta à conversa principal
 // Os apelidos que o /model aceita: cada um aponta sempre para a versão mais nova da família.
@@ -105,6 +109,8 @@ let quietSince: number | null = null // desde quando a faixa diz "parada" com um
 let volume: Settings['sound'] = DEFAULT_SETTINGS.sound // o som em vigor, lido dos ajustes
 let isSilent = false // o Claude Code não tem como tocar som neste sistema (só toca no macOS)
 let sessionSeed = '' // o id da sessão: dele sai o avatar "por sessão"
+let compactState: CompactState = 'idle' // o botão de compactar: parado, esperando a confirmação, ou compactando
+let armedAt = -Infinity // quando o botão de compactar recebeu o primeiro clique
 // Um som da barra, no volume dos ajustes. É enfeite: se não tocar, vira um aviso, uma vez.
 const cue = ($: EngineInterface, name: Cue, now: number) => void playCue($, name, volume, now).catch(err => report($, 'sound', err))
 
@@ -304,6 +310,42 @@ async function switchTo($: EngineInterface, command: Switch, value: string, requ
   }
 }
 
+// Fora de um turno ninguém redesenha sozinho: um quadro a mais mostra o que mudou fora do estado.
+const redraw = ($: EngineInterface) => void update($, frame, f => (f + 1) % FRAME_WRAP).catch(err => report($, 'redraw', err))
+
+// Compacta a conversa (o /compact do Claude Code). Enquanto roda, o botão diz "compactando"; depois, a
+// linha mostra só a janela até a próxima resposta medir o contexto de novo. Devolve o motivo de uma recusa.
+async function compactNow($: EngineInterface, instructions = ''): Promise<string | null> {
+  if (compactState === 'running') return null
+  compactState = 'running'
+  redraw($)
+  const why = await runCompact($, instructions)
+  compactState = 'idle'
+  if (!why) await update($, figures, f => (f.context ? { ...f, context: { window: f.context.window } } : f))
+  redraw($)
+  return why
+}
+
+// O botão de compactar pede confirmação: o primeiro clique o arma, o segundo (em até CONFIRM_MS) compacta.
+// Compactar troca a conversa por um resumo: um clique por engano não pode fazer isso sozinho.
+async function pressCompact($: EngineInterface) {
+  const now = await $.clock.now()
+  if (compactState === 'armed' && now - armedAt < CONFIRM_MS) {
+    const why = await compactNow($)
+    if (why) $.ui.toast(strings.compactFailed(why))
+    return
+  }
+  if (compactState === 'running') return
+  compactState = 'armed'
+  armedAt = now
+  redraw($)
+  $.clock.after(CONFIRM_MS, () => {
+    if (compactState !== 'armed') return
+    compactState = 'idle'
+    redraw($)
+  })
+}
+
 // O idioma em vigor: os textos dos avisos e o que o comando mostra no menu (registrar de novo substitui).
 async function speak($: EngineInterface, language: Settings['language']) {
   strings = stringsOf(language)
@@ -402,6 +444,15 @@ export const register: Register = on => {
       const now = await $.clock.now()
       const text = await ledgerReport($, (await read($, figures)).costUsd, now, strings.stats).catch(err => (report($, 'stats', err), null))
       return { text: text ?? strings.statsOff, isTextDisplayOnly: true }
+    }
+    const compact = COMPACT_ARGS.exec(e.args)
+    if (compact) {
+      // Pedido por escrito, não precisa de confirmação. Roda fora deste hook: um comando que espera
+      // outro comando dentro dele seria recusado.
+      if ((await read($, figures)).context?.tokens === undefined) return { text: strings.compactEmpty, isTextDisplayOnly: true }
+      const instructions = (compact[2] ?? '').trim()
+      $.clock.after(0, () => void compactNow($, instructions).then(why => why && $.ui.toast(strings.compactFailed(why))))
+      return { text: strings.compactQueued, isTextDisplayOnly: true }
     }
     const demo = /^\s*demo\S*(\s.*)?$/i.exec(e.args) // "demo", "demonstração", "demonstration"; o resto é a aparência pedida
     if (demo) return { text: await startDemo($, demo[1], true) }
@@ -553,6 +604,10 @@ export const register: Register = on => {
       const usage = fromUsage(e)
       const hasCostMoved = e.changed.includes('cost')
       const now = await $.clock.now()
+      // O contexto cruzou a linha da sugestão, subindo: um aviso, uma vez (volta a valer depois de baixar).
+      const before = (await read($, figures)).context?.pct
+      const pct = usage.context?.pct
+      if (crossedSuggest(before, pct) && pct !== undefined && (await read($, settings)).showContext) $.ui.toast(strings.compactHint(Math.round(pct)))
       // Cada janela de limite leva as leituras recentes dela: de onde sai a previsão de quando enche.
       await update($, figures, f => ({ ...f, ...usage, ...paced(f, usage, now), ...(hasCostMoved && { costMovedAt: now }) }))
       // Fora de um turno ninguém redesenha sozinho: um quadro a mais apaga o destaque do custo.
@@ -645,6 +700,7 @@ export const register: Register = on => {
     const lines = cardLines({
       figures: f, main: m, agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s,
       stage: draw.node ? [STAGE_SLOT] : draw.lines, hasStageHud, agentRows, viewedId, dayUsd: dayCost(f.costUsd, now),
+      compact: compactState,
     })
     const current = f.model ? prettyModel(f.model).toLowerCase() : ''
     // O que está em vigor: decide em que opção o anel de foco cai quando um seletor ou a aba abre.
@@ -692,6 +748,7 @@ export const register: Register = on => {
       onToggle: kind => void toggle(kind),
       onHide: () => void setHidden(true),
       onView: agentId => void viewAgent($, agentId, strings),
+      onCompact: () => void pressCompact($).catch(err => report($, 'compact', err)),
     }))
   })
 }

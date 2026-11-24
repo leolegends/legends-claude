@@ -46,9 +46,13 @@ export type BarProps = {
   onHide: () => void
   /** Um clique na linha de um agente: `undefined` volta à conversa principal. */
   onView: (agentId: string | undefined) => void
+  /** Um clique no botão de compactar, na linha do contexto. */
+  onCompact: () => void
 }
 
-export const Bar = ({ el, width, rightPad, accent, rule, lines, stage, probe, canView, viewedId, isSettingsOpen, panel, viewed, above, marks, onToggle, onHide, onView }: BarProps): RenderElement => {
+const hasAction = (l: Line) => l.parts.some(q => q.action) || (l.tail ?? []).some(q => q.action)
+
+export const Bar = ({ el, width, rightPad, accent, rule, lines, stage, probe, canView, viewedId, isSettingsOpen, panel, viewed, above, marks, onToggle, onHide, onView, onCompact }: BarProps): RenderElement => {
   const { Box, Button, Text } = el
   const paint = (color: string | undefined) => (color === 'claude' ? accent : color)
   const run = (q: Part) => <Text color={paint(q.color)} backgroundColor={paint(q.bg)} dimColor={q.dim} bold={q.bold} underline={q.underline}>{q.text}</Text>
@@ -69,12 +73,25 @@ export const Bar = ({ el, width, rightPad, accent, rule, lines, stage, probe, ca
       {row(l, width)}
     </Button>
   )
+  // Um trecho com `action` vira botão: o de compactar compacta; os outros abrem o seletor logo abaixo.
+  const part = (q: Part) => {
+    const action = q.action
+    if (!action) return run(q)
+    return <Button key={action} plain onPress={() => (action === 'compact' ? onCompact() : onToggle(action))}>{run(q)}</Button>
+  }
+  // Uma linha com botões (a do contexto) é uma fileira: os botões não cabem dentro de um Text.
+  // O texto sem botões fica num Text só, como nas outras linhas.
+  const actionRow = (l: Line, room: number, key: string) => (
+    <Box key={key}>
+      {l.parts.some(q => q.action)
+        ? [...l.parts.map(part), <Text wrap="truncate-end">{gap(l, room)}</Text>]
+        : <Text wrap="truncate-end">{l.parts.map(run)}{gap(l, room)}</Text>}
+      {(l.tail ?? []).map(part)}
+    </Box>
+  )
   const [first = { parts: [] }, ...rest] = lines
   // Na primeira linha, modelo e effort são botões: um clique abre o seletor logo abaixo.
-  const headParts = first.parts.map(q => {
-    const action = q.action
-    return action ? <Button key={action} plain onPress={() => onToggle(action)}>{run(q)}</Button> : run(q)
-  })
+  const headParts = first.parts.map(part)
   return (
     <Box paddingRight={rightPad}>
       <Box width={width} flexDirection="column">
@@ -92,7 +109,12 @@ export const Bar = ({ el, width, rightPad, accent, rule, lines, stage, probe, ca
         {panel ?? [
           ...(viewed ? [ViewRow({ el, who: viewed.who.map(run), gap: viewed.gap, back: viewed.back, onBack: () => onView(undefined) })] : []),
           ...above,
-          ...rest.map(l => (l === STAGE_SLOT && stage ? stage : l.agentId !== undefined && canView ? agentRow(l, l.agentId) : row(l, width))),
+          ...rest.map((l, n) => (
+            l === STAGE_SLOT && stage ? stage
+            : l.agentId !== undefined && canView ? agentRow(l, l.agentId)
+            : hasAction(l) ? actionRow(l, width, `actions-${n}`)
+            : row(l, width)
+          )),
         ]}
       </Box>
     </Box>

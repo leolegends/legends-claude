@@ -23,6 +23,20 @@ export function report($: EngineInterface, where: string, err: unknown) {
   $.ui.log(`legends-claude: ${where}: ${clean(err instanceof Error ? err.message : String(err), 200)}`)
 }
 
+/**
+ * Compacta a conversa pelo `/compact` do próprio Claude Code, como se a pessoa o tivesse digitado: o
+ * comando aparece na conversa, entra na fila e roda com a sessão parada. `instructions` é o que o resumo
+ * deve manter (o texto depois de `/compact`). Devolve o motivo de uma recusa, ou `null`.
+ */
+export async function runCompact($: EngineInterface, instructions: string): Promise<string | null> {
+  try {
+    await $.command.run({ command: 'compact', args: instructions })
+    return null
+  } catch (err) {
+    return clean(err instanceof Error ? err.message : String(err), 120)
+  }
+}
+
 /** O tema é claro quando o nome dele diz ("light", "light-daltonized"); um tema de nome desconhecido vale como escuro. */
 export const isLightName = (value: unknown) => /light/i.test(String(value ?? ''))
 

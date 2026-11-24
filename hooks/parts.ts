@@ -2,12 +2,14 @@ import { cols } from './format'
 
 /** O que um clique no cabeçalho troca: o modelo ou o effort. */
 export type Switch = 'model' | 'effort'
+/** O que um trecho clicável faz: abre o seletor de modelo ou de effort, ou compacta a conversa. */
+export type Action = Switch | 'compact'
 /**
  * Um trecho de linha. `bg` pinta o fundo da célula (o palco usa para dois tijolos numa célula só);
- * `underline` sublinha (o nome do agente cuja transcrição está na tela); com `action`, um clique nele
- * abre o seletor de modelo ou de effort.
+ * `underline` sublinha (o nome do agente cuja transcrição está na tela); com `action`, o trecho é um
+ * botão: abre o seletor de modelo ou de effort, ou compacta.
  */
-export type Part = { text: string; color?: string; bg?: string; dim?: boolean; bold?: boolean; underline?: boolean; action?: Switch }
+export type Part = { text: string; color?: string; bg?: string; dim?: boolean; bold?: boolean; underline?: boolean; action?: Action }
 /**
  * Uma linha da barra: o texto e, opcionalmente, um trecho encostado à direita. Com `agentId`, é a
  * linha desse agente: no terminal, um clique nela põe a transcrição dele na tela.
