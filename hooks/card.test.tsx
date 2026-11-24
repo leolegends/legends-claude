@@ -48,14 +48,15 @@ const startSession = async (
 
 const SPAWN = { tool_use_id: 't1', prompt: 'p', description: 'buscar rotas HLS', subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-fable-5-2' } as never
 
-test('o card mostra modelo e custo em toda superfície, sem contexto', async ($, on) => {
+test('o card mostra modelo, custo e a linha do contexto em toda superfície', async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   await startSession($, on)
   for (const surface of SURFACES) {
     const ui = await $.ui.mount(band(surface))
     expect(await ui.find({ type: 'Text', text: /Fable 5\.2/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /\$1\.50 sessão/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /ctx|context/i })).toBeUndefined()
+    // sem leitura da janela atual: só o tamanho dela, e nada a compactar
+    expect(await ui.find({ type: 'Text', text: /^contexto ▱+ — \/ 1M/ })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -623,7 +624,7 @@ const find = (ui: { find: (q: { type: string; text: RegExp }) => Promise<unknown
 test('o idioma é a primeira linha da aba de ajustes; trocar muda a barra inteira na hora e fica salvo', async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   const { saved, registered } = await startSession($, on)
-  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|stats|demo [modelo] [effort]]' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|stats|compactar [instruções]|demo [modelo] [effort]]' })
   const ui = await $.ui.mount(band('terminal'))
   await ui.press({ key: 'settings' })
   for (const text of [/^ajustes$/, /^● Português$/, /^English$/, /^Azul$/, /^● completa$/, /^☑ palco$/, / sessão$/]) expect(await find(ui, text)).toBeDefined()
@@ -634,13 +635,13 @@ test('o idioma é a primeira linha da aba de ajustes; trocar muda a barra inteir
   for (const text of [/^ajustes$/, /^Azul$/, /^☑ palco$/, / sessão$/]) expect(await find(ui, text)).toBeUndefined()
   expect(saved.at(-1)).toMatchObject({ language: 'en' })
   // o comando foi registrado de novo, com a descrição e a dica em inglês
-  expect(registered.at(-1)).toMatchObject({ argumentHint: '[settings|stats|demo [model] [effort]]' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[settings|stats|compact [instructions]|demo [model] [effort]]' })
   expect(registered.at(-1)?.description).toMatch(/^Shows or hides the status bar/)
 
   await ui.press({ key: 'set-language-pt' })
   expect(await find(ui, /^ajustes$/)).toBeDefined()
   expect(saved.at(-1)).toMatchObject({ language: 'pt' })
-  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|stats|demo [modelo] [effort]]' })
+  expect(registered.at(-1)).toMatchObject({ argumentHint: '[ajustes|stats|compactar [instruções]|demo [modelo] [effort]]' })
   await ui.unmount()
 })
 

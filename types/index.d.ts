@@ -49,8 +49,17 @@ export type StatusSettings = {
   showTurnCost: boolean
   /** O custo de hoje, somado entre as sessões: só aparece quando difere do da sessão. */
   showDayCost: boolean
+  /** A linha do contexto: quanto da janela do modelo a conversa ocupa, com o botão de compactar. */
+  showContext: boolean
   maxAgents: 3 | 6 | 10
 }
+
+/**
+ * A janela de contexto do modelo como a barra mostra: o tamanho dela e, depois da primeira resposta da
+ * janela em curso, quanto a conversa ocupa (`tokens` e `pct`, de 0 a 100). Uma sessão nova, ou recém-
+ * compactada, fica sem `tokens` e `pct` até a próxima resposta.
+ */
+export type StatusContext = { window: number; tokens?: number; pct?: number }
 
 /** Uma leitura de uma janela de limite: quando foi vista e em quanto estava. */
 export type StatusLimitSample = { at: number; pct: number }
@@ -69,6 +78,8 @@ export type StatusFigures = {
   costMovedAt?: number
   fiveHour?: StatusLimit
   week?: StatusLimit
+  /** A janela de contexto do modelo; ausente antes da primeira leitura. */
+  context?: StatusContext
 }
 
 /** O turno do loop principal: quando começou, quantas ferramentas chamou e o custo na largada. */

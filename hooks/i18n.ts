@@ -22,7 +22,7 @@ export const LANGUAGES: readonly { id: Language; label: string }[] = [
 ]
 
 /** Os interruptores da aba de ajustes: as chaves dos ajustes que ligam e desligam algo. */
-export type ToggleKey = 'showRule' | 'showStage' | 'showLimits' | 'showTurnCost' | 'showDayCost'
+export type ToggleKey = 'showRule' | 'showStage' | 'showContext' | 'showLimits' | 'showTurnCost' | 'showDayCost'
 
 /** Todo texto que a barra mostra, num idioma. */
 export type Strings = {
@@ -43,6 +43,24 @@ export type Strings = {
   today: string
   /** A previsão de quando uma janela de limite enche, no ritmo de agora ("~40m"). */
   fullIn: (eta: string) => string
+  // A linha do contexto e a compactação.
+  /** O rótulo da linha do contexto. */
+  context: string
+  /** O botão que compacta a conversa. */
+  compact: string
+  /** O mesmo botão depois do primeiro clique: o segundo compacta. */
+  compactConfirm: string
+  compacting: string
+  /** Antes do botão, com o contexto alto. */
+  compactSuggest: string
+  /** Antes do botão, com o contexto muito alto. */
+  compactUrgent: string
+  /** O aviso de quando o contexto cruza a linha da sugestão. */
+  compactHint: (pct: number) => string
+  compactFailed: (why: string) => string
+  /** O comando de compactar, com a sessão sem nada para compactar. */
+  compactEmpty: string
+  compactQueued: string
   // Os seletores de modelo e effort, o comando e os avisos.
   pickModel: string
   pickEffort: string
@@ -145,6 +163,16 @@ const PT: Strings = {
   fails: count => `${count} ${count === 1 ? 'falha' : 'falhas'}`,
   today: 'hoje ',
   fullIn: eta => `enche em ${eta}`,
+  context: 'contexto ',
+  compact: '⟳ compactar',
+  compactConfirm: '⟳ confirmar compactação?',
+  compacting: 'compactando…',
+  compactSuggest: 'hora de compactar?',
+  compactUrgent: 'compacte antes que o Claude Code compacte sozinho',
+  compactHint: pct => `O contexto está em ${pct}%: compactar agora (⟳ na barra, ou /legends-claude compactar) mantém o que importa no resumo.`,
+  compactFailed: why => `Não deu para compactar: ${why}`,
+  compactEmpty: 'Ainda não há conversa para compactar.',
+  compactQueued: 'Compactação pedida: roda assim que a sessão ficar parada.',
   pickModel: 'modelo ',
   pickEffort: 'effort ',
   switchFailed: (what, why) => `Não deu para trocar ${what}: ${why}`,
@@ -156,8 +184,8 @@ const PT: Strings = {
   shown: 'Barra de status visível.',
   tooNarrow: columns => `Barra de status visível; ela desenha quando o terminal tiver pelo menos ${columns} colunas.`,
   opened: 'Ajustes abertos na barra.',
-  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre os ajustes, "stats" mostra as contas da sessão, do dia e de sempre, "demo" mostra o palco em ação (com outro modelo e effort: "demo opus max")',
-  argumentHint: '[ajustes|stats|demo [modelo] [effort]]',
+  commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre os ajustes, "stats" mostra as contas da sessão, do dia e de sempre, "compactar" compacta a conversa (com instruções: "compactar mantenha o plano"), "demo" mostra o palco em ação (com outro modelo e effort: "demo opus max")',
+  argumentHint: '[ajustes|stats|compactar [instruções]|demo [modelo] [effort]]',
   statsOff: 'Sem estatísticas nesta sessão: a barra não conseguiu abrir o registro dela.',
   stats: {
     title: 'estatísticas', // o Claude Code já põe o nome do plugin na frente do que o comando diz
@@ -210,7 +238,7 @@ const PT: Strings = {
   sounds: { mudo: 'mudo', baixo: 'baixo', alto: 'alto' },
   mascots: { modelo: 'por modelo', sessao: 'por sessão' },
   backends: { image: 'pixels', raster: 'blocos', svg: 'vetor', text: 'texto' },
-  toggles: { showRule: 'régua', showStage: 'palco', showLimits: 'limites', showTurnCost: 'custo do turno', showDayCost: 'custo do dia' },
+  toggles: { showRule: 'régua', showStage: 'palco', showContext: 'contexto', showLimits: 'limites', showTurnCost: 'custo do turno', showDayCost: 'custo do dia' },
   tributes: { elsa: 'em homenagem à minha filha' },
 }
 
@@ -227,6 +255,16 @@ const EN: Strings = {
   fails: count => `${count} failed`,
   today: 'today ',
   fullIn: eta => `full in ${eta}`,
+  context: 'context ',
+  compact: '⟳ compact',
+  compactConfirm: '⟳ confirm compaction?',
+  compacting: 'compacting…',
+  compactSuggest: 'time to compact?',
+  compactUrgent: 'compact before Claude Code does it on its own',
+  compactHint: pct => `Context is at ${pct}%: compacting now (⟳ in the bar, or /legends-claude compact) keeps what matters in the summary.`,
+  compactFailed: why => `Could not compact: ${why}`,
+  compactEmpty: 'There is no conversation to compact yet.',
+  compactQueued: 'Compaction requested: it runs as soon as the session is idle.',
   pickModel: 'model ',
   pickEffort: 'effort ',
   switchFailed: (what, why) => `Could not switch ${what}: ${why}`,
@@ -238,8 +276,8 @@ const EN: Strings = {
   shown: 'Status bar visible.',
   tooNarrow: columns => `Status bar visible; it draws once the terminal is at least ${columns} columns wide.`,
   opened: 'Settings opened in the bar.',
-  commandDescription: 'Shows or hides the status bar; "settings" opens the settings, "stats" shows the tallies of the session, the day and all time, "demo" plays the stage (as another model and effort: "demo opus max")',
-  argumentHint: '[settings|stats|demo [model] [effort]]',
+  commandDescription: 'Shows or hides the status bar; "settings" opens the settings, "stats" shows the tallies of the session, the day and all time, "compact" compacts the conversation (with instructions: "compact keep the plan"), "demo" plays the stage (as another model and effort: "demo opus max")',
+  argumentHint: '[settings|stats|compact [instructions]|demo [model] [effort]]',
   statsOff: 'No stats in this session: the bar could not open its record.',
   stats: {
     title: 'stats',
@@ -292,7 +330,7 @@ const EN: Strings = {
   sounds: { mudo: 'off', baixo: 'low', alto: 'loud' },
   mascots: { modelo: 'by model', sessao: 'by session' },
   backends: { image: 'pixels', raster: 'blocks', svg: 'vector', text: 'text' },
-  toggles: { showRule: 'rule', showStage: 'stage', showLimits: 'limits', showTurnCost: 'turn cost', showDayCost: 'day cost' },
+  toggles: { showRule: 'rule', showStage: 'stage', showContext: 'context', showLimits: 'limits', showTurnCost: 'turn cost', showDayCost: 'day cost' },
   tributes: { elsa: 'in honor of my daughter' },
 }
 
