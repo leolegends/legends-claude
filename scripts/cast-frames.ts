@@ -1,6 +1,7 @@
 // Gera os quadros do GIF do topo dos READMEs: a barra inteira ao longo de um turno de mentira, com o palco
 // grande, e o mascote trocando de avatar a cada trecho, como nos ajustes. Cada avatar colorido aparece
 // primeiro em `high`, no desenho de base, com a aura do elemento dele, e depois em `max`, transformado.
+// A linha do nível sobe junto com o turno e passa de nível no meio dele (com o aviso na legenda).
 // Usa as mesmas funções que desenham a barra de verdade. Sai JSON no stdout.
 //
 //   bun run scripts/cast-frames.ts 112 [en|pt] | python3 scripts/demo-gif.py docs/demo.gif 10
@@ -14,6 +15,7 @@ import { ruleParts } from '../hooks/effects'
 import { hdScene } from '../hooks/hd'
 import { stringsOf } from '../hooks/i18n'
 import { cardLines, hudParts } from '../hooks/lines'
+import { levelOf as playerLevelOf } from '../hooks/level'
 import { kindOf } from '../hooks/palette'
 import { FORM_FROM } from '../hooks/pose'
 import { auraOf, levelOf, powerOf } from '../hooks/power'
@@ -57,6 +59,15 @@ const NAMES: Record<Avatar, { name: string; form?: string }> = {
 }
 const FRESH = 10 // quadros em que a legenda fica acesa depois de uma troca
 
+// Os tokens de sempre, de onde sai o nível: começa perto do fim do 30 e sobe a cada tanto, como os
+// turnos somam; no meio do GIF passa para o 31, que já é o título seguinte.
+const TOKENS_FROM = 100_300_000
+const TOKENS_STEP = 100_000
+const TOKENS_EVERY = 14 // quadros
+const tokensAt = (frame: number) => TOKENS_FROM + Math.floor(frame / TOKENS_EVERY) * TOKENS_STEP
+const LEVEL_UP_AT = Array.from({ length: 400 }, (_, f) => f).find(f => playerLevelOf(tokensAt(f)).level > playerLevelOf(tokensAt(0)).level) ?? -1
+const LEVEL_UP_FRAMES = 48 // quanto o aviso de nível novo fica na legenda
+
 // A legenda sobre a barra: quem é o mascote, em que ele se transformou (quando a aura dá para isso, como
 // o palco decide) e o effort do turno.
 const captionAt = (frame: number, sim: Sim): Part[] => {
@@ -71,6 +82,17 @@ const captionAt = (frame: number, sim: Sim): Part[] => {
     ...(isFormed ? [{ text: ' → ', dim: true }, { text: form, color: ink, bold: true }] : []),
     { text: '   ·   effort: ', dim: true },
     { text: cast.effort, color: frame - cast.from < FRESH ? 'warning' : 'suggestion', bold: true },
+    ...levelUpParts(frame),
+  ]
+}
+
+// O aviso de quando o nível sobe, como a barra o mostra.
+const levelUpParts = (frame: number): Part[] => {
+  if (LEVEL_UP_AT < 0 || frame < LEVEL_UP_AT || frame >= LEVEL_UP_AT + LEVEL_UP_FRAMES) return []
+  const lv = playerLevelOf(tokensAt(frame))
+  return [
+    { text: '   ·   ', dim: true },
+    { text: `✦ ${STRINGS.levels.up(lv.level, STRINGS.levels.titles[lv.title] ?? '')}`, color: 'warning', bold: true },
   ]
 }
 const T0 = 1_000_000
@@ -179,7 +201,7 @@ const barAt = (prev: Sim, sim: Sim, frame: number, alpha: number): Part[][] => {
   // o poder de cada um em cena, como a barra de verdade o tira do modelo e do effort
   const powers = new Map([[MAIN, powerOf(MODEL, EFFORT)], ...agents.map(a => [a.id, powerOf(a.model, a.effort)] as const)])
   const stage = stageAt(prev, sim, alpha, isWorking ? hudParts(main, now, STRINGS) : [], powers, cast.avatar)
-  const [head = { parts: [] }, ...rest] = cardLines({ figures, main, agents, now, frame, isWorking, max: WIDTH, settings: SETTINGS, stage })
+  const [head = { parts: [] }, ...rest] = cardLines({ figures, main, agents, now, frame, isWorking, max: WIDTH, settings: SETTINGS, stage, tokens: tokensAt(frame) })
   return [
     captionAt(frame, sim),
     [],

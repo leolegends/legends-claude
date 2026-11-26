@@ -2,9 +2,9 @@
 
 **English** · [Português](README.pt-BR.md)
 
-A bar above the Claude Code prompt that shows what matters while you work: **model and effort**, **session and turn cost**, **usage limits**, **every running agent**, and a **stage** where the Claude Code mascot builds, brick by brick, what the turn is doing. The mascot changes with the **model** and the **effort**: the stronger the model and the higher the effort, the more it glows. It does not show a context bar.
+A bar above the Claude Code prompt that shows what matters while you work: **model and effort**, **session and turn cost**, **usage limits**, **every running agent**, your **level** (1 to 100, by the tokens you have spent), and a **stage** where the Claude Code mascot builds, brick by brick, what the turn is doing. The mascot changes with the **model** and the **effort**: the stronger the model and the higher the effort, the more it glows. It does not show a context bar.
 
-![The bar during a turn, with the large stage: the mascot switches avatar (Clawd, Pikachu, Mario, Kratos) and, when the effort goes up to max, each one transforms (Raichu, Super Mario, Kratos in a rage), as it carries bricks, calls helpers and celebrates](docs/demo.gif)
+![The bar during a turn, with the large stage: the mascot switches avatar (Clawd, Pikachu, Mario, Kratos) and, when the effort goes up to max, each one transforms (Raichu, Super Mario, Kratos in a rage), as it carries bricks, calls helpers and celebrates; the level line climbs with the turn and goes from 30 to 31 in the middle of it](docs/demo.gif)
 
 The bar spans the full width of the terminal. On a narrow terminal, model, cost and limits stack on lines of their own.
 
@@ -17,6 +17,7 @@ The bar spans the full width of the terminal. On a narrow terminal, model, cost 
 | Cost | Session total (the same sum `/cost` gives, subagents included) and how much was spent since the last prompt. Two decimal places (`$1.75`). The total lights up with `▲` for a moment whenever it grows. When another session also spent today (or this one started yesterday), the day's cost follows, summed across sessions: `today $9.80`. |
 | Limits | The 5-hour and 7-day windows, with the time left until each resets. When, at the pace of the last minutes, a window fills before it resets, the bar says how soon (`full in ~40m`): in amber, and in red with less than a quarter of an hour. Only shown on accounts that report a limit. |
 | Context | How much of the model's context window the conversation takes up: a gauge, the percentage and the tokens over the window (`context ▰▰▰▱▱▱▱▱▱▱ 31% · 62k/200k`), with a `⟳ compact` button at the right. From 70% the line suggests compacting, in amber (`time to compact?`); from 85%, in red, before Claude Code compacts on its own. The button asks for confirmation: the first click turns it into `⟳ confirm compaction?`, and only a second click within 5 seconds compacts. Crossing 70% on the way up also shows a notice, once. Right after a compaction (and in a fresh session) there is no reading until the next answer: the line shows only the window's size. |
+| Level | Your level, from 1 to 100, by the tokens you have spent with the bar watching: a gauge up to the next level and the percentage (`level 23 ▰▰▰▰▱▱▱▱▱▱ 41%`), and at the right the title, the total and how much is left (`Builder · 12.3M · 1.2M to go`). See [Levels](#levels-1-to-100). |
 | Stage | Four lines of scene (eight at the large size), while a turn or an agent is running: in real pixels, in terminal blocks, in vector or in text, whichever the screen can show. See below. |
 | Work | With the stage off: a comet of sparks `✳✶✻·····`, elapsed time, how many tools were called, how many failed and the last one. With the stage on, this information moves to the scoreboard in its corner. |
 | Agents | One line per subagent, teammate or workflow agent: the name emerges from a handful of sparks that settle letter by letter; then the pulsing spark of its model's class (in the color of its helper on the stage), a shimmer over the name and a comet of its own, each out of phase with its neighbor; what it is doing now (the summary Claude Code keeps of it; before there is one, the task's description); a tiny graph of its activity (`▂▁▅█`), elapsed time, tools, failures, what it has cost so far and the last call. When it finishes it becomes `✓` with a burst of sparks that thins out, duration, tokens and cost (or `✗` if it failed), and leaves after 8 seconds. An agent called by another agent sits right under it, indented with `└`. Up to 6 lines by default (3, 6 or 10 in the settings tab); the rest becomes `+N agents`. In the terminal, a click on the line puts the agent's transcript on screen (see Usage). |
@@ -125,6 +126,16 @@ The stage is one scene drawn four ways. The bar picks the best one the screen ca
 - An image carries no text: in pixels and in vector the scoreboard goes back to the work line, right below the stage.
 - To keep the stage exactly as it was before version 0.9, pick `classic`. To ask the terminal again whether it draws images (after turning tmux's passthrough on, say), pick `auto` again.
 
+## Levels: 1 to 100
+
+The level line measures how much you have worked with Claude Code, not how much a session cost. It adds up the tokens of every turn (the main conversation and the agents), across every session, all time.
+
+- **What counts:** input, output and cache writes. Cache reads stay out: they are the same conversation read again on every request, and counting them would make the level measure the size of the context, not the work.
+- **The curve:** level L asks for 2 billion × ((L−1)/99)^2.5 tokens. The first levels come fast (level 2 at about 20 thousand tokens, level 10 at about 5 million); level 100 asks for 2 billion, more than a year of heavy use.
+- **Titles,** one every ten levels: Apprentice (1–10), Initiate, Artisan, Builder, Architect, Master, Veteran, Legendary, Mythic and Immortal (91–100). The title is in the accent color; from Legendary up, in amber; at level 100, in red, with the gauge full and `MAX`.
+- **Leveling up** shows a notice (`Level 31! Builder`) and plays the fanfare, when the `sound` setting is on.
+- The `level` toggle in the settings tab hides the line (and the notice); `/legends-claude stats` also shows the level, the title and the tokens.
+
 ## Installation
 
 At the prompt of a Claude Code session in the terminal:
@@ -156,7 +167,7 @@ To remove: `claude plugin uninstall legends-claude`.
 - `▾` at the corner of the bar hides it; `◂ status` brings it back. `/legends-claude` toggles between hidden and visible.
 - `/legends-claude demo` plays the stage, with the session idle. `/legends-claude demo fable max` plays it as another model and effort, without changing the session's.
 - `/legends-claude compact` compacts the conversation right away, with no confirmation: it runs Claude Code's own `/compact`, which shows in the conversation and waits for the session to be idle. What comes after the word goes to the summary as instructions (`/legends-claude compact keep the plan`). `compactar` works too.
-- `/legends-claude stats` shows the tallies: the bricks (every tool call is one), the floors, the failures and the turns of this session; today's cost summed across sessions; the all-time total; and the records (the longest turn, the one that called the most tools, the most agents at once). The text shows in the conversation for you alone: it does not go to the model.
+- `/legends-claude stats` shows the tallies: the bricks (every tool call is one), the floors, the failures and the turns of this session; today's cost summed across sessions; the all-time total; and the records (the longest turn, the one that called the most tools, the most agents at once); and the level, with its title and the tokens that count for it. The text shows in the conversation for you alone: it does not go to the model.
 - **`⚙` opens the settings tab** in the bar itself (or `/legends-claude settings`; `ajustes` works too). Every change applies immediately and is saved for the next sessions:
 
 ```
@@ -169,7 +180,7 @@ animation    ● full  subtle  still
 speed        slow  ● normal  fast
 resolution   ● auto  blocks  classic    in use: blocks
 size         ● normal  large
-show         ☑ rule  ☑ stage  ☑ context  ☑ limits  ☑ turn cost  ☑ day cost
+show         ☑ rule  ☑ stage  ☑ context  ☑ level  ☑ limits  ☑ turn cost  ☑ day cost
 agents       3  ● 6  10
 ```
 
@@ -183,7 +194,7 @@ agents       3  ● 6  10
 | speed | The duration of a frame: 200, 125 or 80 ms. It is also the pace of the stage. No effect while the animation is still. |
 | resolution | What the stage is drawn in. `auto` is the best the screen offers: real pixels in a terminal that draws images, terminal blocks in the others, vector in the desktop app. `blocks` keeps the blocks even where there are pixels. `classic` is the text stage. Next to the options, the tab says what is in use on this screen. |
 | size | `normal` is the four-line stage; `large` doubles it (see [Resolution](#resolution-pixels-blocks-vector-or-text)). It only applies outside the text stage, and where the bar has room. |
-| show | Turns the top rule, the stage, the context line, the 5h/7d limits, the turn cost and the day cost on and off. The stage only appears with the `full` animation. |
+| show | Turns the top rule, the stage, the context line, the level line, the 5h/7d limits, the turn cost and the day cost on and off. The stage only appears with the `full` animation. |
 | agents | How many agent lines appear before the `+N agents` summary. |
 
 ## Requirements and limits
@@ -200,7 +211,7 @@ agents       3  ● 6  10
 - Each agent's cost, summary and activity come from Claude Code's agent list, checked once a second. On a version that does not carry them, the line shows the task's description and, when it finishes, the tokens of its last turn.
 - While Claude Code waits for you with a dialog on screen (a permission request, a question), it does not draw the band above the prompt: the bar goes away and comes back when you answer. And the permission, notification and conversation-compaction events do not reach a mod (seen on version 2.1.330, on a team account). So the stage has no scene for those moments; what there is is the question's sound, which the mod recognizes by the tool. The context line's button does not listen for compaction either: it asks for one, through `/compact`, which is a command a mod can run.
 - The limit forecast comes from the readings the bar saw in this session (the last 30 minutes for the 5-hour window, the last 6 hours for the 7-day one) and asks for a minimum of time and of rise: right after the session opens there is no forecast. The percentage is the account's, so other sessions' usage counts in the pace.
-- The tallies count what the bar saw: a session without the plugin loaded is not in them, and the cost is Claude Code's estimate (on a subscription it is not a charge). Each session writes only its own record, at the end of every turn, and that is when it rereads the others' (at most once a minute): while this session is idle, the day's cost on the bar does not follow what the others spend. A record idle for three days goes into the all-time total and leaves the store.
+- The tallies count what the bar saw: a session without the plugin loaded is not in them, and the cost is Claude Code's estimate (on a subscription it is not a charge). Each session writes only its own record, at the end of every turn, and that is when it rereads the others' (at most once a minute): while this session is idle, the day's cost on the bar does not follow what the others spend. A record idle for three days goes into the all-time total and leaves the store. The level comes from the same tallies: tokens spent in a session without the plugin do not count, and a fresh install starts at level 1.
 - The effort appears from the first model request after the plugin loads; until then the bar shows `effort`, already clickable.
 - The model picker uses the aliases `fable`, `opus`, `sonnet` and `haiku`; a model your account does not have is refused by `/model` itself, and the bar says so.
 - Agent lines are only clickable in the terminal; in the desktop app they stay as text. It is Claude Code that switches the view, and only in answer to a click or a key of yours: it may refuse (an agent that already left the task list, a teammate in a pane of its own), and the bar shows the reason.
@@ -224,6 +235,7 @@ The hooks module and what it imports, in `hooks/`:
 - `lines.ts`: the lines of the bar (header, cost, work, limits, agents), pure. `bar-rows.tsx`: the rows of buttons under the header (the model or effort picker, and the one that says whose transcript is on screen).
 - `phase.ts`: what each piece of a model request says about its phase (thinking, writing, putting a call together). `focus.ts`: which button the focus ring lands on when something opens in the bar.
 - `context-line.ts`: the context line, pure: the gauge, the suggestion to compact and the button.
+- `level.ts`: the level, pure: the curve, the titles and the line.
 - `pace.ts`: the pace of a limit window and the forecast of when it fills. `stats.ts`: the tallies of a session, of the day and of all time, pure; `ledger.ts`: their record in the plugin's store. `sound.ts`: the sounds, from the tune to the WAV.
 - `effects.ts`: the text animations (spark, comet, rule pulse, emerging name, burst, shimmer).
 - `format.ts`, `parts.ts`, `agents.ts`: text formats, line parts, and the agent lines reconciled with the engine's list.
@@ -243,9 +255,9 @@ The hooks module and what it imports, in `hooks/`:
 
 The code comments and the test names are in Portuguese, the language the project was born in.
 
-The tests (`*.test.ts`, 642 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene, the power of each class, the aura and the form of each avatar, the PNG encoder and the fit to blocks, and the bar mounted on each surface, in text, in blocks, in pixels and in vector: the phases of a request piece by piece, an agent's transcript on screen and the focus ring included. The test kit does not hand a test the request to move the focus ring (`$.ui.focus`): the ring actually moving is checked in a real Claude Code (`claude --plugin-dir .`, `ctrl+x tab`).
+The tests (`*.test.ts`, 659 in all) cover the pure functions, the simulation frame by frame, the drawing of the scene, the power of each class, the aura and the form of each avatar, the PNG encoder and the fit to blocks, and the bar mounted on each surface, in text, in blocks, in pixels and in vector: the phases of a request piece by piece, an agent's transcript on screen and the focus ring included. The test kit does not hand a test the request to move the focus ring (`$.ui.focus`): the ring actually moving is checked in a real Claude Code (`claude --plugin-dir .`, `ctrl+x tab`).
 
-The GIFs of the two READMEs come out of the same functions that draw the bar, outside Claude Code (needs `bun` and Pillow). The make-believe turn has the large stage, in blocks, as most terminals show it, and the mascot switches avatar at each stretch: Clawd as Fable max and then Pikachu (Opus), Mario (Sonnet) and Kratos (Opus), each one first at `high`, in the base drawing, and then at `max`, transformed; `scripts/demo-frames.ts` still gives a turn with a single model and effort. The power table is the same in both languages:
+The GIFs of the two READMEs come out of the same functions that draw the bar, outside Claude Code (needs `bun` and Pillow). The make-believe turn has the large stage, in blocks, as most terminals show it, and the mascot switches avatar at each stretch: Clawd as Fable max and then Pikachu (Opus), Mario (Sonnet) and Kratos (Opus), each one first at `high`, in the base drawing, and then at `max`, transformed; the level line climbs with the turn and goes from 30 (Artisan) to 31 (Builder) in the middle of it, with the notice in the caption; `scripts/demo-frames.ts` still gives a turn with a single model and effort. The power table is the same in both languages:
 
 ```
 bun run scripts/cast-frames.ts 112 en | python3 scripts/demo-gif.py docs/demo.gif 10
