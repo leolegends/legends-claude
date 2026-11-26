@@ -1,5 +1,6 @@
 import { fmtCost, fmtSpan } from './format'
 import type { Strings } from './i18n'
+import { fmtTokens, levelOf } from './level'
 
 // O que a barra lembra de uma sessão para a outra: quantos tijolos (uma ferramenta chamada é um
 // tijolo) cada sessão assentou, as falhas, os turnos, os recordes e o custo por dia. Cada sessão
@@ -27,6 +28,8 @@ export type Tally = {
   mostTools: number
   /** O maior número de agentes rodando ao mesmo tempo. */
   mostHelpers: number
+  /** Tokens que contam para o nível (level.ts): entrada, saída e escrita no cache, agentes incluídos. */
+  tokens: number
 }
 
 /** O registro de uma sessão no store. */
@@ -47,7 +50,7 @@ export type Lifetime = Tally & {
   usd: number
 }
 
-const NO_TALLY: Tally = { bricks: 0, fails: 0, turns: 0, longestTurnMs: 0, mostTools: 0, mostHelpers: 0 }
+const NO_TALLY: Tally = { bricks: 0, fails: 0, turns: 0, longestTurnMs: 0, mostTools: 0, mostHelpers: 0, tokens: 0 }
 
 const COUNT_MAX = Number.MAX_SAFE_INTEGER
 const TIME_MAX = 8.64e15 // o maior instante que uma data representa
@@ -75,7 +78,7 @@ export const freshStats = (now: number, cost: number): SessionStats => ({ ...NO_
 
 const tallyOf = (r: Record<string, unknown>): Tally => ({
   bricks: count(r.bricks), fails: count(r.fails), turns: count(r.turns),
-  longestTurnMs: count(r.longestTurnMs), mostTools: count(r.mostTools), mostHelpers: count(r.mostHelpers),
+  longestTurnMs: count(r.longestTurnMs), mostTools: count(r.mostTools), mostHelpers: count(r.mostHelpers), tokens: count(r.tokens),
 })
 
 /** O registro de uma sessão como veio do store, conferido campo a campo; `null` quando não é um registro. */
@@ -112,6 +115,8 @@ export const spend = (stats: SessionStats, cost: number, now: number): SessionSt
 }
 
 export const countTool = (stats: SessionStats): SessionStats => ({ ...stats, bricks: stats.bricks + 1 })
+/** Tokens de um turno (da conversa principal ou de um agente) somados à conta. */
+export const countTokens = (stats: SessionStats, tokens: number): SessionStats => ({ ...stats, tokens: stats.tokens + count(tokens) })
 export const countFail = (stats: SessionStats): SessionStats => ({ ...stats, fails: stats.fails + 1 })
 export const countHelpers = (stats: SessionStats, running: number): SessionStats =>
   running > stats.mostHelpers ? { ...stats, mostHelpers: running } : stats
@@ -127,6 +132,7 @@ export const countTurn = (stats: SessionStats, ms: number, tools: number): Sessi
 export const after = (stats: SessionStats, saved: SessionStats, now: number): SessionStats => ({
   ...stats, startedAt: now,
   bricks: Math.max(0, stats.bricks - saved.bricks), fails: Math.max(0, stats.fails - saved.fails), turns: Math.max(0, stats.turns - saved.turns),
+  tokens: Math.max(0, stats.tokens - saved.tokens),
   days: Object.fromEntries(
     Object.entries(stats.days).map(([day, usd]) => [day, Math.max(0, usd - (saved.days[day] ?? 0))] as const).filter(([, usd]) => usd > 0),
   ),
@@ -135,6 +141,7 @@ export const after = (stats: SessionStats, saved: SessionStats, now: number): Se
 const sum = (a: Tally, b: Tally): Tally => ({
   bricks: a.bricks + b.bricks, fails: a.fails + b.fails, turns: a.turns + b.turns,
   longestTurnMs: Math.max(a.longestTurnMs, b.longestTurnMs), mostTools: Math.max(a.mostTools, b.mostTools), mostHelpers: Math.max(a.mostHelpers, b.mostHelpers),
+  tokens: a.tokens + b.tokens,
 })
 
 /** Puro: o total de sempre com uma sessão que saiu do store somada a ele. */
@@ -175,7 +182,7 @@ export const summarize = (mine: SessionStats, others: readonly SessionStats[], l
 const LABEL_GAP = 2 // colunas entre o rótulo mais comprido do relatório e as contas
 
 /** Puro: o relatório do comando de estatísticas, uma linha por conta, no idioma dado. */
-export const statsText = (s: Summary, t: Strings['stats']): string => {
+export const statsText = (s: Summary, t: Strings['stats'], lv?: Strings['levels']): string => {
   const work = (tally: Tally) => [
     t.bricks(tally.bricks),
     floorsOf(tally.bricks) > 0 ? t.floors(floorsOf(tally.bricks)) : '',
@@ -193,6 +200,7 @@ export const statsText = (s: Summary, t: Strings['stats']): string => {
     [t.today, [fmtCost(s.today.usd), t.sessions(s.today.sessions)]],
     [t.since(dayOf(all.since)), [...work(all), t.sessions(all.sessions), fmtCost(all.usd)]],
     ...(records.some(Boolean) ? [[t.records, records] as const] : []),
+    ...(lv ? [[lv.level.trim(), [t.level(levelOf(all.tokens).level, lv.titles[levelOf(all.tokens).title] ?? '', fmtTokens(all.tokens, lv.decimal))]] as const] : []),
   ]
   // a coluna dos rótulos tem a largura do mais comprido deles: as contas começam alinhadas
   const width = Math.max(...rows.map(([label]) => label.length)) + LABEL_GAP

@@ -148,11 +148,18 @@ export const dayCost = (cost: number | undefined, now: number): number | undefin
  * parados há dias também: só entram no total de sempre quando alguma sessão abre o livro, e até lá
  * contam daqui); `null` sem livro aberto.
  */
-export async function ledgerReport($: EngineInterface, cost: number | undefined, now: number, t: Strings['stats']): Promise<string | null> {
+export async function ledgerReport($: EngineInterface, cost: number | undefined, now: number, t: Strings['stats'], lv?: Strings['levels']): Promise<string | null> {
   const key = book?.key
   if (key === undefined) return null
   const others = (await readOthers($, key)).map(([, stats]) => stats)
   if (!book || book.key !== key) return null
   book = { ...withBase(book, cost), others, readAt: now }
-  return statsText(summarize(book.mine, others, book.life, cost, now), t)
+  return statsText(summarize(book.mine, others, book.life, cost, now), t, lv)
 }
+
+/**
+ * Os tokens de sempre, de onde sai o nível: o total guardado, as outras sessões (como na última
+ * leitura, no máximo um minuto atrás) e esta; `undefined` sem livro aberto.
+ */
+export const totalTokens = (): number | undefined =>
+  book ? book.life.tokens + book.others.reduce((sum, s) => sum + s.tokens, 0) + book.mine.tokens : undefined
