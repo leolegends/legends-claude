@@ -51,6 +51,8 @@ export type StatusSettings = {
   showDayCost: boolean
   /** A linha do contexto: quanto da janela do modelo a conversa ocupa, com o botão de compactar. */
   showContext: boolean
+  /** A linha do nível: de 1 a 100, pelo total de tokens de todas as sessões. */
+  showLevel: boolean
   maxAgents: 3 | 6 | 10
 }
 

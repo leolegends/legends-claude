@@ -78,7 +78,7 @@ describe('o que vem do store', () => {
   test('um registro é conferido campo a campo: o que não é número vale zero, um dia malformado sai', () => {
     const read = readStats({ updatedAt: NOON, startedAt: NOON - 5, bricks: 12, fails: 'três', turns: -4, lastCost: Infinity, days: { [TODAY]: 3, ontem: 9, '2026-11-22': '1' } })
     expect(read).toEqual({
-      bricks: 12, fails: 0, turns: 0, longestTurnMs: 0, mostTools: 0, mostHelpers: 0,
+      bricks: 12, fails: 0, turns: 0, longestTurnMs: 0, mostTools: 0, mostHelpers: 0, tokens: 0,
       startedAt: NOON - 5, updatedAt: NOON, lastCost: 0, days: { [TODAY]: 3, '2026-11-22': 0 },
     })
   })
@@ -107,7 +107,7 @@ describe('o que vem do store', () => {
   })
 
   test('sem total guardado, a conta de sempre começa agora', () => {
-    expect(readLifetime(undefined, NOON)).toEqual({ bricks: 0, fails: 0, turns: 0, longestTurnMs: 0, mostTools: 0, mostHelpers: 0, since: NOON, sessions: 0, usd: 0 })
+    expect(readLifetime(undefined, NOON)).toEqual({ bricks: 0, fails: 0, turns: 0, longestTurnMs: 0, mostTools: 0, mostHelpers: 0, tokens: 0, since: NOON, sessions: 0, usd: 0 })
     expect(readLifetime({ since: 5, sessions: 2, usd: 7.5, bricks: 300 }, NOON)).toMatchObject({ since: 5, sessions: 2, usd: 7.5, bricks: 300 })
   })
 
@@ -115,7 +115,7 @@ describe('o que vem do store', () => {
     expect(STALE_MS).toBe(3 * 86_400_000)
     const old = session({ startedAt: 100, bricks: 250, fails: 4, turns: 9, longestTurnMs: 90_000, mostTools: 40, mostHelpers: 3, days: { '2026-11-01': 6 } })
     const life = absorb(readLifetime({ since: 500, sessions: 1, usd: 1, bricks: 50, mostTools: 60 }, NOON), old)
-    expect(life).toEqual({ bricks: 300, fails: 4, turns: 9, longestTurnMs: 90_000, mostTools: 60, mostHelpers: 3, since: 100, sessions: 2, usd: 7 })
+    expect(life).toEqual({ bricks: 300, fails: 4, turns: 9, longestTurnMs: 90_000, mostTools: 60, mostHelpers: 3, tokens: 0, since: 100, sessions: 2, usd: 7 })
   })
 })
 

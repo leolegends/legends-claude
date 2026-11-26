@@ -1,4 +1,5 @@
 import { fmtCount } from './format'
+import type { LevelStrings } from './level'
 import type { Backend } from './stage'
 import type {
   StatusAccent as Accent,
@@ -22,7 +23,7 @@ export const LANGUAGES: readonly { id: Language; label: string }[] = [
 ]
 
 /** Os interruptores da aba de ajustes: as chaves dos ajustes que ligam e desligam algo. */
-export type ToggleKey = 'showRule' | 'showStage' | 'showContext' | 'showLimits' | 'showTurnCost' | 'showDayCost'
+export type ToggleKey = 'showRule' | 'showStage' | 'showContext' | 'showLevel' | 'showLimits' | 'showTurnCost' | 'showDayCost'
 
 /** Todo texto que a barra mostra, num idioma. */
 export type Strings = {
@@ -81,6 +82,8 @@ export type Strings = {
   // O relatório do comando de estatísticas: um rótulo por linha e as contas de cada uma.
   /** Sem o registro da sessão não há o que relatar. */
   statsOff: string
+  /** A linha do nível (level.ts) e o aviso de quando ele sobe. */
+  levels: LevelStrings & { up: (level: number, title: string) => string; decimal: string }
   stats: {
     title: string
     session: string
@@ -96,6 +99,8 @@ export type Strings = {
     longest: (span: string) => string
     mostTools: (count: number) => string
     mostHelpers: (count: number) => string
+    /** O nível e os tokens que contam para ele. */
+    level: (level: number, title: string, tokens: string) => string
   }
   // A demonstração do palco.
   demo: string
@@ -187,6 +192,14 @@ const PT: Strings = {
   commandDescription: 'Mostra ou esconde a barra de status; "ajustes" abre os ajustes, "stats" mostra as contas da sessão, do dia e de sempre, "compactar" compacta a conversa (com instruções: "compactar mantenha o plano"), "demo" mostra o palco em ação (com outro modelo e effort: "demo opus max")',
   argumentHint: '[ajustes|stats|compactar [instruções]|demo [modelo] [effort]]',
   statsOff: 'Sem estatísticas nesta sessão: a barra não conseguiu abrir o registro dela.',
+  levels: {
+    level: 'nível ',
+    titles: ['Aprendiz', 'Iniciado', 'Artesão', 'Construtor', 'Arquiteto', 'Mestre', 'Veterano', 'Lendário', 'Mítico', 'Imortal'],
+    max: 'MAX',
+    toNext: tokens => `faltam ${tokens}`,
+    up: (level, title) => `Nível ${level}! ${title}`,
+    decimal: ',',
+  },
   stats: {
     title: 'estatísticas', // o Claude Code já põe o nome do plugin na frente do que o comando diz
     session: 'esta sessão',
@@ -201,6 +214,7 @@ const PT: Strings = {
     longest: span => `turno mais longo ${span}`,
     mostTools: count => `${fmtCount(count, '.')} ${count === 1 ? 'tool' : 'tools'} num turno`,
     mostHelpers: count => `${count} ${count === 1 ? 'agente' : 'agentes'} de uma vez`,
+    level: (level, title, tokens) => `${level} · ${title} · ${tokens} tokens`,
   },
   demo: 'Demonstração do palco em cena.',
   demoAs: (model, effort) => `Demonstração do palco em cena, como ${model} · ${effort}.`,
@@ -238,7 +252,7 @@ const PT: Strings = {
   sounds: { mudo: 'mudo', baixo: 'baixo', alto: 'alto' },
   mascots: { modelo: 'por modelo', sessao: 'por sessão' },
   backends: { image: 'pixels', raster: 'blocos', svg: 'vetor', text: 'texto' },
-  toggles: { showRule: 'régua', showStage: 'palco', showContext: 'contexto', showLimits: 'limites', showTurnCost: 'custo do turno', showDayCost: 'custo do dia' },
+  toggles: { showRule: 'régua', showStage: 'palco', showContext: 'contexto', showLevel: 'nível', showLimits: 'limites', showTurnCost: 'custo do turno', showDayCost: 'custo do dia' },
   tributes: { elsa: 'em homenagem à minha filha' },
 }
 
@@ -279,6 +293,14 @@ const EN: Strings = {
   commandDescription: 'Shows or hides the status bar; "settings" opens the settings, "stats" shows the tallies of the session, the day and all time, "compact" compacts the conversation (with instructions: "compact keep the plan"), "demo" plays the stage (as another model and effort: "demo opus max")',
   argumentHint: '[settings|stats|compact [instructions]|demo [model] [effort]]',
   statsOff: 'No stats in this session: the bar could not open its record.',
+  levels: {
+    level: 'level ',
+    titles: ['Apprentice', 'Initiate', 'Artisan', 'Builder', 'Architect', 'Master', 'Veteran', 'Legendary', 'Mythic', 'Immortal'],
+    max: 'MAX',
+    toNext: tokens => `${tokens} to go`,
+    up: (level, title) => `Level ${level}! ${title}`,
+    decimal: '.',
+  },
   stats: {
     title: 'stats',
     session: 'this session',
@@ -293,6 +315,7 @@ const EN: Strings = {
     longest: span => `longest turn ${span}`,
     mostTools: count => `${fmtCount(count, ',')} ${count === 1 ? 'tool' : 'tools'} in one turn`,
     mostHelpers: count => `${count} ${count === 1 ? 'agent' : 'agents'} at once`,
+    level: (level, title, tokens) => `${level} · ${title} · ${tokens} tokens`,
   },
   demo: 'Stage demo playing.',
   demoAs: (model, effort) => `Stage demo playing, as ${model} · ${effort}.`,
@@ -330,7 +353,7 @@ const EN: Strings = {
   sounds: { mudo: 'off', baixo: 'low', alto: 'loud' },
   mascots: { modelo: 'by model', sessao: 'by session' },
   backends: { image: 'pixels', raster: 'blocks', svg: 'vector', text: 'text' },
-  toggles: { showRule: 'rule', showStage: 'stage', showContext: 'context', showLimits: 'limits', showTurnCost: 'turn cost', showDayCost: 'day cost' },
+  toggles: { showRule: 'rule', showStage: 'stage', showContext: 'context', showLevel: 'level', showLimits: 'limits', showTurnCost: 'turn cost', showDayCost: 'day cost' },
   tributes: { elsa: 'in honor of my daughter' },
 }
 

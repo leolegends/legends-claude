@@ -90,11 +90,11 @@ export const AGENT_LIMITS = [3, 6, 10] as const
 export const DEFAULT_SETTINGS: Settings = {
   language: 'pt', accent: 'claude', motion: 'completa', speed: 'normal',
   showRule: true, showStage: true, resolution: 'auto', size: 'normal', avatar: 'clawd', sound: 'mudo',
-  showLimits: true, showTurnCost: true, showDayCost: true, showContext: true, maxAgents: 6,
+  showLimits: true, showTurnCost: true, showDayCost: true, showContext: true, showLevel: true, maxAgents: 6,
 }
 
 /** Os interruptores da linha "mostrar", na ordem em que aparecem. */
-export const TOGGLES: readonly ToggleKey[] = ['showRule', 'showStage', 'showContext', 'showLimits', 'showTurnCost', 'showDayCost']
+export const TOGGLES: readonly ToggleKey[] = ['showRule', 'showStage', 'showContext', 'showLevel', 'showLimits', 'showTurnCost', 'showDayCost']
 
 const oneOf = <T extends string | number>(ids: readonly T[], v: unknown, fallback: T): T =>
   ids.includes(v as T) ? (v as T) : fallback
@@ -122,6 +122,7 @@ export const sanitize = (raw: unknown, language: Language = DEFAULT_SETTINGS.lan
     showTurnCost: flag(r.showTurnCost, d.showTurnCost),
     showDayCost: flag(r.showDayCost, d.showDayCost),
     showContext: flag(r.showContext, d.showContext),
+    showLevel: flag(r.showLevel, d.showLevel),
     maxAgents: oneOf(AGENT_LIMITS, r.maxAgents, d.maxAgents),
   }
 }

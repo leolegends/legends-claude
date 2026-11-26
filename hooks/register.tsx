@@ -15,7 +15,8 @@ import { clean, cols, prettyModel, shortTool } from './format'
 import type { Zoom } from './hd'
 import { stringsOf } from './i18n'
 import type { Strings } from './i18n'
-import { closeLedger, dayCost, ledgerReport, saveLedger, tally } from './ledger'
+import { closeLedger, dayCost, ledgerReport, saveLedger, tally, totalTokens } from './ledger'
+import { levelUp, xpOf } from './level'
 import { EFFORTS, STAGE_SLOT, cardLines, fromUsage, hudParts, viewParts } from './lines'
 import { paced } from './pace'
 import { dropStage, recheckPixels, resetPainter } from './painter'
@@ -38,7 +39,7 @@ import { backendOf, zoomOf } from './stage'
 import type { Abilities, Pixels } from './stage'
 import { drawStage } from './stage-draw'
 import { offeredBy } from './stage-node'
-import { countFail, countHelpers, countTool, countTurn } from './stats'
+import { countFail, countHelpers, countTokens, countTool, countTurn } from './stats'
 import type { SessionStats } from './stats'
 import type {
   StatusAgent as Agent,
@@ -210,6 +211,17 @@ const count = ($: EngineInterface, change: (stats: SessionStats) => SessionStats
 // Lança o custo de agora nas contas da sessão e grava o registro dela: no fim de cada turno, dela ou de um agente.
 const keepBooks = ($: EngineInterface, now: number) =>
   void read($, figures).then(f => saveLedger($, f.costUsd, now)).catch(err => report($, 'stats', err))
+
+// Os tokens de um turno entram na conta; quando o nível sobe, a barra avisa (com a linha do nível ligada) e festeja.
+async function gainTokens($: EngineInterface, xp: number) {
+  const before = totalTokens()
+  if (xp <= 0 || before === undefined) return
+  tally(stats => countTokens(stats, xp))
+  const up = levelUp(before, before + xp)
+  if (!up || !(await read($, settings)).showLevel) return
+  $.ui.toast(strings.levels.up(up.level, strings.levels.titles[up.title] ?? ''))
+  cue($, 'party', await $.clock.now())
+}
 
 async function reconcile($: EngineInterface, now: number) {
   const listed = await $.agent.list()
@@ -442,7 +454,7 @@ export const register: Register = on => {
     if (STATS_ARGS.test(e.args)) {
       // As contas são para a pessoa: o texto aparece na conversa e não vai para o modelo.
       const now = await $.clock.now()
-      const text = await ledgerReport($, (await read($, figures)).costUsd, now, strings.stats).catch(err => (report($, 'stats', err), null))
+      const text = await ledgerReport($, (await read($, figures)).costUsd, now, strings.stats, strings.levels).catch(err => (report($, 'stats', err), null))
       return { text: text ?? strings.statsOff, isTextDisplayOnly: true }
     }
     const compact = COMPACT_ARGS.exec(e.args)
@@ -572,6 +584,7 @@ export const register: Register = on => {
     } finally {
       // Mesmo que o que está abaixo falhe, o turno acabou: a barra e a cena têm de saber.
       try {
+        await gainTokens($, xpOf(e.usage))
         if (e.agentId) {
           const state: AgentState = e.isAborted || e.reason === 'error' ? 'failed' : 'done'
           const u = e.usage
@@ -700,7 +713,7 @@ export const register: Register = on => {
     const lines = cardLines({
       figures: f, main: m, agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s,
       stage: draw.node ? [STAGE_SLOT] : draw.lines, hasStageHud, agentRows, viewedId, dayUsd: dayCost(f.costUsd, now),
-      compact: compactState,
+      compact: compactState, tokens: totalTokens(),
     })
     const current = f.model ? prettyModel(f.model).toLowerCase() : ''
     // O que está em vigor: decide em que opção o anel de foco cai quando um seletor ou a aba abre.
