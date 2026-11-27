@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import { STALE_MS, absorb, after, freshStats, floorsOf, othersToday, readLifetime, readStats, spend, statsText, summarize, todayOf } from './stats'
 import type { Lifetime, SessionStats } from './stats'
-import { newBadges } from './badges'
+import { BADGE_COUNT, earnedBadges, newBadges } from './badges'
 import type { Badge, BadgeFacts, BadgeStrings } from './badges'
 import type { Strings } from './i18n'
 
@@ -186,3 +186,7 @@ export const freshBadges = (): Badge[] => {
   badgeBase = now
   return before ? newBadges(before, now) : []
 }
+
+/** Quantas insígnias as contas de sempre já dão, e quantas existem; `undefined` sem livro aberto. */
+export const badgeTally = (): { earned: number; total: number } | undefined =>
+  book ? { earned: earnedBadges(factsOf(book)).length, total: BADGE_COUNT } : undefined

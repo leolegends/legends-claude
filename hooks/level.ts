@@ -94,11 +94,23 @@ export const fmtTokens = (n: number, decimal = ','): string => {
 // A cor do título sobe com ele: o comum na cor de destaque, os altos em âmbar, o 100 em vermelho-lenda.
 const colorOf = (lv: Level) => (lv.isMax ? 'error' : lv.title >= 7 ? 'warning' : 'claude')
 
+/** As insígnias para o fim da linha: quantas vieram e quantas existem. */
+export type BadgeTally = { earned: number; total: number }
+
+/** O ícone das insígnias na linha: uma coluna só, em qualquer terminal. */
+export const BADGE_ICON = '✪'
+
+// "✪ 10/21": dourado com alguma conquistada, apagado sem nenhuma.
+const badgeParts = (b: BadgeTally): Part[] => [
+  { text: ' · ', dim: true },
+  b.earned > 0 ? { text: `${BADGE_ICON} ${b.earned}/${b.total}`, color: 'warning', bold: b.earned >= b.total } : { text: `${BADGE_ICON} 0/${b.total}`, dim: true },
+]
+
 /**
- * Puro: "nível 23 ▰▰▰▰▱▱▱▱▱▱ 41%            Construtor · 12,3M · faltam 1,2M". No 100, o medidor
- * cheio e "MAX". `decimal` é o separador do idioma.
+ * Puro: "nível 23 ▰▰▰▰▱▱▱▱▱▱ 41%       Construtor · 12,3M · faltam 1,2M · ✪ 10/21". No 100, o medidor
+ * cheio e "MAX". `decimal` é o separador do idioma; sem `badges`, a linha não fala das insígnias.
  */
-export const levelLine = (total: number, t: LevelStrings, decimal = ','): Line => {
+export const levelLine = (total: number, t: LevelStrings, decimal = ',', badges?: BadgeTally): Line => {
   const lv = levelOf(total)
   const color = colorOf(lv)
   const on = Math.min(GAUGE, Math.floor(lv.progress * GAUGE))
@@ -119,6 +131,7 @@ export const levelLine = (total: number, t: LevelStrings, decimal = ','): Line =
       { text: title, color, bold: lv.title >= 7 },
       { text: ` · ${fmtTokens(lv.tokens, decimal)}`, dim: true },
       ...(lv.isMax ? [] : [{ text: ` · ${t.toNext(fmtTokens(lv.next - lv.tokens, decimal))}`, dim: true }]),
+      ...(badges ? badgeParts(badges) : []),
     ],
   }
 }
