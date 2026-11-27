@@ -150,6 +150,7 @@ Enquanto o nível mede os tokens, as insígnias marcam o resto das contas de sem
 | Maestro | agentes rodando ao mesmo tempo | 3 · 5 · 10 |
 | Persistente | ferramentas que falharam | 10 · 100 · 1.000 |
 
+- **Na barra,** a linha do nível fecha com o ícone e o contador: `… · faltam 1,2M · ✪ 10/21`. Em dourado com alguma conquistada, apagado sem nenhuma, em negrito com as 21.
 - **Quando uma vem,** no fim do turno, aparece um aviso (`Insígnia nova: Pedreiro prata · 1.000 ferramentas`) com a mesma festa do nível. Vindo várias de uma vez, o aviso fala da de grau mais alto e diz quantas mais (`(+2)`). O que você já tinha ao abrir a sessão não vira aviso.
 - **`/legends-claude stats`** mostra quantas você tem, o grau mais alto de cada uma, e a próxima, a mais perto de vir, com quanto do caminho já foi:
   ```
@@ -157,7 +158,7 @@ Enquanto o nível mede os tokens, as insígnias marcam o resto das contas de sem
   próxima           Persistente bronze · 10 falhas superadas · 90%
   ```
 - Nada é gravado sobre elas: uma insígnia está conquistada quando a conta passa da meta. Por isso não há data de conquista, e duas sessões abertas ao mesmo tempo não brigam por um registro; em troca, uma insígnia que veio do trabalho de outra sessão pode ser avisada nesta também.
-- O aviso segue o interruptor `nível`: com a linha do nível desligada, as insígnias só aparecem no `stats`.
+- O contador e o aviso seguem o interruptor `nível`: com a linha do nível desligada, as insígnias só aparecem no `stats`.
 
 ## Instalação
 

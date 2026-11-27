@@ -90,3 +90,20 @@ test('com o interruptor do nível desligado, a linha some e a subida não avisa'
   expect(store['stats:esta']).toMatchObject({ tokens: tokensFor(5) }) // a conta segue: ligar de novo mostra o nível certo
   await ui.unmount()
 })
+
+test('a linha do nível fecha com o ícone e o contador das insígnias de sempre', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  // 150 ferramentas e 12 sessões no total: Pedreiro bronze e Assíduo bronze
+  await startSession($, on, { stored: { stats: { since: 1, sessions: 12, tokens: tokensFor(10), bricks: 150 } } })
+  const ui = await $.ui.mount(band())
+  expect(await ui.find({ type: 'Text', text: /✪ 2\/21/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('com o interruptor do nível desligado, o contador das insígnias some junto', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  await startSession($, on, { settings: { showLevel: false }, stored: { stats: { since: 1, sessions: 12, bricks: 150 } } })
+  const ui = await $.ui.mount(band())
+  expect(await ui.find({ type: 'Text', text: /✪/ })).toBeUndefined()
+  await ui.unmount()
+})

@@ -15,7 +15,7 @@ import { clean, cols, prettyModel, shortTool } from './format'
 import type { Zoom } from './hd'
 import { stringsOf } from './i18n'
 import type { Strings } from './i18n'
-import { closeLedger, dayCost, freshBadges, ledgerReport, saveLedger, tally, totalTokens } from './ledger'
+import { badgeTally, closeLedger, dayCost, freshBadges, ledgerReport, saveLedger, tally, totalTokens } from './ledger'
 import { badgeToast } from './badges'
 import { levelUp, xpOf } from './level'
 import { EFFORTS, STAGE_SLOT, cardLines, fromUsage, hudParts, viewParts } from './lines'
@@ -723,7 +723,7 @@ export const register: Register = on => {
     const lines = cardLines({
       figures: f, main: m, agents: list, now, frame: fr, isWorking: e.props.isWorking, max: width, settings: s,
       stage: draw.node ? [STAGE_SLOT] : draw.lines, hasStageHud, agentRows, viewedId, dayUsd: dayCost(f.costUsd, now),
-      compact: compactState, tokens: totalTokens(),
+      compact: compactState, tokens: totalTokens(), badges: badgeTally(),
     })
     const current = f.model ? prettyModel(f.model).toLowerCase() : ''
     // O que está em vigor: decide em que opção o anel de foco cai quando um seletor ou a aba abre.

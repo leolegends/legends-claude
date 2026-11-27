@@ -77,6 +77,25 @@ describe('a linha da barra', () => {
     expect(text(line.tail)).toBe('Imortal · 2B')
   })
 
+  test('com as insígnias, o ícone e o contador fecham a linha, em dourado', () => {
+    const line = levelLine(tokensFor(23), PT, ',', { earned: 10, total: 21 })
+    expect(text(line.tail)).toMatch(/ · faltam [\d,]+M · ✪ 10\/21$/)
+    expect(line.tail?.at(-1)).toMatchObject({ color: 'warning' })
+  })
+
+  test('sem nenhuma insígnia, o contador aparece apagado', () => {
+    const last = levelLine(0, PT, ',', { earned: 0, total: 21 }).tail?.at(-1)
+    expect(last).toMatchObject({ text: '✪ 0/21', dim: true })
+  })
+
+  test('todas conquistadas: o contador em negrito', () => {
+    expect(levelLine(MAX_TOKENS, PT, ',', { earned: 21, total: 21 }).tail?.at(-1)).toMatchObject({ text: '✪ 21/21', bold: true })
+  })
+
+  test('sem as contas das insígnias, a linha não fala delas', () => {
+    expect(text(levelLine(tokensFor(23), PT, ',').tail)).not.toContain('✪')
+  })
+
   test('os números curtos usam o separador do idioma', () => {
     expect([fmtTokens(940), fmtTokens(12_300), fmtTokens(1_250_000, ','), fmtTokens(1_250_000, '.'), fmtTokens(345_000_000)])
       .toEqual(['940', '12k', '1,3M', '1.3M', '345M'])

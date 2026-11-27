@@ -150,6 +150,7 @@ While the level measures tokens, badges mark the rest of the all-time tallies (e
 | Conductor | agents running at once | 3 · 5 · 10 |
 | Persistent | tool calls that failed | 10 · 100 · 1,000 |
 
+- **On the bar,** the level line ends with the icon and the counter: `… · 1.2M to go · ✪ 10/21`. Gold once any is earned, dimmed with none, bold with all 21.
 - **When one comes,** at the end of the turn, a notice shows (`New badge: Mason silver · 1,000 tools`) with the same celebration as the level. When several come at once, the notice names the highest tier and says how many more (`(+2)`). What you already had when the session opened does not become a notice.
 - **`/legends-claude stats`** shows how many you have, the highest tier of each, and the next one, the closest to coming, with how much of the way is done:
   ```
@@ -157,7 +158,7 @@ While the level measures tokens, badges mark the rest of the all-time tallies (e
   next              Persistent bronze · 10 failures overcome · 90%
   ```
 - Nothing is saved about them: a badge is earned when the tally passes the goal. So there is no date earned, and two sessions open at the same time do not fight over a record; in exchange, a badge that came from another session's work may be announced in this one too.
-- The notice follows the `level` toggle: with the level line off, badges only show in `stats`.
+- The counter and the notice follow the `level` toggle: with the level line off, badges only show in `stats`.
 
 ## Installation
 

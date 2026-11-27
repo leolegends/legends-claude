@@ -3,6 +3,7 @@ import type { SessionUsage } from 'claude-code'
 import { contextLine, fromContext } from './context-line'
 import type { CompactState } from './context-line'
 import { levelLine } from './level'
+import type { BadgeTally } from './level'
 import { IDLE_GLYPH, burst, reveal, seedOf, shimmer, trail } from './effects'
 import { PENDING, fit, fmtCost, fmtEta, fmtSoon, fmtSpan, fmtSpark, fmtTokens, prettyModel } from './format'
 import { stringsOf } from './i18n'
@@ -284,12 +285,14 @@ export type CardInput = {
   compact?: CompactState
   /** Os tokens de sempre, de onde sai o nível; ausente quando a barra não tem como saber. */
   tokens?: number
+  /** As insígnias conquistadas e o total, para o contador na linha do nível; ausente quando a barra não tem como saber. */
+  badges?: BadgeTally
 }
 
 // Puro: as linhas da barra, na largura `max`. Quando cabe, modelo fica à esquerda e custo e limites
 // encostam à direita da mesma linha; senão, empilham. A linha do contexto vem logo abaixo, antes do palco.
 export const cardLines = (input: CardInput): Line[] => {
-  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], hasStageHud = true, agentRows = Infinity, viewedId, dayUsd, compact = 'idle', tokens } = input
+  const { figures: f, main: m, agents: list, now, frame: fr, isWorking, max = DEFAULT_WIDTH, settings: s = DEFAULT_SETTINGS, stage = [], hasStageHud = true, agentRows = Infinity, viewedId, dayUsd, compact = 'idle', tokens, badges } = input
   const fx = effectsOf(s)
   const t = stringsOf(s.language)
   const head = headLine(f, isWorking, fr, fx, t)
@@ -302,7 +305,7 @@ export const cardLines = (input: CardInput): Line[] => {
   const shown = nested.slice(0, Math.max(0, Math.min(s.maxAgents, agentRows)))
   const hiddenCount = nested.length - shown.length
   const context = s.showContext && f.context ? [contextLine(f.context, compact, t)] : []
-  const level = s.showLevel && tokens !== undefined ? [levelLine(tokens, t.levels, t.levels.decimal)] : []
+  const level = s.showLevel && tokens !== undefined ? [levelLine(tokens, t.levels, t.levels.decimal, badges)] : []
   return [
     ...(isOneRow ? [top, ...context, ...level, ...stage, ...work] : [head, cost, ...context, ...level, ...stage, ...work, ...(limits ? [limits] : [])]),
     ...shown.map(({ agent, depth }, n) => agentLine(agent, now, fr, n, max, fx, t, agent.id === viewedId, depth)),
