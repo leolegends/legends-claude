@@ -2,6 +2,8 @@ import type { EngineInterface } from 'claude-code'
 
 import { STALE_MS, absorb, after, freshStats, floorsOf, othersToday, readLifetime, readStats, spend, statsText, summarize, todayOf } from './stats'
 import type { Lifetime, SessionStats } from './stats'
+import { newBadges } from './badges'
+import type { Badge, BadgeFacts, BadgeStrings } from './badges'
 import type { Strings } from './i18n'
 
 // O livro de contas da barra: o registro da sessão de agora, os das outras sessões e o total de
@@ -38,6 +40,8 @@ type Save = { cost: number | undefined; now: number }
 
 // O livro aberto: uma variável do módulo, como a cena do palco. Um reload a zera, e a sessão o reabre do store.
 let book: Book | null = null
+// As contas da última olhada nas insígnias (freshBadges): o que já estava conquistado ali não é avisado de novo.
+let badgeBase: BadgeFacts | null = null
 let isSaving = false
 let queued: Save | null = null // a gravação pedida enquanto outra estava em curso: roda em seguida
 
@@ -75,11 +79,15 @@ export async function openLedger($: EngineInterface, now: number, cost: number |
     key, life, readAt: now, mine: stored ?? freshStats(now, cost ?? 0), hasBase: stored !== null || cost !== undefined, saved: stored,
     others: all.filter(([, stats]) => now - stats.updatedAt <= STALE_MS).map(([, stats]) => stats),
   }
+  badgeBase = factsOf(book) // o que a pessoa já tinha ao abrir a sessão não vira aviso
   return id
 }
 
 /** Fecha o livro: sem ele, nada é contado nem gravado (a sessão recomeçou, ou não há como saber quem ela é). */
-export const closeLedger = () => void (book = null)
+export const closeLedger = () => {
+  book = null
+  badgeBase = null
+}
 
 /**
  * Uma conta da sessão mudou (uma ferramenta, uma falha, um turno). Devolve quantos andares fecharam
@@ -148,13 +156,13 @@ export const dayCost = (cost: number | undefined, now: number): number | undefin
  * parados há dias também: só entram no total de sempre quando alguma sessão abre o livro, e até lá
  * contam daqui); `null` sem livro aberto.
  */
-export async function ledgerReport($: EngineInterface, cost: number | undefined, now: number, t: Strings['stats'], lv?: Strings['levels']): Promise<string | null> {
+export async function ledgerReport($: EngineInterface, cost: number | undefined, now: number, t: Strings['stats'], lv?: Strings['levels'], bd?: BadgeStrings): Promise<string | null> {
   const key = book?.key
   if (key === undefined) return null
   const others = (await readOthers($, key)).map(([, stats]) => stats)
   if (!book || book.key !== key) return null
   book = { ...withBase(book, cost), others, readAt: now }
-  return statsText(summarize(book.mine, others, book.life, cost, now), t, lv)
+  return statsText(summarize(book.mine, others, book.life, cost, now), t, lv, bd)
 }
 
 /**
@@ -163,3 +171,18 @@ export async function ledgerReport($: EngineInterface, cost: number | undefined,
  */
 export const totalTokens = (): number | undefined =>
   book ? book.life.tokens + book.others.reduce((sum, s) => sum + s.tokens, 0) + book.mine.tokens : undefined
+
+// As contas de sempre de onde saem as insígnias: o total guardado, as outras sessões (como na última leitura) e esta.
+const factsOf = (open: Book): BadgeFacts => [...open.others, open.mine].reduce(absorb, open.life)
+
+
+/**
+ * As insígnias que vieram desde a última olhada (ou desde que o livro abriu). Sem livro aberto, nenhuma.
+ */
+export const freshBadges = (): Badge[] => {
+  if (!book) return []
+  const now = factsOf(book)
+  const before = badgeBase
+  badgeBase = now
+  return before ? newBadges(before, now) : []
+}

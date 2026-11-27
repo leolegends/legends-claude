@@ -1,4 +1,5 @@
 import { fmtCount } from './format'
+import type { BadgeStrings } from './badges'
 import type { LevelStrings } from './level'
 import type { Backend } from './stage'
 import type {
@@ -84,6 +85,8 @@ export type Strings = {
   statsOff: string
   /** A linha do nível (level.ts) e o aviso de quando ele sobe. */
   levels: LevelStrings & { up: (level: number, title: string) => string; decimal: string }
+  /** As insígnias (badges.ts): no relatório de estatísticas e no aviso de quando uma vem. */
+  badges: BadgeStrings
   stats: {
     title: string
     session: string
@@ -200,6 +203,24 @@ const PT: Strings = {
     up: (level, title) => `Nível ${level}! ${title}`,
     decimal: ',',
   },
+  badges: {
+    label: 'insígnias',
+    next: 'próxima',
+    names: { bricks: 'Pedreiro', turns: 'Maratonista', sessions: 'Assíduo', longest: 'Fôlego', burst: 'Rajada', crew: 'Maestro', grit: 'Persistente' },
+    tiers: ['bronze', 'prata', 'ouro'],
+    count: (earned, total) => `${earned} de ${total}`,
+    goals: {
+      bricks: goal => `${fmtCount(goal, '.')} ferramentas`,
+      turns: goal => `${fmtCount(goal, '.')} turnos`,
+      sessions: goal => `${fmtCount(goal, '.')} sessões`,
+      longest: goal => `turno de ${Math.round(goal / 60_000)} min`,
+      burst: goal => `${fmtCount(goal, '.')} ferramentas num turno`,
+      crew: goal => `${goal} agentes de uma vez`,
+      grit: goal => `${fmtCount(goal, '.')} falhas superadas`,
+    },
+    up: (name, goal) => `Insígnia nova: ${name} · ${goal}`,
+    more: count => `(+${count})`,
+  },
   stats: {
     title: 'estatísticas', // o Claude Code já põe o nome do plugin na frente do que o comando diz
     session: 'esta sessão',
@@ -300,6 +321,24 @@ const EN: Strings = {
     toNext: tokens => `${tokens} to go`,
     up: (level, title) => `Level ${level}! ${title}`,
     decimal: '.',
+  },
+  badges: {
+    label: 'badges',
+    next: 'next',
+    names: { bricks: 'Mason', turns: 'Marathoner', sessions: 'Regular', longest: 'Stamina', burst: 'Burst', crew: 'Conductor', grit: 'Persistent' },
+    tiers: ['bronze', 'silver', 'gold'],
+    count: (earned, total) => `${earned} of ${total}`,
+    goals: {
+      bricks: goal => `${fmtCount(goal, ',')} tools`,
+      turns: goal => `${fmtCount(goal, ',')} turns`,
+      sessions: goal => `${fmtCount(goal, ',')} sessions`,
+      longest: goal => `${Math.round(goal / 60_000)} min turn`,
+      burst: goal => `${fmtCount(goal, ',')} tools in one turn`,
+      crew: goal => `${goal} agents at once`,
+      grit: goal => `${fmtCount(goal, ',')} failures overcome`,
+    },
+    up: (name, goal) => `New badge: ${name} · ${goal}`,
+    more: count => `(+${count})`,
   },
   stats: {
     title: 'stats',
