@@ -153,6 +153,15 @@ describe('as contas do dia e de sempre', () => {
     ])
   })
 
+  test('com as insígnias, o relatório ganha as conquistadas e a próxima', () => {
+    const t = stringsOf('pt')
+    const lines = statsText(summarize(mine, others, life, 4.2, NOON), t.stats, undefined, t.badges).split('\n')
+    expect(lines.slice(-2)).toEqual([
+      'insígnias         10 de 21 · Pedreiro ouro · Maratonista bronze · Assíduo bronze · Fôlego bronze · Rajada prata · Maestro prata',
+      'próxima           Persistente bronze · 10 falhas superadas · 90%',
+    ])
+  })
+
   test('um recorde de uma ferramenta só vai no singular, nos dois idiomas', () => {
     const one = summarize(session({ turns: 1, mostTools: 1, longestTurnMs: 5_000 }), [], readLifetime(undefined, NOON), undefined, NOON)
     expect(statsText(one, stringsOf('pt').stats)).toContain('turno mais longo 5s · 1 tool num turno')

@@ -136,6 +136,29 @@ The level line measures how much you have worked with Claude Code, not how much 
 - **Leveling up** shows a notice (`Level 31! Builder`) and plays the fanfare, when the `sound` setting is on.
 - The `level` toggle in the settings tab hides the line (and the notice); `/legends-claude stats` also shows the level, the title and the tokens.
 
+## Badges
+
+While the level measures tokens, badges mark the rest of the all-time tallies (every session, agents included). There are seven, each in three tiers, bronze, silver and gold: 21 in all.
+
+| Badge | What it measures | Bronze · silver · gold |
+|---|---|---|
+| Mason | tool calls | 100 · 1,000 · 10,000 |
+| Marathoner | turns | 100 · 1,000 · 10,000 |
+| Regular | sessions | 10 · 100 · 500 |
+| Stamina | the longest turn | 10 · 30 · 60 min |
+| Burst | tools in a single turn | 25 · 50 · 100 |
+| Conductor | agents running at once | 3 · 5 · 10 |
+| Persistent | tool calls that failed | 10 · 100 · 1,000 |
+
+- **When one comes,** at the end of the turn, a notice shows (`New badge: Mason silver · 1,000 tools`) with the same celebration as the level. When several come at once, the notice names the highest tier and says how many more (`(+2)`). What you already had when the session opened does not become a notice.
+- **`/legends-claude stats`** shows how many you have, the highest tier of each, and the next one, the closest to coming, with how much of the way is done:
+  ```
+  badges            10 of 21 · Mason gold · Marathoner bronze · Regular bronze · Stamina bronze · Burst silver · Conductor silver
+  next              Persistent bronze · 10 failures overcome · 90%
+  ```
+- Nothing is saved about them: a badge is earned when the tally passes the goal. So there is no date earned, and two sessions open at the same time do not fight over a record; in exchange, a badge that came from another session's work may be announced in this one too.
+- The notice follows the `level` toggle: with the level line off, badges only show in `stats`.
+
 ## Installation
 
 At the prompt of a Claude Code session in the terminal:
@@ -167,7 +190,7 @@ To remove: `claude plugin uninstall legends-claude`.
 - `▾` at the corner of the bar hides it; `◂ status` brings it back. `/legends-claude` toggles between hidden and visible.
 - `/legends-claude demo` plays the stage, with the session idle. `/legends-claude demo fable max` plays it as another model and effort, without changing the session's.
 - `/legends-claude compact` compacts the conversation right away, with no confirmation: it runs Claude Code's own `/compact`, which shows in the conversation and waits for the session to be idle. What comes after the word goes to the summary as instructions (`/legends-claude compact keep the plan`). `compactar` works too.
-- `/legends-claude stats` shows the tallies: the bricks (every tool call is one), the floors, the failures and the turns of this session; today's cost summed across sessions; the all-time total; and the records (the longest turn, the one that called the most tools, the most agents at once); and the level, with its title and the tokens that count for it. The text shows in the conversation for you alone: it does not go to the model.
+- `/legends-claude stats` shows the tallies: the bricks (every tool call is one), the floors, the failures and the turns of this session; today's cost summed across sessions; the all-time total; and the records (the longest turn, the one that called the most tools, the most agents at once); the level, with its title and the tokens that count for it; and the [badges](#badges), with the next one. The text shows in the conversation for you alone: it does not go to the model.
 - **`⚙` opens the settings tab** in the bar itself (or `/legends-claude settings`; `ajustes` works too). Every change applies immediately and is saved for the next sessions:
 
 ```
@@ -235,7 +258,7 @@ The hooks module and what it imports, in `hooks/`:
 - `lines.ts`: the lines of the bar (header, cost, work, limits, agents), pure. `bar-rows.tsx`: the rows of buttons under the header (the model or effort picker, and the one that says whose transcript is on screen).
 - `phase.ts`: what each piece of a model request says about its phase (thinking, writing, putting a call together). `focus.ts`: which button the focus ring lands on when something opens in the bar.
 - `context-line.ts`: the context line, pure: the gauge, the suggestion to compact and the button.
-- `level.ts`: the level, pure: the curve, the titles and the line.
+- `level.ts`: the level, pure: the curve, the titles and the line. `badges.ts`: the badges, pure: the goals, the earned ones, the next one and the texts of the report and the notice.
 - `pace.ts`: the pace of a limit window and the forecast of when it fills. `stats.ts`: the tallies of a session, of the day and of all time, pure; `ledger.ts`: their record in the plugin's store. `sound.ts`: the sounds, from the tune to the WAV.
 - `effects.ts`: the text animations (spark, comet, rule pulse, emerging name, burst, shimmer).
 - `format.ts`, `parts.ts`, `agents.ts`: text formats, line parts, and the agent lines reconciled with the engine's list.

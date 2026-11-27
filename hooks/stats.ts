@@ -1,5 +1,7 @@
 import { fmtCost, fmtSpan } from './format'
 import type { Strings } from './i18n'
+import { badgeRows } from './badges'
+import type { BadgeStrings } from './badges'
 import { fmtTokens, levelOf } from './level'
 
 // O que a barra lembra de uma sessão para a outra: quantos tijolos (uma ferramenta chamada é um
@@ -182,7 +184,7 @@ export const summarize = (mine: SessionStats, others: readonly SessionStats[], l
 const LABEL_GAP = 2 // colunas entre o rótulo mais comprido do relatório e as contas
 
 /** Puro: o relatório do comando de estatísticas, uma linha por conta, no idioma dado. */
-export const statsText = (s: Summary, t: Strings['stats'], lv?: Strings['levels']): string => {
+export const statsText = (s: Summary, t: Strings['stats'], lv?: Strings['levels'], bd?: BadgeStrings): string => {
   const work = (tally: Tally) => [
     t.bricks(tally.bricks),
     floorsOf(tally.bricks) > 0 ? t.floors(floorsOf(tally.bricks)) : '',
@@ -201,6 +203,7 @@ export const statsText = (s: Summary, t: Strings['stats'], lv?: Strings['levels'
     [t.since(dayOf(all.since)), [...work(all), t.sessions(all.sessions), fmtCost(all.usd)]],
     ...(records.some(Boolean) ? [[t.records, records] as const] : []),
     ...(lv ? [[lv.level.trim(), [t.level(levelOf(all.tokens).level, lv.titles[levelOf(all.tokens).title] ?? '', fmtTokens(all.tokens, lv.decimal))]] as const] : []),
+    ...(bd ? badgeRows(all, bd) : []),
   ]
   // a coluna dos rótulos tem a largura do mais comprido deles: as contas começam alinhadas
   const width = Math.max(...rows.map(([label]) => label.length)) + LABEL_GAP

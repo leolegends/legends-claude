@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { stringsOf } from './i18n'
-import { closeLedger, dayCost, ledgerReport, openLedger, saveLedger, tally } from './ledger'
+import { closeLedger, dayCost, freshBadges, ledgerReport, openLedger, saveLedger, tally } from './ledger'
 import { countTool, countTurn, dayOf } from './stats'
 
 // O livro de contas diante do store, com um store de mentira que o teste controla: o que já havia
@@ -182,5 +182,28 @@ describe('o livro de contas', () => {
     const report = await ledgerReport(engine(store), 0, NOW, T)
     expect(report).toContain('297 tijolos · 2 andares · 12 turnos · 4 sessões')
     expect(report).toContain('esta sessão')
+  })
+})
+
+describe('as insígnias do livro', () => {
+  test('sem livro aberto, nenhuma', () => {
+    closeLedger()
+    expect(freshBadges()).toEqual([])
+  })
+
+  test('a que vem durante a sessão aparece uma vez só', async () => {
+    closeLedger()
+    await openLedger(engine({}), NOW, 0)
+    bricks(99)
+    expect(freshBadges()).toEqual([])
+    bricks(1)
+    expect(freshBadges()).toEqual([{ family: 'bricks', tier: 0, goal: 100 }])
+    expect(freshBadges()).toEqual([])
+  })
+
+  test('o que a pessoa já tinha ao abrir a sessão não vira aviso', async () => {
+    closeLedger()
+    await openLedger(engine({ [KEY]: record({ bricks: 150 }), 'stats:outra': record({ turns: 100 }) }), NOW, 0)
+    expect(freshBadges()).toEqual([])
   })
 })

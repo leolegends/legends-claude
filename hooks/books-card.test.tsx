@@ -89,6 +89,8 @@ test('as contas da sessão: cada ferramenta é um tijolo, e o comando as mostra 
     `desde ${TODAY}  3 tijolos · 1 falha · 1 turno · 1 sessão · $1.25`,
     'recordes          turno mais longo 1m30s · 3 tools num turno',
     'nível             1 · Aprendiz · 0 tokens',
+    'insígnias         0 de 21',
+    'próxima           Fôlego bronze · turno de 10 min · 15%',
   ])
   // o registro da sessão fica no store, na chave dela, para as outras sessões somarem
   expect(store['stats:esta']).toMatchObject({ bricks: 3, fails: 1, turns: 1, longestTurnMs: 90_000, mostTools: 3, lastCost: 1.25, days: { [TODAY]: 1.25 } })

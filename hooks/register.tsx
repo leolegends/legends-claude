@@ -15,7 +15,8 @@ import { clean, cols, prettyModel, shortTool } from './format'
 import type { Zoom } from './hd'
 import { stringsOf } from './i18n'
 import type { Strings } from './i18n'
-import { closeLedger, dayCost, ledgerReport, saveLedger, tally, totalTokens } from './ledger'
+import { closeLedger, dayCost, freshBadges, ledgerReport, saveLedger, tally, totalTokens } from './ledger'
+import { badgeToast } from './badges'
 import { levelUp, xpOf } from './level'
 import { EFFORTS, STAGE_SLOT, cardLines, fromUsage, hudParts, viewParts } from './lines'
 import { paced } from './pace'
@@ -210,7 +211,16 @@ const count = ($: EngineInterface, change: (stats: SessionStats) => SessionStats
 
 // Lança o custo de agora nas contas da sessão e grava o registro dela: no fim de cada turno, dela ou de um agente.
 const keepBooks = ($: EngineInterface, now: number) =>
-  void read($, figures).then(f => saveLedger($, f.costUsd, now)).catch(err => report($, 'stats', err))
+  void read($, figures).then(f => saveLedger($, f.costUsd, now)).then(() => earnBadges($)).catch(err => report($, 'stats', err))
+
+// As insígnias que vieram desde o último turno: um aviso só (com quantas mais vieram) e a festa do nível.
+// Seguem o ajuste do nível: com a linha dele desligada, nada de aviso.
+async function earnBadges($: EngineInterface) {
+  const text = badgeToast(freshBadges(), strings.badges)
+  if (!text || !(await read($, settings)).showLevel) return
+  $.ui.toast(text)
+  cue($, 'party', await $.clock.now())
+}
 
 // Os tokens de um turno entram na conta; quando o nível sobe, a barra avisa (com a linha do nível ligada) e festeja.
 async function gainTokens($: EngineInterface, xp: number) {
@@ -454,7 +464,7 @@ export const register: Register = on => {
     if (STATS_ARGS.test(e.args)) {
       // As contas são para a pessoa: o texto aparece na conversa e não vai para o modelo.
       const now = await $.clock.now()
-      const text = await ledgerReport($, (await read($, figures)).costUsd, now, strings.stats, strings.levels).catch(err => (report($, 'stats', err), null))
+      const text = await ledgerReport($, (await read($, figures)).costUsd, now, strings.stats, strings.levels, strings.badges).catch(err => (report($, 'stats', err), null))
       return { text: text ?? strings.statsOff, isTextDisplayOnly: true }
     }
     const compact = COMPACT_ARGS.exec(e.args)

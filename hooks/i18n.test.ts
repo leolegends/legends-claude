@@ -23,7 +23,7 @@ describe('os dois idiomas', () => {
     const pt = texts(PT)
     const same = [...texts(EN)].filter(([path, text]) => pt.get(path) === text).map(([path]) => path)
     // "pixels" é a mesma palavra nas duas línguas; "MAX" e a linha do nível no relatório também
-    expect(same).toEqual(['noEffort', 'tools', 'pickEffort', 'levels.max', 'stats.level', 'accents.claude', 'accents.mono', 'speeds.normal', 'sizes.normal', 'backends.image'])
+    expect(same).toEqual(['noEffort', 'tools', 'pickEffort', 'levels.max', 'badges.tiers.0', 'badges.more', 'stats.level', 'accents.claude', 'accents.mono', 'speeds.normal', 'sizes.normal', 'backends.image'])
   })
 
   test('o plural acompanha a contagem em cada um', () => {

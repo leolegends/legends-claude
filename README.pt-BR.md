@@ -136,6 +136,29 @@ A linha do nível mede quanto você já trabalhou com o Claude Code, não quanto
 - **Subir de nível** mostra um aviso (`Nível 31! Construtor`) e toca a fanfarra, quando o ajuste `som` está ligado.
 - O interruptor `nível` na aba de ajustes esconde a linha (e o aviso); `/legends-claude stats` também mostra o nível, o título e os tokens.
 
+## Insígnias
+
+Enquanto o nível mede os tokens, as insígnias marcam o resto das contas de sempre (todas as sessões, agentes incluídos). São sete, cada uma em três graus, bronze, prata e ouro: 21 ao todo.
+
+| Insígnia | O que mede | Bronze · prata · ouro |
+|---|---|---|
+| Pedreiro | ferramentas chamadas | 100 · 1.000 · 10.000 |
+| Maratonista | turnos | 100 · 1.000 · 10.000 |
+| Assíduo | sessões | 10 · 100 · 500 |
+| Fôlego | o turno mais longo | 10 · 30 · 60 min |
+| Rajada | ferramentas num turno só | 25 · 50 · 100 |
+| Maestro | agentes rodando ao mesmo tempo | 3 · 5 · 10 |
+| Persistente | ferramentas que falharam | 10 · 100 · 1.000 |
+
+- **Quando uma vem,** no fim do turno, aparece um aviso (`Insígnia nova: Pedreiro prata · 1.000 ferramentas`) com a mesma festa do nível. Vindo várias de uma vez, o aviso fala da de grau mais alto e diz quantas mais (`(+2)`). O que você já tinha ao abrir a sessão não vira aviso.
+- **`/legends-claude stats`** mostra quantas você tem, o grau mais alto de cada uma, e a próxima, a mais perto de vir, com quanto do caminho já foi:
+  ```
+  insígnias         10 de 21 · Pedreiro ouro · Maratonista bronze · Assíduo bronze · Fôlego bronze · Rajada prata · Maestro prata
+  próxima           Persistente bronze · 10 falhas superadas · 90%
+  ```
+- Nada é gravado sobre elas: uma insígnia está conquistada quando a conta passa da meta. Por isso não há data de conquista, e duas sessões abertas ao mesmo tempo não brigam por um registro; em troca, uma insígnia que veio do trabalho de outra sessão pode ser avisada nesta também.
+- O aviso segue o interruptor `nível`: com a linha do nível desligada, as insígnias só aparecem no `stats`.
+
 ## Instalação
 
 No prompt de uma sessão do Claude Code no terminal:
@@ -167,7 +190,7 @@ Para remover: `claude plugin uninstall legends-claude`.
 - `▾` no canto da barra esconde; `◂ status` traz de volta. `/legends-claude` alterna entre escondido e visível.
 - `/legends-claude demo` mostra o palco em ação, com a sessão parada. `/legends-claude demo fable max` mostra com outro modelo e effort, sem trocar os da sessão.
 - `/legends-claude compactar` compacta a conversa na hora, sem confirmação: roda o `/compact` do próprio Claude Code, que aparece na conversa e espera a sessão ficar parada. O que vem depois da palavra vai para o resumo como instrução (`/legends-claude compactar mantenha o plano`). `compact` também vale.
-- `/legends-claude stats` mostra as contas: os tijolos (cada ferramenta chamada é um), os andares, as falhas e os turnos desta sessão; o custo de hoje somado entre as sessões; o total de sempre; e os recordes (o turno mais longo, o que mais chamou ferramentas, mais agentes de uma vez); e o nível, com o título e os tokens que contam para ele. O texto aparece na conversa só para você: não vai para o modelo.
+- `/legends-claude stats` mostra as contas: os tijolos (cada ferramenta chamada é um), os andares, as falhas e os turnos desta sessão; o custo de hoje somado entre as sessões; o total de sempre; e os recordes (o turno mais longo, o que mais chamou ferramentas, mais agentes de uma vez); o nível, com o título e os tokens que contam para ele; e as [insígnias](#insígnias), com a próxima. O texto aparece na conversa só para você: não vai para o modelo.
 - **`⚙` abre a aba de ajustes** na própria barra (ou `/legends-claude ajustes`; `settings` também serve). Cada mudança vale na hora e fica salva para as próximas sessões:
 
 ```
@@ -235,7 +258,7 @@ O módulo de hooks e o que ele importa, em `hooks/`:
 - `lines.ts`: as linhas da barra (cabeçalho, custo, trabalho, limites, agentes), puras. `bar-rows.tsx`: as linhas de botões sob o cabeçalho (o seletor de modelo ou de effort, e a que diz de qual agente é a transcrição na tela).
 - `phase.ts`: o que cada trecho de um pedido ao modelo diz sobre a fase dele (pensa, escreve, monta uma chamada). `focus.ts`: em que botão o anel de foco cai quando algo abre na barra.
 - `context-line.ts`: a linha do contexto, pura: o medidor, a sugestão de compactar e o botão.
-- `level.ts`: o nível, puro: a curva, os títulos e a linha.
+- `level.ts`: o nível, puro: a curva, os títulos e a linha. `badges.ts`: as insígnias, puras: as metas, as conquistadas, a próxima e os textos do relatório e do aviso.
 - `pace.ts`: o ritmo de uma janela de limite e a previsão de quando ela enche. `stats.ts`: as contas de uma sessão, do dia e de sempre, puras; `ledger.ts`: o registro delas no store do plugin. `sound.ts`: os sons, da melodia ao WAV.
 - `effects.ts`: as animações de texto (faísca, cometa, pulso da régua, nome surgindo, estouro, brilho).
 - `format.ts`, `parts.ts`, `agents.ts`: formatos de texto, trechos de linha, e as linhas de agente conferidas com a lista do engine.
